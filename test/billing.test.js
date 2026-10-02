@@ -90,7 +90,9 @@ test('checkout: needs a signed-in member, gives the trial once, and refuses a se
   B.stripe = () => ({
     customers: { create: async (x) => { calls.push(['customer', x]); return { id: 'cus_2' }; } },
     checkout: { sessions: { create: async (x) => { calls.push(['checkout', x]); return { url: 'https://checkout.stripe.com/c/pay/1' }; } } },
+    subscriptions: { list: async () => ({ data: subsInStripe }) },
   });
+  let subsInStripe = [];
   const anon = res();
   await billing({ method: 'POST', headers: {}, body: { action: 'checkout' } }, anon);
   assert.equal(anon.statusCode, 401);
@@ -119,4 +121,48 @@ test('checkout: needs a signed-in member, gives the trial once, and refuses a se
   const r3 = res();
   await billing({ method: 'POST', headers: { authorization: 'Bearer tok' }, body: { action: 'checkout' } }, r3);
   assert.equal(r3.statusCode, 409);
+});
+
+test('checkout refuses a second membership that Stripe already has (open in two tabs)', async () => {
+  const rows = [{ user_id: 'u3', customer_id: 'cus_3', status: 'none', trial_used: false }];
+  global.fetch = fakeSupabase(rows, { tok3: { id: 'u3', email: 'c@d.co' } });
+  let created = 0;
+  B.stripe = () => ({ subscriptions: { list: async () => ({ data: [{ id: 'sub_a', status: 'trialing' }] }) }, checkout: { sessions: { create: async () => { created++; return { url: 'x' }; } } } });
+  const r = res();
+  await billing({ method: 'POST', headers: { authorization: 'Bearer tok3' }, body: { action: 'checkout' } }, r);
+  assert.equal(r.statusCode, 409);
+  assert.equal(created, 0);
+});
+
+test('deleting an account cancels every live subscription', async () => {
+  const rows = [{ user_id: 'u4', customer_id: 'cus_4', status: 'active', trial_used: true }];
+  global.fetch = fakeSupabase(rows, { tok4: { id: 'u4', email: 'e@f.co' } });
+  const cancelled = [];
+  B.stripe = () => ({ subscriptions: { list: async () => ({ data: [{ id: 'sub_live', status: 'active' }, { id: 'sub_old', status: 'canceled' }] }), cancel: async (id) => { cancelled.push(id); return {}; } } });
+  const r = res();
+  await billing({ method: 'POST', headers: { authorization: 'Bearer tok4' }, body: { action: 'cancel_for_delete' } }, r);
+  assert.equal(r.statusCode, 200);
+  assert.deepEqual(cancelled, ['sub_live']);
+});
+
+test('a late event about an old cancelled subscription does not lock out a paying member', async () => {
+  const rows = [{ user_id: 'u5', customer_id: 'cus_5', subscription_id: 'sub_new', status: 'active', trial_used: true }];
+  global.fetch = fakeSupabase(rows, {});
+  const old = { id: 'sub_old', object: 'subscription', customer: 'cus_5', status: 'canceled', cancel_at_period_end: false, metadata: { user_id: 'u5' }, items: { data: [{ current_period_end: 1790000000, price: { id: 'price_month' } }] } };
+  const real = new RealStripe('sk_test_123');
+  B.stripe = () => ({ webhooks: real.webhooks, subscriptions: { retrieve: async () => old } });
+  const payload = JSON.stringify({ id: 'evt_9', object: 'event', type: 'customer.subscription.deleted', data: { object: old } });
+  const r = res();
+  await webhook({ method: 'POST', headers: { 'stripe-signature': real.webhooks.generateTestHeaderString({ payload, secret: 'whsec_test' }) }, body: Buffer.from(payload) }, r);
+  assert.equal(r.statusCode, 200);
+  assert.equal(rows[0].status, 'active');
+  assert.equal(rows[0].subscription_id, 'sub_new');
+});
+
+test('the AI coach only serves signed-in members with access', async () => {
+  const rows = [{ user_id: 'u6', customer_id: 'cus_6', status: 'canceled' }, { user_id: 'u7', status: 'comp' }];
+  global.fetch = fakeSupabase(rows, { tok6: { id: 'u6' }, tok7: { id: 'u7' } });
+  assert.deepEqual(await B.memberGate({ headers: {} }), { status: 401, error: 'Sign in to use the AI coach' });
+  assert.equal((await B.memberGate({ headers: { authorization: 'Bearer tok6' } })).status, 402);
+  assert.equal(await B.memberGate({ headers: { authorization: 'Bearer tok7' } }), null);
 });

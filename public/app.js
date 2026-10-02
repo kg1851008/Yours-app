@@ -363,6 +363,12 @@
   }
 
   // ---------- AI ----------
+  // The AI endpoints only serve signed-in members (and, with payments on, members with access).
+  async function coachHeaders() {
+    const h = { 'Content-Type': 'application/json' };
+    if (isCloud()) { try { const t = await cloud.accessToken(); if (t) h.Authorization = `Bearer ${t}`; } catch { /* falls back to the on-device coach */ } }
+    return h;
+  }
   async function checkAI() {
     try {
       const r = await fetch('/api/coach', { method: 'GET' });
@@ -545,7 +551,7 @@
       try {
         const r = await fetch('/api/coach', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: await coachHeaders(),
           body: JSON.stringify({ mode: 'chat', context: buildContext(), messages: S.data.chat.slice(-20).map((m) => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.content })) }),
         });
         if (r.ok) reply = (await r.json()).text;
@@ -724,7 +730,7 @@
         const note = chosen.map((p, i) => `Photo ${i + 1}: ${p.pose} view, taken ${p.date}${p.phase ? ` during ${p.phase} phase` : ''}`).join('. ');
         const r = await fetch('/api/coach', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: await coachHeaders(),
           body: JSON.stringify({ mode: 'progress', context: buildContext(), images: chosen.map((p) => p.data), imageNote: note }),
         });
         if (r.ok) { const j = await r.json(); result = { verdict: j.verdict || 'progressing', text: j.text, photos: chosen.length }; }
@@ -779,7 +785,7 @@
       try {
         const r = await fetch('/api/coach', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: await coachHeaders(),
           body: JSON.stringify({ mode: 'progress', context: { ...buildContext(), weekly: stats, answers, proposedChanges: result.adjustments.map((a) => a.label) }, images: imgs, imageNote: notes.join('. ') + '. This is her weekly check-in: compare matching poses and connect what you see to her week.' }),
         });
         if (r.ok && S.modal && S.modal.type === 'weeklyResult') { const j = await r.json(); S.modal.text = j.text; S.modal.verdict = j.verdict; }
@@ -790,7 +796,7 @@
     try {
       const r = await fetch('/api/coach', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await coachHeaders(),
         body: JSON.stringify({
           mode: 'chat',
           context: buildContext(),
@@ -1120,7 +1126,8 @@
     return recent.concat(recipes).slice(0, 20);
   }
   async function aiEstimate(payload) {
-    const r = await fetch('/api/coach', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'food', units: S.data.profile.units === 'metric' ? 'metric' : 'imperial', myFoods: myFoodHints(), ...payload }) });
+    const r = await fetch('/api/coach', { method: 'POST', headers: await coachHeaders(), body: JSON.stringify({ mode: 'food', units: S.data.profile.units === 'metric' ? 'metric' : 'imperial', myFoods: myFoodHints(), ...payload }) });
+    if (r.status === 401 || r.status === 402) throw Object.assign(new Error('members only'), { members: true });
     if (!r.ok) throw new Error('estimate failed');
     return r.json();
   }
@@ -1138,8 +1145,8 @@
       S.modal.items = L.cleanEstimates(j.items).map((x) => estItem(x));
       S.modal.note = j.note || '';
       if (j.slot) S.modal.slot = j.slot;
-    } catch {
-      if (S.modal && S.modal.type === 'estimate') S.modal.error = 'Could not reach the coach. Check your connection, or describe it instead.';
+    } catch (e) {
+      if (S.modal && S.modal.type === 'estimate') S.modal.error = e && e.members ? 'Plate photos are for members. Sign in, or describe it instead.' : 'Could not reach the coach. Check your connection, or describe it instead.';
     }
     if (S.modal && S.modal.type === 'estimate') { S.modal.loading = false; render(); }
   }
@@ -2212,7 +2219,7 @@
         <button class="btn accent sm" type="submit">Post</button></div>
       </form>
       ${posts.map((p) => { const liked = me && p.likedBy.includes(me); const open = S.openComments[p.id]; return `<div class="card post">
-        <div class="head"><div class="avatar sm ${p.author.startsWith('u:') ? '' : 'alt'}">${esc(initials(memberName(p.author)))}</div><div class="grow"><strong>${esc(memberName(p.author))}</strong><div class="tiny muted">${timeAgo(p.ts)}${p.phase && D.PHASES[p.phase] && p.phase !== 'steady' ? ` · ${esc(phaseName(p.phase))} phase` : ''}</div></div><span class="tag ${p.tag === 'Win' ? 'accent' : ''}">${esc(p.tag)}</span></div>
+        <div class="head"><div class="avatar sm ${p.author.startsWith('u:') ? '' : 'alt'}">${esc(initials(memberName(p.author)))}</div><div class="grow"><strong>${esc(memberName(p.author))}</strong><div class="tiny muted">${timeAgo(p.ts)}${p.phase && Object.prototype.hasOwnProperty.call(D.PHASES, p.phase) && p.phase !== 'steady' ? ` · ${esc(phaseName(p.phase))} phase` : ''}</div></div><span class="tag ${p.tag === 'Win' ? 'accent' : ''}">${esc(p.tag)}</span></div>
         <div class="body">${esc(p.text)}</div>
         <div class="foot"><button class="${liked ? 'on' : ''}" data-action="like" data-id="${p.id}" aria-label="Like">${icon('heart', 18)} ${p.baseLikes + p.likedBy.length}</button><button data-action="toggle-comments" data-id="${p.id}">${icon('comment', 18)} ${p.comments.length}</button>${p.author !== me ? `<button data-action="message" data-id="${esc(p.author)}">Message</button>` : ''}${isCloud() ? (p.author === me ? `<button data-action="post-delete" data-id="${p.id}" aria-label="Delete your post">${icon('trash', 16)}</button>` : `<button data-action="report" data-post="${p.id}" data-author="${esc(p.author)}" aria-label="Report or hide">More</button>`) : ''}</div>
         ${open ? `${p.comments.map((cm) => `<div class="comment"><div class="avatar sm ${cm.author.startsWith('u:') ? '' : 'alt'}">${esc(initials(memberName(cm.author)))}</div><div class="c"><strong class="small">${esc(memberName(cm.author))}</strong><div class="small">${esc(cm.text)}</div></div></div>`).join('')}
@@ -2873,6 +2880,14 @@
   async function deleteData() {
     if (isCloud()) {
       if (!confirm('Delete your YOURS account? This removes your plan, history, posts, messages and photo backup from every device and from the cloud. It cannot be undone.')) return;
+      if (billingOn() && S.sub && S.sub.status && !['none', 'comp', 'canceled'].includes(S.sub.status)) {
+        // End the membership first so a deleted account is never charged again.
+        try {
+          const token = await cloud.accessToken();
+          const r = await fetch('/api/billing', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ action: 'cancel_for_delete' }) });
+          if (!r.ok) throw new Error('cancel failed');
+        } catch { return toast('Could not cancel your membership. Check your connection and try again.'); }
+      }
       try { await cloud.deleteAccount(); } catch (e) { return toast(window.YOURS_CLOUD.friendlyError(e)); }
       stopCloudCommunity();
       store.del(bkStoreKey());
