@@ -29,6 +29,12 @@
 - **Installable app (PWA).** Home-screen icon, an offline app shell, and the Android install prompt. On iPhone, Safari's Add to Home Screen.
 - **Privacy.** With a vault PIN, photos are encrypted on the device with AES-GCM (key derived from the PIN with PBKDF2). She can export her data as JSON and delete everything.
 
+## Design
+
+The look is editorial athletic: grainy, motion-blurred campaign posters, condensed display headlines (Anton), italic serif accents (Instrument Serif), tracked monospace captions (DM Mono), Inter for body text, and the Archivo Expanded wordmark. All fonts are self-hosted in `public/fonts/` under the SIL Open Font License, so they work offline and make no third-party requests.
+
+**Photography.** Posters currently use grainy motion-blur art in the brand palette. To use real campaign photos, add images to `public/img/` and set the paths in `IMAGERY` in `public/data.js` (`welcome`, each phase, and `session` for workouts). Grain and a legibility shade are applied automatically. Use photos you own or have licensed.
+
 ## How data is stored
 
 The app stores everything on the user's device for now:

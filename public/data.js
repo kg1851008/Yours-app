@@ -423,7 +423,20 @@
     'Protein hot chocolate': ['g:Cacao powder', 'g:Protein powder', 'd:Milk of choice'],
   };
 
-  const api = { PHASES, PHASE_ORDER, WORKOUTS, ROTATION, MEALS, FAVORITE_OPTIONS, AVOID_OPTIONS, MEMBERS, SEED_POSTS, AUTO_REPLIES, CYCLE_MODES, SYMPTOMS, GROCERY };
+  // Editorial copy for phase posters.
+  const PHASE_COPY = {
+    menstrual: { serif: 'Slow down. It still counts.', cap: 'Rest . Restore . Reset' },
+    follicular: { serif: 'Something is building.', cap: 'Build . Push . Progress' },
+    ovulation: { serif: 'This is your moment.', cap: 'Peak . Power . Perform' },
+    luteal: { serif: 'Steady wins this week.', cap: 'Sustain . Steady . Strong' },
+    steady: { serif: 'Consistency is the plan.', cap: 'Train . Fuel . Recover' },
+  };
+
+  // Campaign photography slots. Drop images in public/img/ and set the paths, e.g. welcome: 'img/welcome.jpg'.
+  // Until then, posters use grainy motion-blur art in the same palette.
+  const IMAGERY = { welcome: null, menstrual: null, follicular: null, ovulation: null, luteal: null, steady: null, session: null };
+
+  const api = { PHASE_COPY, IMAGERY, PHASES, PHASE_ORDER, WORKOUTS, ROTATION, MEALS, FAVORITE_OPTIONS, AVOID_OPTIONS, MEMBERS, SEED_POSTS, AUTO_REPLIES, CYCLE_MODES, SYMPTOMS, GROCERY };
   if (typeof window !== 'undefined') window.YOURS_DATA = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

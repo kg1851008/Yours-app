@@ -565,43 +565,67 @@
   }
 
   // ---------- share cards ----------
+  // Poster-style share card: motion art, grain, condensed headline.
+  const CARD_ART = {
+    menstrual: ['#6E3A2C', '#2A1C17', '#C9765A'], follicular: ['#6F7D45', '#2C331D', '#D3DC94'], ovulation: ['#E89A5F', '#8E4524', '#FFD6A8'],
+    luteal: ['#9A8466', '#3E3127', '#CDB89A'], steady: ['#B9AD9C', '#5C5145', '#EDE6DA'], session: ['#2F3720', '#121409', '#6A7A48'],
+  };
   async function makeCard(card) {
     const W = 1080, H = 1350;
     const c = document.createElement('canvas');
     c.width = W; c.height = H;
     const g = c.getContext('2d');
-    try { await Promise.all([document.fonts.load('900 120px Archivo'), document.fonts.load('700 60px Inter')]); } catch { /* fallback fonts */ }
-    const head = '"Archivo", "Arial Black", Arial, sans-serif';
-    const body = '"Inter", Arial, sans-serif';
-    g.fillStyle = '#F9F7F4'; g.fillRect(0, 0, W, H);
-    g.fillStyle = '#D4845C'; g.fillRect(0, H - 24, W, 24);
-    g.fillStyle = '#2F3720';
-    g.font = `900 110px ${head}`;
-    g.fillText('yours.', 80, 190);
-    g.font = `600 28px ${body}`;
-    g.fillStyle = '#747B66';
-    g.fillText('F O R   Y O U R   B O D Y .', 86, 245);
-    g.fillStyle = '#D4845C';
-    g.font = `700 40px ${body}`;
-    g.fillText(card.eyebrow.toUpperCase(), 80, 520);
-    g.fillStyle = '#2F3720';
-    let size = 190;
-    g.font = `900 ${size}px ${head}`;
-    while (g.measureText(card.big).width > W - 160 && size > 70) { size -= 10; g.font = `900 ${size}px ${head}`; }
-    g.fillText(card.big, 72, 520 + size + 10);
-    g.font = `500 52px ${body}`;
+    try { await Promise.all(['400 200px Anton', 'italic 400 80px "Instrument Serif"', '500 30px "DM Mono"', '900 100px Archivo'].map((f) => document.fonts.load(f))); } catch { /* fallback fonts */ }
+    const [base, deep, glow] = CARD_ART[card.art] || CARD_ART.session;
+    const bg = g.createLinearGradient(0, 0, W * 0.4, H);
+    bg.addColorStop(0, base); bg.addColorStop(1, deep);
+    g.fillStyle = bg; g.fillRect(0, 0, W, H);
+    g.save();
+    g.filter = 'blur(70px)';
+    const r1 = g.createRadialGradient(W * 0.3, H * 0.28, 0, W * 0.3, H * 0.28, W * 0.6);
+    r1.addColorStop(0, glow); r1.addColorStop(1, 'transparent');
+    g.fillStyle = r1; g.fillRect(0, 0, W, H);
+    g.globalAlpha = 0.18; g.fillStyle = '#FFFFFF';
+    for (let i = -4; i < 30; i++) { g.save(); g.translate(i * 60, 0); g.rotate(0.18); g.fillRect(0, -200, 6, H + 400); g.restore(); }
+    g.restore();
+    // Grain
+    const tile = document.createElement('canvas'); tile.width = tile.height = 256;
+    const tg = tile.getContext('2d'); const img = tg.createImageData(256, 256);
+    for (let i = 0; i < img.data.length; i += 4) { const v = Math.random() * 255; img.data[i] = img.data[i + 1] = img.data[i + 2] = v; img.data[i + 3] = 34; }
+    tg.putImageData(img, 0, 0);
+    g.fillStyle = g.createPattern(tile, 'repeat'); g.fillRect(0, 0, W, H);
+    // Darken bottom for legibility
+    const sh = g.createLinearGradient(0, H * 0.45, 0, H);
+    sh.addColorStop(0, 'rgba(0,0,0,0)'); sh.addColorStop(1, 'rgba(0,0,0,0.45)');
+    g.fillStyle = sh; g.fillRect(0, 0, W, H);
+
+    const cream = '#F7F2EA';
+    g.fillStyle = cream;
+    g.font = '500 26px "DM Mono", monospace';
+    const spaced = (t) => t.toUpperCase().split('').join(String.fromCharCode(8202));
+    g.fillText(spaced(card.eyebrow), 70, 100);
+    const right = spaced(card.foot || '');
+    g.fillText(right, W - 70 - g.measureText(right).width, 100);
+    g.font = 'italic 400 76px "Instrument Serif", Georgia, serif';
     const words = card.sub.split(' ');
-    let line = '', y = 520 + size + 110;
-    words.forEach((w) => {
-      if (g.measureText(line + w).width > W - 160) { g.fillText(line.trim(), 80, y); line = ''; y += 68; }
-      line += w + ' ';
-    });
-    g.fillText(line.trim(), 80, y);
-    if (card.foot) {
-      g.font = `600 34px ${body}`;
-      g.fillStyle = '#747B66';
-      g.fillText(card.foot, 80, H - 90);
-    }
+    let line = '', lines = [];
+    words.forEach((w) => { if (g.measureText(line + w).width > W - 140) { lines.push(line.trim()); line = ''; } line += w + ' '; });
+    lines.push(line.trim());
+    let size = 280;
+    g.font = `400 ${size}px Anton, Impact, sans-serif`;
+    while (g.measureText(card.big.toUpperCase()).width > W - 140 && size > 110) { size -= 10; g.font = `400 ${size}px Anton, Impact, sans-serif`; }
+    const titleY = H - 230;
+    g.fillStyle = '#D8E0A2';
+    g.fillText(card.big.toUpperCase(), 64, titleY);
+    g.fillStyle = cream;
+    g.font = 'italic 400 76px "Instrument Serif", Georgia, serif';
+    lines.slice(-3).reverse().forEach((l, i) => g.fillText(l, 70, titleY - size * 0.95 - 46 - i * 78));
+    g.font = '500 24px "DM Mono", monospace';
+    g.globalAlpha = 0.85;
+    g.fillText(spaced('Strength . Cycle . Discipline'), 70, H - 150);
+    g.globalAlpha = 1;
+    g.font = '900 64px Archivo, "Arial Black", sans-serif';
+    g.fillText('yours.', 64, H - 64);
     return c.toDataURL('image/png');
   }
   async function openShare(card) {
@@ -668,19 +692,28 @@
     toastTimer = setTimeout(() => el.remove(), 2400);
   }
 
+  // ---------- posters ----------
+  function backdrop(kind) {
+    const img = D.IMAGERY[kind];
+    return img ? `<img class="poster-img" src="${esc(img)}" alt=""><div class="shade"></div>` : `<div class="art art-${kind}"></div><div class="shade"></div>`;
+  }
+  const poster = (kind, inner, cls) => `<div class="poster ${cls || ''}">${backdrop(kind)}${inner}</div>`;
+  const copyFor = (phase) => D.PHASE_COPY[phase] || D.PHASE_COPY.steady;
+
   // ---------- views: welcome + auth ----------
   function viewWelcome() {
-    return `<div class="welcome">
+    return `<div class="welcome">${backdrop('welcome')}
+      <div class="p-row"><span>Vol. 01</span><span>Cycle-synced coaching</span></div>
       <div class="hero">
+        <p class="lead">Train with your cycle, not against it.</p>
         <div class="wordmark xl">yours.</div>
         <div class="tagline">For your body.</div>
-        <p class="lead">Coaching that learns your cycle. Training, food and steps that change with you, every phase.</p>
       </div>
       <div class="stack">
-        <button class="btn primary block" data-action="start">Get started</button>
+        <button class="btn cream block" data-action="start">Get started</button>
         <button class="btn ghost block" data-action="go-login">I have an account</button>
         <button class="btn soft block" data-action="demo">Try the demo</button>
-        <p class="tiny muted center" style="margin-top:16px">Your data stays on this device.</p>
+        <div class="p-row" style="margin-top:18px;justify-content:center;opacity:.75">Strength . Cycle . Discipline</div>
       </div>
     </div>`;
   }
@@ -790,19 +823,26 @@
     const t = tgt(c);
     const wk = todaysWorkout();
     return `<div class="screen no-nav">
-      <div class="wordmark sm">yours.</div>
-      <div class="eyebrow" style="margin-top:28px">Your plan is ready</div>
-      <h1 style="margin-top:6px">${c.steady ? 'Built around your week, starting today.' : `Built for your ${ph.name.toLowerCase()} phase, starting today.`}</h1>
-      <div class="card phase-card" style="margin-top:20px">
-        <div class="row" style="gap:16px">${phaseRing(c, 96)}<div class="grow"><div class="eyebrow">${c.steady ? 'Steady mode' : `Day ${c.day} of ${c.len}`}</div><div class="phase-name" style="font-size:24px">${ph.name}</div><div class="muted small">${ph.short}</div></div></div>
-        <p class="small" style="margin-top:14px">${esc(ph.training)}</p>
+      <div class="row between"><div class="wordmark sm">yours.</div><span class="eyebrow">${fmtDate(today(), { month: 'short', day: 'numeric', year: 'numeric' })}</span></div>
+      <div class="paper" style="margin-top:20px">
+        <div class="extra"><span>Extra!</span><span>Extra!</span><span>Extra!</span></div>
+        <div class="rule"></div>
+        <div class="headline">Your plan is ready</div>
+        <div class="dek">The cycle-synced plan built for your body</div>
+        <div class="center"><span class="stamp">Edition of one · ${fmtDate(today(), { month: 'short', day: 'numeric' })}</span></div>
+        <div class="rule" style="height:3px"></div>
+        <p class="lede">${c.steady ? 'Built around your week and your daily readiness, starting today.' : `You are on day ${c.day} of your cycle, in your ${ph.name.toLowerCase()} phase. ${esc(ph.training)}`}</p>
+        <div class="cols">
+          <div><div class="k">Phase</div><div class="v">${ph.name}</div></div>
+          <div><div class="k">Today</div><div class="v" style="font-size:22px">${esc(wk.name)}</div></div>
+          <div><div class="k">Protein</div><div class="v">${t.protein}<small>g</small></div></div>
+          <div><div class="k">Calories</div><div class="v">${t.kcal.toLocaleString()}<small>kcal</small></div></div>
+          <div><div class="k">Water</div><div class="v">${t.water}<small>L</small></div></div>
+          <div><div class="k">Steps</div><div class="v">${t.steps.toLocaleString()}</div></div>
+        </div>
+        <div class="rule" style="height:3px;margin-top:12px"></div>
+        <ul class="phase-list" style="--line:#1F1F1A33"><li>Learns your real cycle and energy patterns from 20-second daily check-ins</li><li>Suggests the exact weight for every lift, adjusted for your phase</li><li>Reviews your week every Sunday and adjusts next week's plan</li></ul>
       </div>
-      <div class="card workout-hero"><div class="eyebrow muted">Today's workout</div><h2 style="margin-top:4px">${esc(wk.name)}</h2><div class="small muted">${wk.minutes} min · ${esc(wk.focus)}</div></div>
-      <div class="stats" style="margin-top:12px">
-        ${statTile('Protein', t.protein, 'g')}${statTile('Calories', t.kcal.toLocaleString(), 'kcal')}${statTile('Water', t.water, 'L')}${statTile('Steps', t.steps.toLocaleString(), '')}
-      </div>
-      <div class="card soft" style="margin-top:12px"><div class="eyebrow">How YOURS coaches you</div>
-        <ul class="phase-list"><li>Learns your real cycle and energy patterns from daily 20-second check-ins</li><li>Suggests the exact weight for every lift, adjusted for your phase</li><li>Reviews your week every Sunday and adjusts next week's plan</li></ul></div>
       <div class="card" style="margin-top:24px">
         <h2>Save your plan</h2>
         <p class="muted small" style="margin:4px 0 16px">Create a free account to keep your plan and unlock progress photos and the community.</p>
@@ -849,9 +889,9 @@
   }
 
   // ---------- home ----------
-  function header(title, sub) {
+  function header(title, sub, big) {
     const name = myName();
-    return `<div class="top"><div class="grow"><div class="eyebrow">${esc(sub)}</div><h1 style="margin-top:4px">${title}</h1></div>
+    return `<div class="top"><div class="grow"><div class="eyebrow">${esc(sub)}</div>${big ? `<div class="masthead" style="margin-top:8px">${title}</div>` : `<h1 class="serif" style="margin-top:6px">${title}</h1>`}</div>
       <button class="avatar" data-action="open-settings" aria-label="Profile and settings">${isGuest() ? icon('settings', 18) : esc(initials(name))}</button></div>`;
   }
 
@@ -921,29 +961,30 @@
       ${header(`${greet}${name ? `, ${esc(name)}` : ''}`, fmtDate(today()))}
       ${st.count >= 2 ? `<button class="tag accent" style="margin:-8px 0 16px;height:30px;gap:6px" data-action="share-streak">${icon('flame', 15)} ${st.count}-day streak${st.todayDone ? '' : ' · keep it alive today'}</button>` : ''}
       ${resumeBanner()}${guestBanner()}
-      <div class="card phase-card">
-        <div class="row" style="gap:16px">
-          ${phaseRing(c, 116)}
-          <div class="grow">
-            <span class="tag accent">${c.late ? 'Period late' : ph.energy}</span>
-            <div class="phase-name" style="margin-top:8px">${ph.name}</div>
-            <div class="muted small">${ph.short}${c.estimate && !c.steady ? ' · estimate' : ''}</div>
-            ${c.steady ? '<div class="small" style="margin-top:8px">Readiness guides today</div>' : c.late ? '<button class="link small" style="margin-top:8px" data-action="log-period-today">My period started</button>' : `<div class="small" style="margin-top:8px">${phaseName(c.next)} in ${plural(c.daysToNext, 'day')}</div>`}
-          </div>
-        </div>
-        <p class="small" style="margin-top:16px">${esc(ph.hormones)}</p>
+      ${poster(c.phase, `
+        <div class="p-row"><span>${c.steady ? 'Steady mode' : `Day ${c.day} / ${c.len}${c.estimate ? ' · est.' : ''}`}</span><span style="text-align:right">${c.steady ? 'Readiness guides today' : c.late ? 'Period late' : `${esc(phaseName(c.next))} in ${plural(c.daysToNext, 'day')}`}</span></div>
+        <div class="p-body">
+          <div class="p-serif">${esc(copyFor(c.phase).serif)}</div>
+          <div class="p-title">${ph.name}</div>
+          <div class="row between" style="margin-top:16px;align-items:flex-end"><div><span class="tag glass">${c.late ? 'Period late' : esc(ph.energy)}</span><div class="p-cap">${esc(copyFor(c.phase).cap)}</div></div>${phaseRing(c, 78)}</div>
+        </div>`)}
+      <div class="card" style="margin-top:12px">
+        <div class="eyebrow">The science</div>
+        <p class="small" style="margin-top:6px">${esc(ph.hormones)}</p>
         <ul class="phase-list">${ph.tips.map((tip) => `<li>${esc(tip)}</li>`).join('')}</ul>
+        ${c.late ? '<button class="btn primary sm" style="margin-top:10px" data-action="log-period-today">My period started</button>' : ''}
       </div>
       ${checkinCard()}
       ${smartSuggestion(c, wk)}
 
       <div class="section-title"><h2>Today's workout</h2><button class="link" data-action="tab" data-tab="workouts">See plan</button></div>
-      <div class="card workout-hero">
-        <div class="row between"><span class="eyebrow muted">${esc(wk.focus)}</span><span class="small muted">${wk.minutes} min</span></div>
-        <h2 style="margin-top:6px;font-size:24px">${esc(wk.name)}</h2>
-        <p class="small muted" style="margin-top:6px">${esc(wk.summary)}</p>
-        <div class="row" style="margin-top:16px">${done ? `<span class="btn accent sm" style="pointer-events:none">${icon('check', 18)} Completed</span>` : `<button class="btn accent sm" data-action="start-workout" data-id="${wk.id}">Start workout</button>`}<button class="btn sm" style="color:inherit;border:1px solid rgba(255,255,255,0.25)" data-action="view-workout" data-id="${wk.id}">Details</button></div>
-      </div>
+      ${poster('session', `
+        <div class="p-row"><span>${esc(wk.focus)}</span><span>${wk.minutes} min · ${esc(wk.intensity)}</span></div>
+        <div class="p-body">
+          <div class="p-serif">${esc(wk.summary.split('.')[0])}.</div>
+          <div class="p-title cream">${esc(wk.name)}</div>
+          <div class="row" style="margin-top:18px">${done ? `<span class="btn cream sm" style="pointer-events:none">${icon('check', 16)} Completed</span>` : `<button class="btn cream sm" data-action="start-workout" data-id="${wk.id}">Start workout</button>`}<button class="btn outline sm" data-action="view-workout" data-id="${wk.id}">Details</button></div>
+        </div>`, 'short')}
 
       <div class="section-title"><h2>Today's targets</h2><span class="small muted">${c.steady ? 'Steady plan' : `${ph.name} adjusted`}</span></div>
       <div class="stats">
@@ -1003,19 +1044,18 @@
     const levelNote = { beginner: 'Sets are reduced for your level. Leave 2-3 reps in reserve.', intermediate: 'Leave 1-2 reps in reserve on main lifts.', advanced: 'Main lifts include an extra set for your level.' }[S.data.profile.level] || '';
     const vol = S.data.plan.volume;
     return `<div class="screen">
-      ${header('Workouts', c.steady ? 'Steady plan' : `${ph.name} phase · day ${c.day}`)}
+      ${header('Workouts', c.steady ? 'Steady plan' : `${ph.name} phase · day ${c.day}`, true)}
       ${resumeBanner()}
       <div class="week">${days.map((d) => { const k = dateKey(d); return `<div class="day ${k === todayKey() ? 'today' : ''} ${loggedOn(k).length ? 'done' : ''}"><div class="d">${d.toLocaleDateString(undefined, { weekday: 'narrow' })}</div><div class="n">${d.getDate()}</div><div class="mk"></div></div>`; }).join('')}</div>
       <p class="small muted" style="margin-top:10px">${plural(thisWeek.length, 'session')} logged this week</p>
       ${smartSuggestion(c, wk)}
 
       <div class="section-title"><h2>Recommended today</h2><span class="tag">${esc(wk.intensity)}</span></div>
-      <div class="card">
-        <div class="eyebrow">${esc(wk.focus)} · ${wk.minutes} min</div>
-        <h2 style="margin-top:4px;font-size:24px">${esc(wk.name)}</h2>
-        <p class="small muted" style="margin-top:6px">${esc(wk.summary)}</p>
-        <div class="why">${esc(ph.training)}</div>
-        <div class="divider"></div>
+      ${poster(wk.phase === 'any' ? 'steady' : wk.phase, `
+        <div class="p-row"><span>${esc(wk.focus)}</span><span>${wk.minutes} min</span></div>
+        <div class="p-body"><div class="p-serif">${esc(wk.summary.split('.')[0])}.</div><div class="p-title">${esc(wk.name)}</div><div class="p-cap">${esc(copyFor(c.phase).cap)}</div></div>`, 'short')}
+      <div class="card" style="margin-top:12px">
+        <div class="why" style="margin-top:0">${esc(ph.training)}</div>
         ${exerciseList(wk, true)}
         <p class="tiny muted" style="margin-top:8px">${levelNote}${vol ? ` Your weekly check-in ${vol > 0 ? 'added' : 'removed'} a set on main lifts.` : ''} Suggested weights adjust for your phase and readiness.</p>
         <div class="row" style="margin-top:14px">
@@ -1029,7 +1069,7 @@
 
       <div class="section-title"><h2>Workout library</h2></div>
       <div class="chips">${D.PHASE_ORDER.map((p) => `<button class="chip ${lib === p ? 'selected' : ''}" data-action="lib-phase" data-phase="${p}"><span class="dot" style="background:var(--${p})"></span>${phaseName(p)}</button>`).join('')}</div>
-      <div class="h-scroll" style="margin-top:14px">${D.WORKOUTS.filter((w) => w.phase === lib).map((w) => `<button class="card flat" style="text-align:left" data-action="view-workout" data-id="${w.id}"><div class="eyebrow">${esc(w.focus)}</div><h3 style="margin-top:4px">${esc(w.name)}</h3><p class="small muted" style="margin-top:4px">${w.minutes} min · ${esc(w.intensity)}</p><p class="small" style="margin-top:8px">${esc(w.summary)}</p></button>`).join('')}</div>
+      <div class="h-scroll" style="margin-top:14px">${D.WORKOUTS.filter((w) => w.phase === lib).map((w) => `<button class="poster mini" data-action="view-workout" data-id="${w.id}">${backdrop(lib)}<div class="p-row"><span>${w.minutes} min</span><span>${esc(w.intensity)}</span></div><div class="p-body"><div class="p-title">${esc(w.name)}</div><div class="p-cap" style="letter-spacing:.2em">${esc(w.focus)}</div></div></button>`).join('')}</div>
     </div>`;
   }
 
@@ -1076,7 +1116,7 @@
       id: uid(), date: todayKey(), templateId: a.templateId, name: a.name, minutes, sets, unit: a.unit, phase: a.phase,
       detail: a.exercises.map((e) => ({ name: e.name, sets: e.sets.filter((s) => s.done).map((s) => ({ weight: Number(s.weight) || 0, reps: Number(s.reps) || 0 })) })).filter((e) => e.sets.length),
     };
-    const prs = L.detectPRs(record, S.data.workouts).map((p) => ({ ...p, date: record.date, workoutId: record.id }));
+    const prs = L.detectPRs(record, S.data.workouts).map((p) => ({ ...p, date: record.date, workoutId: record.id, phase: record.phase }));
     const volume = record.detail.reduce((n, e) => n + e.sets.reduce((m, s) => m + s.weight * s.reps, 0), 0);
     S.data.workouts.push(record);
     S.data.prs.push(...prs);
@@ -1100,7 +1140,7 @@
     const eaten = S.data.eaten[k] || {};
     const had = L.proteinFor(S.data, k);
     return `<div class="screen">
-      ${header('Meals', `${ph.name} ${c.steady ? 'plan' : 'phase'} · ${fmtDate(today(), { month: 'short', day: 'numeric' })}`)}
+      ${header('Meals', `${ph.name} ${c.steady ? 'plan' : 'phase'} · ${fmtDate(today(), { month: 'short', day: 'numeric' })}`, true)}
       <div class="card soft"><div class="eyebrow">Nutrition focus</div><p style="margin-top:6px">${esc(ph.nutrition)}</p>
         <div class="chips" style="margin-top:12px">${ph.foods.map((f) => `<span class="tag">${esc(f)}</span>`).join('')}</div></div>
       <div class="stats" style="margin-top:12px">
@@ -1110,7 +1150,7 @@
       <button class="btn ghost block" style="margin-top:12px" data-action="open-grocery">${icon('list', 18)} Grocery list for the week</button>
       <p class="small muted" style="margin-top:10px">This plan gives about ${Math.round(totalP * portion)} g protein at a portion size of x${portion}. ${totalP * portion < t.protein ? `Add a shake or an extra protein serving to close the ${Math.round(t.protein - totalP * portion)} g gap.` : 'That covers your protein target.'}</p>
       ${slots.map(([s, label], i) => { const { meal, count, compromised } = picks[i]; const isEaten = eaten[s] && eaten[s].name === meal.name; return `
-        <div class="section-title"><h2>${label}</h2>${count > 1 && !isEaten ? `<button class="link row" style="gap:4px" data-action="swap-meal" data-slot="${s}">${icon('swap', 16)} Swap</button>` : ''}</div>
+        <div class="section-title"><div class="slot">${label}</div>${count > 1 && !isEaten ? `<button class="link row" style="gap:4px" data-action="swap-meal" data-slot="${s}">${icon('swap', 16)} Swap</button>` : ''}</div>
         <div class="card meal"><h3>${esc(meal.name)}</h3><p class="small muted">${esc(meal.desc)}</p>
           <div class="macro"><span><strong>${Math.round(meal.protein * portion)} g</strong> protein</span><span><strong>${Math.round(meal.kcal * portion)}</strong> kcal</span></div>
           <div class="why">${esc(meal.why)}</div>
@@ -1128,7 +1168,7 @@
     const c = cyc();
     const v = S.advisorView;
     return `<div class="screen" ${v === 'coach' ? 'style="padding-bottom:calc(var(--nav-h) + 110px)"' : ''}>
-      ${header('Advisor', S.ai ? 'AI coach · live' : 'Coach · on-device')}
+      ${header('Advisor', S.ai ? 'AI coach · live' : 'Coach · on-device', true)}
       <div class="segment" style="margin-bottom:20px">${[['coach', 'Coach'], ['insights', 'Insights'], ['progress', 'Progress']].map(([id, label]) => `<button class="${v === id ? 'active' : ''}" data-action="advisor-view" data-value="${id}">${label}</button>`).join('')}</div>
       ${v === 'coach' ? viewChat(c) : v === 'insights' ? viewInsights(c) : viewProgress()}
     </div>`;
@@ -1282,7 +1322,7 @@
   // ---------- community ----------
   function viewCommunity() {
     return `<div class="screen">
-      ${header('Community', 'Wins, questions and support')}
+      ${header('Community', 'Wins, questions and support', true)}
       <div class="segment" style="margin-bottom:20px"><button class="${S.communityView === 'feed' ? 'active' : ''}" data-action="community-view" data-value="feed">Feed</button><button class="${S.communityView === 'messages' ? 'active' : ''}" data-action="community-view" data-value="messages">Messages</button></div>
       ${S.communityView === 'feed' ? viewFeed() : S.openThread ? viewThread() : viewThreads()}
     </div>`;
@@ -1804,13 +1844,13 @@
       runAction(a);
     },
 
-    'share-streak': () => { const st = L.streak(S.data); openShare({ eyebrow: 'Streak', big: `${st.count} days`, sub: 'Showing up for my body, every phase.', foot: 'Training, walking and check-ins all count.' }); },
-    'share-strength': () => { const s = L.strengthByPhase(S.data.workouts); if (s) openShare({ eyebrow: 'Strength by phase', big: `+${Math.round(s.diff)}%`, sub: `I lift about ${Math.round(s.diff)}% more in my ${phaseName(s.best).toLowerCase()} phase than my ${phaseName(s.low).toLowerCase()} phase.`, foot: 'Cycle-synced training with YOURS' }); },
-    'share-pr': (el) => { const p = S.data.prs.slice().reverse().find((x) => x.date === el.dataset.date && x.name === el.dataset.name); if (p) openShare({ eyebrow: 'New personal record', big: fmtLoad(p.weight, p.unit), sub: `${p.name} for ${p.reps} reps.`, foot: shortDate(p.date) }); },
+    'share-streak': () => { const st = L.streak(S.data); openShare({ art: cyc().phase, eyebrow: 'Streak', big: `${st.count} days`, sub: 'Showing up for my body, every phase.', foot: shortDate(todayKey()) }); },
+    'share-strength': () => { const s = L.strengthByPhase(S.data.workouts); if (s) openShare({ art: s.best, eyebrow: 'Strength by phase', big: `+${Math.round(s.diff)}%`, sub: `I lift ${Math.round(s.diff)}% more in my ${phaseName(s.best).toLowerCase()} phase.`, foot: 'Cycle-synced' }); },
+    'share-pr': (el) => { const p = S.data.prs.slice().reverse().find((x) => x.date === el.dataset.date && x.name === el.dataset.name); if (p) openShare({ art: p.phase || 'session', eyebrow: 'New personal record', big: fmtLoad(p.weight, p.unit), sub: `${p.name} for ${p.reps} reps.`, foot: shortDate(p.date) }); },
     'share-workout': () => {
       const m = S.modal;
       const pr = m.prs[0];
-      openShare(pr ? { eyebrow: 'New personal record', big: fmtLoad(pr.weight, pr.unit), sub: `${pr.name} for ${pr.reps} reps.`, foot: m.record.name } : { eyebrow: 'Session complete', big: `${m.record.sets} sets`, sub: m.record.name, foot: `${m.record.phase && m.record.phase !== 'steady' ? `${phaseName(m.record.phase)} phase · ` : ''}${shortDate(m.record.date)}` });
+      openShare(pr ? { art: m.record.phase, eyebrow: 'New personal record', big: fmtLoad(pr.weight, pr.unit), sub: `${pr.name} for ${pr.reps} reps.`, foot: shortDate(m.record.date) } : { art: 'session', eyebrow: 'Session complete', big: `${m.record.sets} sets`, sub: m.record.name, foot: shortDate(m.record.date) });
     },
     'share-card': () => shareCard(),
 
