@@ -41,7 +41,13 @@ async function handler(req, res) {
     }
     const userId = await userIdFor(sub, fallbackUser);
     if (!userId) return res.status(200).json({ received: true, note: 'no member for this customer' });
-    await B.saveRow({ user_id: userId, ...B.rowFromSubscription(sub) });
+    // Events can arrive late or out of order: an older, ended subscription must not overwrite a current one.
+    const existing = await B.getRow(userId);
+    const next = B.rowFromSubscription(sub);
+    if (existing && existing.subscription_id && existing.subscription_id !== sub.id && B.hasAccess(existing) && !B.hasAccess(next)) {
+      return res.status(200).json({ received: true, note: 'stale subscription ignored' });
+    }
+    await B.saveRow({ user_id: userId, ...next });
     return res.status(200).json({ received: true });
   } catch (e) {
     console.error('webhook error', e && e.message);

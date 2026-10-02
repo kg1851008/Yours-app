@@ -51,8 +51,21 @@ module.exports = async function handler(req, res) {
       const portal = await s.billingPortal.sessions.create({ customer: row.customer_id, return_url: `${origin}/?billing=portal` });
       return res.status(200).json({ url: portal.url });
     }
+    if (body.action === 'cancel_for_delete') {
+      // Account deletion: end any membership right away so she is never charged again.
+      if (row && row.customer_id) {
+        const subs = await s.subscriptions.list({ customer: row.customer_id, status: 'all', limit: 20 });
+        for (const sub of subs.data) if (!['canceled', 'incomplete_expired'].includes(sub.status)) await s.subscriptions.cancel(sub.id);
+      }
+      return res.status(200).json({ ok: true });
+    }
     if (body.action !== 'checkout') return res.status(400).json({ error: 'Unknown action' });
     if (B.hasAccess(row)) return res.status(409).json({ error: 'You already have an active membership' });
+    // A second tab or a slow webhook: never start a second paid membership for the same person.
+    if (row && row.customer_id) {
+      const live = await s.subscriptions.list({ customer: row.customer_id, status: 'all', limit: 20 });
+      if (live.data.some((x) => ['trialing', 'active', 'past_due', 'unpaid'].includes(x.status))) return res.status(409).json({ error: 'You already have a membership. Tap "I already subscribed".' });
+    }
 
     const plan = body.plan === 'yearly' ? 'yearly' : 'monthly';
     if (!row || !row.customer_id) {

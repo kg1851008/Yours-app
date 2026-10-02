@@ -5,6 +5,7 @@
 // Photos are only held in memory for the duration of the request and are never stored.
 
 const Anthropic = require('@anthropic-ai/sdk');
+const { memberGate } = require('../lib/billing');
 
 const MODEL = process.env.ANTHROPIC_MODEL || 'claude-opus-5-5';
 const MAX_IMAGES = 6;
@@ -210,6 +211,9 @@ async function handler(req, res) {
   if (!aiConfigured()) {
     return res.status(503).json({ error: 'AI coach is not configured' });
   }
+  // Only signed-in members (with access, when payments are on) can spend the AI budget.
+  const denied = await memberGate(req);
+  if (denied) return res.status(denied.status).json({ error: denied.error });
 
   let body;
   try {
