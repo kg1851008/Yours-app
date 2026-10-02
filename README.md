@@ -24,6 +24,7 @@
 - **PR detection** using estimated one-rep max, plus **strength by phase**, which compares her relative strength across phases on the same lifts.
 - **Weekly check-in.** Three questions (how training felt, hunger, next week's plans) plus her numbers (sessions, steps, readiness, weight trend, upcoming phase changes) produce plan changes she can accept or skip: sets on main lifts, step target and calories, all within safe limits.
 - **Forgiving streak.** A day counts for training, a check-in, or 60% of her step target, and one missed day a week is forgiven.
+- **Barcode food logging.** Scan a packaged food with the phone camera (native BarcodeDetector on Android Chrome, the bundled ZXing reader on iPhone and everywhere else), scan from a photo, or type the number. Nutrition comes from Open Food Facts, a free open database; only the barcode is sent. Log by servings or grams to a meal. Products missing from the database can be added once from the label and are remembered. Also: food search, recent foods, and manual entries. Calories, protein, carbs and fat roll up into daily totals on Home and Meals.
 - **Protein tracking** by marking meals as eaten, plus a **grocery list** for the next 7 days of meals that she can tick off and share.
 - **Share cards** (PRs, streak, strength by phase): 1080x1350 branded images, shared through the phone's share menu or downloaded.
 - **Installable app (PWA).** Home-screen icon, an offline app shell, and the Android install prompt. On iPhone, Safari's Add to Home Screen.
@@ -53,7 +54,7 @@ The app stores everything on the user's device for now:
 ## Tests
 
 ```bash
-npm test   # coaching logic: cycle learning, readiness, load suggestions, PRs, patterns, weekly review, streak, grocery list
+npm test   # coaching and nutrition logic: cycle learning, readiness, load suggestions, PRs, patterns, weekly review, streak, grocery list
 ```
 
 ## Run locally

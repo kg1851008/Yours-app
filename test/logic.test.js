@@ -135,3 +135,26 @@ test('suggestLoad works in pounds and converts kg history', () => {
   assert.equal(c.unit, 'lb');
   assert.equal(c.weight, 17.5); // 8 kg = 17.6 lb, rounded to 2.5 lb steps; reps not yet at 12 so weight holds
 });
+
+test('parseOFF reads per-serving and per-100 g nutrition', () => {
+  const p = L.parseOFF({ code: '0123', product_name: 'Greek Yogurt Vanilla', brands: 'Oikos, Danone', serving_size: '150 g', serving_quantity: '150', nutriments: { 'energy-kcal_100g': 60, proteins_100g: 10, carbohydrates_100g: 4, fat_100g: 0 } }, '0123');
+  assert.equal(p.brand, 'Oikos');
+  assert.equal(p.perServing.kcal, 90);
+  assert.equal(p.perServing.protein, 15);
+  assert.deepEqual(L.foodMacros(p, 2, 'servings'), { kcal: 180, protein: 30, carbs: 12, fat: 0 });
+  assert.equal(L.foodMacros(p, 50, 'grams').protein, 5);
+  assert.equal(L.parseOFF({ product_name: 'No data', nutriments: {} }), null);
+});
+
+test('macrosFor sums meals, scanned foods and extra protein', () => {
+  const data = { eaten: { [k(0)]: { lunch: { protein: 40, kcal: 600 } } }, foodLog: { [k(0)]: [{ kcal: 200, protein: 20, carbs: 10, fat: 5 }] }, proteinExtra: { [k(0)]: 10 } };
+  assert.deepEqual(L.macrosFor(data, k(0)), { kcal: 800, protein: 70, carbs: 10, fat: 5 });
+  assert.equal(L.proteinFor(data, k(0)), 70);
+});
+
+test('validBarcode checks the check digit', () => {
+  assert.equal(L.validBarcode('5000112637922'), true); // EAN-13
+  assert.equal(L.validBarcode('5000112637923'), false);
+  assert.equal(L.validBarcode('036000291452'), true); // UPC-A
+  assert.equal(L.validBarcode('abc'), false);
+});

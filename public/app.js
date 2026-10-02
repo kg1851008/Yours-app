@@ -60,6 +60,9 @@
     list: '<path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/>',
     calendar: '<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
     download: '<path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 19h14"/>',
+    barcode: '<path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 8v8M10 8v8M13 8v8M16 8v8"/>',
+    search: '<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/>',
+    image: '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m4 18 5-5 4 4 3-3 4 4"/>',
   };
   const icon = (name, size = 22, sw = 1.8) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
 
@@ -97,7 +100,7 @@
       onboarded: false, planSeen: false, obStep: 0,
       profile: { units: 'imperial', cycleMode: 'natural', cycleLength: 28, periodLength: 5, favorites: [], avoid: [], foodNotes: '' },
       periods: [], daily: {}, plan: { volume: 0, stepBonus: 0, kcalAdjust: 0 }, reviews: [], prs: [],
-      workouts: [], steps: {}, water: {}, eaten: {}, proteinExtra: {}, checkins: [], chat: [], overrides: {}, mealSwaps: {}, grocery: { checked: {} },
+      workouts: [], steps: {}, water: {}, eaten: {}, proteinExtra: {}, foodLog: {}, recentFoods: [], customFoods: {}, checkins: [], chat: [], overrides: {}, mealSwaps: {}, grocery: { checked: {} },
       activeWorkout: null, pinHash: null, pinSalt: null,
     };
   }
@@ -219,6 +222,8 @@
       recentWorkouts: S.data.workouts.slice(-10).map((w) => ({ date: w.date, name: w.name, minutes: w.minutes, phase: w.phase })),
       recentPRs: S.data.prs.slice(-5),
       proteinTodayG: L.proteinFor(S.data, todayKey()),
+      eatenToday: L.macrosFor(S.data, todayKey()),
+      foodLogToday: (S.data.foodLog[todayKey()] || []).map((f) => ({ name: f.name, amount: f.label, kcal: f.kcal, protein: f.protein })),
       stepsLast14Days: last14.map((k) => ({ date: k, steps: S.data.steps[k] || 0 })),
       waterTodayMl: S.data.water[todayKey()] || 0,
       weightCheckins: S.data.checkins.slice(-12),
@@ -651,6 +656,148 @@
   }
   const fmtLoad = (w, u) => `${Number(w.toFixed(1))} ${u}`;
 
+  // ---------- barcode scanning + food lookup ----------
+  // Native BarcodeDetector where available (Chrome on Android); ZXing everywhere else (iPhone Safari).
+  const OFF_FIELDS = 'code,product_name,generic_name,brands,nutriments,serving_size,serving_quantity,image_front_small_url';
+  let scanSession = null;
+  let zxingPromise = null;
+  function loadZXing() {
+    if (window.ZXingBrowser) return Promise.resolve();
+    if (!zxingPromise) zxingPromise = new Promise((resolve, reject) => {
+      const el = document.createElement('script');
+      el.src = '/vendor/zxing-browser.min.js';
+      el.onload = resolve;
+      el.onerror = () => { zxingPromise = null; reject(new Error('Scanner failed to load')); };
+      document.head.appendChild(el);
+    });
+    return zxingPromise;
+  }
+  const setScanStatus = (text) => { const el = document.getElementById('scan-status'); if (el) el.textContent = text; };
+
+  async function nativeDetector() {
+    if (!('BarcodeDetector' in window)) return null;
+    try {
+      const formats = await window.BarcodeDetector.getSupportedFormats();
+      if (!formats.includes('ean_13')) return null;
+      return new window.BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e'].filter((f) => formats.includes(f)) });
+    } catch { return null; }
+  }
+
+  async function startScanner() {
+    const video = document.getElementById('scan-video');
+    if (!video) return;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { setScanStatus('Camera is not available here. Type the barcode or scan from a photo.'); return; }
+    let done = false;
+    const found = (code) => { if (done) return; code = String(code).trim(); if (!L.validBarcode(code)) return; done = true; stopScanner(); if (navigator.vibrate) navigator.vibrate(40); lookupBarcode(code); };
+    try {
+      setScanStatus('Starting camera...');
+      const detector = await nativeDetector();
+      if (detector) {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+        video.srcObject = stream;
+        await video.play();
+        let active = true;
+        scanSession = { stop: () => { active = false; stream.getTracks().forEach((t) => t.stop()); } };
+        const tick = async () => {
+          if (!active) return;
+          try { const codes = await detector.detect(video); if (codes.length) return found(codes[0].rawValue); } catch { /* keep trying */ }
+          setTimeout(tick, 160);
+        };
+        tick();
+      } else {
+        await loadZXing();
+        const reader = new window.ZXingBrowser.BrowserMultiFormatReader();
+        const controls = await reader.decodeFromConstraints({ video: { facingMode: 'environment' }, audio: false }, video, (result) => { if (result) found(result.getText()); });
+        scanSession = { stop: () => controls.stop() };
+      }
+      if (!done) setScanStatus('Line the barcode up inside the frame');
+    } catch (e) {
+      stopScanner();
+      setScanStatus(e && e.name === 'NotAllowedError' ? 'Camera access is blocked. Allow it in your browser settings, or scan from a photo.' : 'Could not start the camera. Type the barcode or scan from a photo.');
+    }
+  }
+  function stopScanner() { if (scanSession) { try { scanSession.stop(); } catch { /* already stopped */ } scanSession = null; } }
+
+  async function scanPhoto(file) {
+    setScanStatus('Reading barcode...');
+    const url = URL.createObjectURL(file);
+    try {
+      let code = null;
+      const detector = await nativeDetector();
+      if (detector) { try { const codes = await detector.detect(await createImageBitmap(file)); if (codes.length) code = codes[0].rawValue; } catch { /* fall through */ } }
+      if (!code) { await loadZXing(); code = (await new window.ZXingBrowser.BrowserMultiFormatReader().decodeFromImageUrl(url)).getText(); }
+      if (!L.validBarcode(code)) throw new Error('invalid');
+      stopScanner();
+      lookupBarcode(code);
+    } catch { setScanStatus('No barcode found in that photo. Try a closer, sharper shot, or type the number.'); }
+    finally { URL.revokeObjectURL(url); }
+  }
+
+  async function fetchOFF(code) {
+    const r = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=${OFF_FIELDS}`);
+    if (!r.ok && r.status !== 404) throw new Error('network');
+    const j = await r.json();
+    return j && j.status === 1 ? L.parseOFF(j.product, code) : null;
+  }
+
+  async function lookupBarcode(code) {
+    const custom = S.data.customFoods[code];
+    if (custom) { openFood(custom); return; }
+    S.modal = { type: 'food', loading: true, barcode: code };
+    render();
+    try {
+      let food = await fetchOFF(code);
+      if (!food && code.length === 12) food = await fetchOFF('0' + code); // UPC-A stored as EAN-13
+      if (S.modal && S.modal.barcode !== code) return;
+      if (food) openFood(food);
+      else { S.modal = { type: 'foodManual', barcode: code, notFound: true }; render(); }
+    } catch {
+      S.modal = { type: 'foodManual', barcode: code, offline: true };
+      render();
+    }
+  }
+
+  function openFood(food, amount, mode) {
+    S.modal = { type: 'food', food, amount: amount || 1, mode: mode || 'servings', slot: slotNow() };
+    render();
+  }
+
+  function foodLabel(food, amount, mode) {
+    if (mode === 'grams') return `${amount} g`;
+    const s = food.serving.label;
+    return amount === 1 ? s : `${amount} x ${s}`;
+  }
+
+  const foodMacroTiles = (mac) => [['kcal', mac.kcal, ''], ['Protein', mac.protein, 'g'], ['Carbs', mac.carbs, 'g'], ['Fat', mac.fat, 'g']].map(([l, v, u]) => `<div class="stat" style="padding:10px"><div class="eyebrow" style="font-size:9px">${l}</div><div class="value" style="font-size:24px">${Math.round(v)}<small>${u}</small></div></div>`).join('');
+
+  function logFood() {
+    const m = S.modal;
+    const f = m.food;
+    const mac = L.foodMacros(f, m.amount, m.mode);
+    const k = todayKey();
+    (S.data.foodLog[k] = S.data.foodLog[k] || []).push({ id: uid(), name: f.name, brand: f.brand || '', barcode: f.barcode || null, slot: m.slot, amount: m.amount, mode: m.mode, label: foodLabel(f, m.amount, m.mode), ...mac, ts: Date.now() });
+    const keyOf = (x) => x.food.barcode || x.food.name.toLowerCase();
+    S.data.recentFoods = [{ food: f, amount: m.amount, mode: m.mode }].concat((S.data.recentFoods || []).filter((x) => keyOf(x) !== keyOf({ food: f }))).slice(0, 12);
+    S.modal = null;
+    save();
+    render();
+    toast(`Logged ${f.name} · ${mac.kcal} kcal, ${Math.round(mac.protein)} g protein`);
+  }
+
+  async function searchFoods(q) {
+    S.modal = { type: 'foodSearch', q, loading: true, results: [] };
+    render();
+    const local = Object.values(S.data.customFoods).filter((f) => f.name.toLowerCase().includes(q.toLowerCase()));
+    try {
+      const r = await fetch(`https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page_size=20&fields=${OFF_FIELDS}`);
+      const j = await r.json();
+      const remote = (j.products || []).map((p) => L.parseOFF(p, p.code)).filter(Boolean);
+      if (S.modal && S.modal.type === 'foodSearch' && S.modal.q === q) { S.modal.results = local.concat(remote); S.modal.loading = false; render(); }
+    } catch {
+      if (S.modal && S.modal.type === 'foodSearch') { S.modal.results = local; S.modal.loading = false; S.modal.error = true; render(); }
+    }
+  }
+
   // ---------- community (shared on this device) ----------
   function community() {
     let c = store.get('yours.community', null);
@@ -1004,7 +1151,7 @@
       <div class="stats">
         <div class="stat"><div class="row between"><div class="eyebrow">Protein</div><button class="icon-btn" style="width:30px;height:30px" data-action="log-protein" aria-label="Log protein">${icon('plus', 16)}</button></div>
           <div class="value">${protein}<small>/ ${t.protein} g</small></div><div class="meter"><div style="width:${clamp((protein / t.protein) * 100, 0, 100)}%"></div></div></div>
-        <div class="stat"><div class="eyebrow">Calories</div><div class="value">${t.kcal.toLocaleString()}<small>kcal</small></div><div class="tiny muted" style="margin-top:4px">C ${t.carbs} · F ${t.fat}</div></div>
+        <div class="stat"><div class="row between"><div class="eyebrow">Calories</div><button class="icon-btn" style="width:30px;height:30px" data-action="open-scanner" aria-label="Scan food barcode">${icon('barcode', 16)}</button></div><div class="value">${L.macrosFor(S.data, todayKey()).kcal.toLocaleString()}<small>/ ${t.kcal.toLocaleString()}</small></div><div class="meter green"><div style="width:${clamp((L.macrosFor(S.data, todayKey()).kcal / t.kcal) * 100, 0, 100)}%"></div></div></div>
         <div class="stat"><div class="row between"><div class="eyebrow">Water</div><button class="icon-btn" style="width:30px;height:30px" data-action="water" data-ml="250" aria-label="Add 250 ml">${icon('plus', 16)}</button></div>
           <div class="value">${(water / 1000).toFixed(1)}<small>/ ${t.water} L</small></div><div class="meter"><div style="width:${clamp((water / t.waterMl) * 100, 0, 100)}%"></div></div></div>
         <div class="stat"><div class="row between"><div class="eyebrow">Steps</div><button class="icon-btn" style="width:30px;height:30px" data-action="log-steps" aria-label="Log steps">${icon('plus', 16)}</button></div>
@@ -1141,6 +1288,22 @@
   }
 
   // ---------- meals ----------
+  const SLOT_LABEL = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', snack: 'Snack' };
+  const slotNow = () => { const h = new Date().getHours(); return h < 11 ? 'breakfast' : h < 15 ? 'lunch' : h < 21 ? 'dinner' : 'snack'; };
+
+  function intakeCard(t) {
+    const k = todayKey();
+    const m = L.macrosFor(S.data, k);
+    const log = S.data.foodLog[k] || [];
+    const line = (label, v, target, unitLabel, color) => `<div style="margin-top:10px"><div class="row between"><span class="eyebrow" style="color:var(--text)">${label}</span><span class="tiny" style="font-family:var(--mono)">${v} / ${target} ${unitLabel}</span></div><div class="meter" style="margin-top:6px"><div style="width:${clamp((v / target) * 100, 0, 100)}%;background:${color}"></div></div></div>`;
+    return `<div class="card">
+      <div class="row between" style="align-items:flex-end"><div><div class="eyebrow">Eaten today</div><div class="big-number" style="font-size:52px;margin-top:6px">${m.kcal.toLocaleString()}<span class="eyebrow" style="font-size:11px;margin-left:6px">/ ${t.kcal.toLocaleString()} kcal</span></div></div></div>
+      ${line('Protein', m.protein, t.protein, 'g', 'var(--accent)')}${line('Carbs', m.carbs, t.carbs, 'g', 'var(--follicular)')}${line('Fat', m.fat, t.fat, 'g', 'var(--luteal)')}
+      <div class="row" style="margin-top:16px"><button class="btn primary grow" data-action="open-scanner">${icon('barcode', 18)} Scan barcode</button><button class="btn ghost" data-action="open-food-search" aria-label="Search foods">${icon('search', 18)}</button><button class="btn ghost" data-action="open-food-manual" aria-label="Add food manually">${icon('plus', 18)}</button></div>
+      ${log.length ? `<div class="divider"></div>${log.map((f) => `<div class="list-item" style="padding:10px 0"><div class="grow"><strong class="small">${esc(f.name)}</strong><div class="tiny muted">${esc(SLOT_LABEL[f.slot] || '')} · ${esc(f.label)}${f.brand ? ` · ${esc(f.brand)}` : ''}</div></div><div class="tiny" style="font-family:var(--mono);text-align:right">${f.kcal} kcal<br>${Math.round(f.protein)} g P</div><button class="icon-btn" style="width:30px;height:30px" data-action="food-del" data-id="${f.id}" aria-label="Remove ${esc(f.name)}">${icon('x', 14)}</button></div>`).join('')}` : ''}
+    </div>`;
+  }
+
   function viewMeals() {
     const c = cyc();
     const ph = D.PHASES[c.phase];
@@ -1152,15 +1315,11 @@
     const totalK = picks.reduce((n, x) => n + x.meal.kcal, 0);
     const portion = clamp(Math.round((t.kcal / totalK) * 10) / 10, 0.7, 1.6);
     const eaten = S.data.eaten[k] || {};
-    const had = L.proteinFor(S.data, k);
     return `<div class="screen">
       ${header('the meal edit', `${ph.name} ${c.steady ? 'plan' : 'phase'} · ${fmtDate(today(), { month: 'short', day: 'numeric' })}`, 'serif')}
-      <div class="card soft"><div class="eyebrow">Nutrition focus</div><p style="margin-top:6px">${esc(ph.nutrition)}</p>
+      ${intakeCard(t)}
+      <div class="card soft" style="margin-top:12px"><div class="eyebrow">Nutrition focus</div><p style="margin-top:6px">${esc(ph.nutrition)}</p>
         <div class="chips" style="margin-top:12px">${ph.foods.map((f) => `<span class="tag">${esc(f)}</span>`).join('')}</div></div>
-      <div class="stats" style="margin-top:12px">
-        <div class="stat"><div class="eyebrow">Protein today</div><div class="value">${had}<small>/ ${t.protein} g</small></div><div class="meter"><div style="width:${clamp((had / t.protein) * 100, 0, 100)}%"></div></div></div>
-        ${statTile('Calories', t.kcal.toLocaleString(), 'kcal')}
-      </div>
       <button class="btn ghost block" style="margin-top:12px" data-action="open-grocery">${icon('list', 18)} Grocery list for the week</button>
       <p class="small muted" style="margin-top:10px">This plan gives about ${Math.round(totalP * portion)} g protein at a portion size of x${portion}. ${totalP * portion < t.protein ? `Add a shake or an extra protein serving to close the ${Math.round(t.protein - totalP * portion)} g gap.` : 'That covers your protein target.'}</p>
       ${slots.map(([s, label], i) => { const { meal, count, compromised } = picks[i]; const isEaten = eaten[s] && eaten[s].name === meal.name; return `
@@ -1169,7 +1328,7 @@
           <div class="macro"><span><strong>${Math.round(meal.protein * portion)} g</strong> protein</span><span><strong>${Math.round(meal.kcal * portion)}</strong> kcal</span></div>
           <div class="why">${esc(meal.why)}</div>
           ${compromised ? '<p class="tiny error">No option fully matches your food filters here. Swap ingredients as needed.</p>' : ''}
-          <button class="btn ${isEaten ? 'soft' : 'ghost'} sm" style="margin-top:8px;align-self:flex-start" data-action="eat-meal" data-slot="${s}" data-name="${esc(meal.name)}" data-protein="${Math.round(meal.protein * portion)}">${isEaten ? `${icon('check', 16, 2.4)} Eaten` : 'Mark as eaten'}</button>
+          <button class="btn ${isEaten ? 'soft' : 'ghost'} sm" style="margin-top:8px;align-self:flex-start" data-action="eat-meal" data-slot="${s}" data-name="${esc(meal.name)}" data-protein="${Math.round(meal.protein * portion)}" data-kcal="${Math.round(meal.kcal * portion)}">${isEaten ? `${icon('check', 16, 2.4)} Eaten` : 'Mark as eaten'}</button>
         </div>`; }).join('')}
       <p class="tiny muted center" style="margin-top:20px">Filtering out: ${esc((S.data.profile.avoid || []).join(', ') || 'nothing')}. Edit in your profile.</p>
     </div>`;
@@ -1459,10 +1618,56 @@
       return sheet('Share your progress', `${m.url ? `<img src="${m.url}" alt="Progress card" style="border-radius:16px;border:1px solid var(--line)">` : '<div class="empty">Creating your card...</div>'}
         <button class="btn primary block" style="margin-top:14px" data-action="share-card" ${m.url ? '' : 'disabled'}>${icon('share', 18)} Share or save</button>`);
     }
+    if (m.type === 'scanner') {
+      const recent = S.data.recentFoods || [];
+      return `<div class="overlay"><div class="sheet full scanner-sheet" role="dialog" aria-label="Scan a barcode">
+        <div class="sheet-head"><button class="icon-btn" data-action="close-scanner" aria-label="Close scanner">${icon('x', 18)}</button><div class="eyebrow" style="color:#F7F2EA">Scan barcode</div><button class="icon-btn" data-action="open-food-search" aria-label="Search foods">${icon('search', 18)}</button></div>
+        <div class="scan-frame"><video id="scan-video" playsinline muted></video><div class="scan-box"><span></span></div></div>
+        <p id="scan-status" class="mono center" style="margin-top:14px;color:#F7F2EA;opacity:.85">Starting camera...</p>
+        <div class="row" style="margin-top:16px"><label class="btn outline grow" style="cursor:pointer">${icon('image', 18)} Scan from photo<input type="file" accept="image/*" capture="environment" data-scan-photo hidden></label></div>
+        <form class="row" data-form="barcode" style="margin-top:10px"><input class="input grow" name="code" inputmode="numeric" pattern="[0-9]*" maxlength="14" placeholder="Or type the barcode number" aria-label="Barcode number" style="background:rgba(247,242,234,.08);border-color:rgba(247,242,234,.25);color:#F7F2EA"><button class="btn cream sm" type="submit">Look up</button></form>
+        ${recent.length ? `<div class="eyebrow" style="margin-top:24px;color:#F7F2EA;opacity:.7">Recent</div>${recent.slice(0, 5).map((r, i) => `<button class="list-item" style="width:100%;text-align:left;color:#F7F2EA;border-color:rgba(247,242,234,.15)" data-action="recent-food" data-i="${i}"><div class="grow"><strong class="small">${esc(r.food.name)}</strong><div class="tiny" style="opacity:.7">${esc(foodLabel(r.food, r.amount, r.mode))}</div></div><span class="tiny" style="font-family:var(--mono)">${L.foodMacros(r.food, r.amount, r.mode).kcal} kcal</span></button>`).join('')}` : ''}
+        <p class="tiny center" style="margin-top:20px;color:#F7F2EA;opacity:.55">Only the barcode number is sent to Open Food Facts, an open food database.</p>
+      </div></div>`;
+    }
+    if (m.type === 'food') {
+      if (m.loading) return sheet('Looking it up', `<div class="empty">Finding barcode ${esc(m.barcode)}...</div>`);
+      const f = m.food;
+      const mac = L.foodMacros(f, m.amount, m.mode);
+      return sheet('Log food', `<div class="row" style="gap:14px;align-items:flex-start">${f.image ? `<img src="${esc(f.image)}" alt="" style="width:64px;height:64px;object-fit:contain;border-radius:12px;background:#fff;flex-shrink:0" referrerpolicy="no-referrer">` : ''}<div class="grow"><div class="serif" style="font-size:26px;line-height:1.05">${esc(f.name)}</div><div class="eyebrow" style="margin-top:6px">${esc(f.brand || 'Food')}${f.barcode ? ` · ${esc(f.barcode)}` : ''}</div></div></div>
+        ${f.per100 && f.serving.grams !== 100 ? `<div class="segment" style="margin-top:16px">${[['servings', 'Servings'], ['grams', 'Grams']].map(([v, l]) => `<button class="${m.mode === v ? 'active' : ''}" data-action="food-mode" data-value="${v}">${l}</button>`).join('')}</div>` : ''}
+        ${m.mode === 'grams'
+          ? `<label class="field" style="margin-top:14px"><span class="label">Amount in grams</span><input class="input" type="number" inputmode="decimal" min="1" max="2000" value="${m.amount}" data-food-grams></label>`
+          : `<div class="row between" style="margin-top:16px"><button class="icon-btn" data-action="food-step" data-d="-0.5" aria-label="Less">${icon('x', 14)}</button><div class="center"><div class="big-number" style="font-size:48px">${m.amount}</div><div class="tiny muted">x ${esc(f.serving.label)}</div></div><button class="icon-btn" data-action="food-step" data-d="0.5" aria-label="More">${icon('plus', 16)}</button></div>`}
+        <div class="stats" id="food-macros" style="margin-top:16px;grid-template-columns:repeat(4,1fr)">${foodMacroTiles(mac)}</div>
+        <div class="label" style="margin-top:16px">Meal</div><div class="chips">${Object.entries(SLOT_LABEL).map(([v, l]) => `<button class="chip ${m.slot === v ? 'selected' : ''}" data-action="food-slot" data-value="${v}">${l}</button>`).join('')}</div>
+        <button class="btn primary block" style="margin-top:20px" data-action="food-log">Log it</button>
+        <p class="tiny muted center" style="margin-top:10px">${f.custom ? 'Your saved food.' : 'Nutrition from Open Food Facts. Check the label if anything looks off.'}</p>`);
+    }
+    if (m.type === 'foodManual') {
+      const pre = m.prefill || {};
+      return sheet('Add food', `${m.notFound ? `<p class="small" style="margin-bottom:12px">Barcode ${esc(m.barcode)} is not in the database yet. Add it once from the label and it will be saved for next time.</p>` : m.offline ? '<p class="small" style="margin-bottom:12px">Could not reach the food database. Check your connection, or add it from the label.</p>' : ''}
+        <form data-form="food-manual">
+          <label class="field"><span class="label">Food name</span><input class="input" name="name" required maxlength="80" value="${esc(pre.name || '')}"></label>
+          <label class="field"><span class="label">Serving</span><input class="input" name="serving" maxlength="40" placeholder="e.g. 1 bar, 150 g, 1 cup" value="${esc(pre.serving || '')}"></label>
+          <div class="input-row" style="margin-top:14px"><label class="field"><span class="label">Calories</span><input class="input" name="kcal" type="number" inputmode="decimal" min="0" max="3000" required></label><label class="field" style="margin-top:0"><span class="label">Protein g</span><input class="input" name="protein" type="number" inputmode="decimal" min="0" max="300" step="0.1" required></label></div>
+          <div class="input-row" style="margin-top:14px"><label class="field"><span class="label">Carbs g</span><input class="input" name="carbs" type="number" inputmode="decimal" min="0" max="500" step="0.1" value="0"></label><label class="field" style="margin-top:0"><span class="label">Fat g</span><input class="input" name="fat" type="number" inputmode="decimal" min="0" max="300" step="0.1" value="0"></label></div>
+          <p class="tiny muted" style="margin-top:8px">Enter the values for one serving.</p>
+          <button class="btn primary block" style="margin-top:18px" type="submit">${m.barcode ? 'Save and log' : 'Log it'}</button>
+        </form>`);
+    }
+    if (m.type === 'foodSearch') {
+      return sheet('Search foods', `<form class="row" data-form="food-search"><input class="input grow" name="q" value="${esc(m.q || '')}" placeholder="e.g. greek yogurt, protein bar" maxlength="80" aria-label="Search foods" autofocus><button class="btn primary sm" type="submit">Search</button></form>
+        ${m.loading ? '<div class="empty">Searching...</div>' : ''}
+        ${m.error ? '<p class="tiny error" style="margin-top:10px">Could not reach the food database. Showing your saved foods.</p>' : ''}
+        ${(m.results || []).map((f, i) => `<button class="list-item" style="width:100%;text-align:left" data-action="search-pick" data-i="${i}">${f.image ? `<img src="${esc(f.image)}" alt="" style="width:40px;height:40px;object-fit:contain;border-radius:8px;background:#fff" referrerpolicy="no-referrer" loading="lazy">` : ''}<div class="grow"><strong class="small">${esc(f.name)}</strong><div class="tiny muted">${esc(f.brand || '')}${f.brand ? ' · ' : ''}${esc(f.serving.label)}</div></div><span class="tiny" style="font-family:var(--mono);text-align:right">${Math.round(f.perServing.kcal)} kcal<br>${Math.round(f.perServing.protein)} g P</span></button>`).join('')}
+        ${!m.loading && m.q && !(m.results || []).length ? `<div class="empty">Nothing found. <button class="link" data-action="open-food-manual">Add it manually</button></div>` : ''}`);
+    }
     if (m.type === 'protein') {
       const k = todayKey();
       const eaten = Object.entries(S.data.eaten[k] || {});
-      return sheet('Log protein', `<p class="small muted">Today: ${L.proteinFor(S.data, k)} of ${tgt().protein} g. Mark meals as eaten in Meals, or add extra here.</p>
+      return sheet('Log protein', `<p class="small muted">Today: ${L.proteinFor(S.data, k)} of ${tgt().protein} g. Scan a barcode, mark meals as eaten in Meals, or add a quick amount.</p>
+        <button class="btn primary block" style="margin-top:14px" data-action="open-scanner">${icon('barcode', 18)} Scan a barcode</button>
         <div class="row" style="margin-top:14px">${[10, 20, 30].map((g) => `<button class="btn soft grow" data-action="add-protein" data-g="${g}">+${g} g</button>`).join('')}</div>
         ${eaten.length ? `<div class="divider"></div>${eaten.map(([slot, x]) => `<div class="row between small" style="margin-top:6px"><span>${esc(x.name)}</span><strong>${x.protein} g</strong></div>`).join('')}` : ''}
         ${(S.data.proteinExtra[k] || 0) ? `<div class="row between small" style="margin-top:6px"><span>Extra</span><strong>${S.data.proteinExtra[k]} g</strong></div><button class="link small" style="margin-top:8px" data-action="add-protein" data-g="${-S.data.proteinExtra[k]}">Clear extra</button>` : ''}`);
@@ -1652,7 +1857,7 @@
     }
     d.steps[dateKey(t)] = 4210;
     d.water[dateKey(t)] = 1000;
-    d.eaten[dateKey(t)] = { breakfast: { name: L.mealFor(d, t, 'breakfast').meal.name, protein: 34 } };
+    d.eaten[dateKey(t)] = { breakfast: { name: L.mealFor(d, t, 'breakfast').meal.name, protein: 34, kcal: 450 } };
     [65.2, 64.9, 65.1, 64.6, 64.2, 64.4, 63.8, 63.5].forEach((kg, i) => d.checkins.push({ date: dateKey(addDays(t, -(7 - i) * 7)), kg }));
     store.set(`yours.data.${email}`, d);
     await startSession({ kind: 'user', email });
@@ -1764,7 +1969,7 @@
 
     tab: (el) => { goTab(el.dataset.tab); render(); if (S.tab === 'advisor' && S.advisorView === 'coach') scrollChat(); },
     'open-settings': () => { S.modal = { type: 'settings' }; render(); },
-    'close-modal': () => { S.modal = null; render(); },
+    'close-modal': () => { stopScanner(); S.modal = null; render(); },
     overlay: (el, ev) => { if (ev.target === el) { S.modal = null; render(); } },
     water: (el) => { addWater(Number(el.dataset.ml)); render(); },
     'log-steps': () => { S.modal = { type: 'steps' }; render(); },
@@ -1836,10 +2041,21 @@
       const k = todayKey();
       const day = (S.data.eaten[k] = S.data.eaten[k] || {});
       if (day[el.dataset.slot] && day[el.dataset.slot].name === el.dataset.name) delete day[el.dataset.slot];
-      else { day[el.dataset.slot] = { name: el.dataset.name, protein: Number(el.dataset.protein) }; toast(`+${el.dataset.protein} g protein`); }
+      else { day[el.dataset.slot] = { name: el.dataset.name, protein: Number(el.dataset.protein), kcal: Number(el.dataset.kcal) || 0 }; toast(`+${el.dataset.protein} g protein`); }
       save(); render();
     },
     'open-grocery': () => { S.modal = { type: 'grocery' }; render(); },
+    'open-scanner': () => { stopScanner(); S.modal = { type: 'scanner' }; render(); startScanner(); },
+    'close-scanner': () => { stopScanner(); S.modal = null; render(); },
+    'open-food-search': () => { stopScanner(); S.modal = { type: 'foodSearch', q: '', results: [] }; render(); },
+    'open-food-manual': () => { stopScanner(); S.modal = { type: 'foodManual' }; render(); },
+    'recent-food': (el) => { stopScanner(); const r = S.data.recentFoods[el.dataset.i]; if (r) openFood(r.food, r.amount, r.mode); },
+    'search-pick': (el) => { const f = S.modal.results[el.dataset.i]; if (f) openFood(f); },
+    'food-step': (el) => { S.modal.amount = clamp(Math.round((S.modal.amount + Number(el.dataset.d)) * 2) / 2, 0.5, 20); render(); },
+    'food-mode': (el) => { const m = S.modal; if (m.mode === el.dataset.value) return; m.mode = el.dataset.value; m.amount = m.mode === 'grams' ? (m.food.serving.grams || 100) : 1; render(); },
+    'food-slot': (el) => { S.modal.slot = el.dataset.value; render(); },
+    'food-log': () => logFood(),
+    'food-del': (el) => { const k = todayKey(); S.data.foodLog[k] = (S.data.foodLog[k] || []).filter((f) => f.id !== el.dataset.id); save(); render(); },
     'grocery-check': (el) => { const c = S.data.grocery.checked; c[el.dataset.item] = !c[el.dataset.item]; save(); render(); },
     'grocery-clear': () => { S.data.grocery.checked = {}; save(); render(); },
     'grocery-share': async () => {
@@ -1953,6 +2169,11 @@
       const btn = root.querySelector('[data-action="ob-next"]');
       if (btn) btn.disabled = !stepValid(S.data.obStep, p);
     }
+    if (el.matches('[data-food-grams]') && S.modal && S.modal.type === 'food') {
+      S.modal.amount = clamp(Number(el.value) || 0, 0, 2000);
+      const box = document.getElementById('food-macros');
+      if (box) box.innerHTML = foodMacroTiles(L.foodMacros(S.modal.food, S.modal.amount, 'grams'));
+    }
     if (el.dataset.set && S.data.activeWorkout) {
       const [ei, si, field] = el.dataset.set.split('.');
       S.data.activeWorkout.exercises[ei].sets[si][field] = el.value;
@@ -1964,6 +2185,7 @@
   document.addEventListener('change', async (ev) => {
     const el = ev.target;
     if (el.dataset.bindUi === 'pose') { S.pose = el.value; return; }
+    if (el.matches('[data-scan-photo]') && el.files && el.files[0]) { scanPhoto(el.files[0]); return; }
     if (el.matches('[data-upload]') && el.files && el.files[0]) {
       const file = el.files[0];
       if (!file.type.startsWith('image/')) return toast('Choose an image file');
@@ -1985,7 +2207,7 @@
       ev.preventDefault();
       ev.target.form.requestSubmit();
     }
-    if (ev.key === 'Escape' && S.modal && S.modal.type !== 'active') { S.modal = null; render(); }
+    if (ev.key === 'Escape' && S.modal && S.modal.type !== 'active') { stopScanner(); S.modal = null; render(); }
   });
 
   document.addEventListener('submit', async (ev) => {
@@ -1996,6 +2218,20 @@
     if (type === 'login') return login(form);
     if (type === 'signup') return signup(form);
     if (type === 'chat') { const v = form.msg.value; form.msg.value = ''; return sendChat(v); }
+    if (type === 'barcode') {
+      const code = form.code.value.replace(/\D/g, '');
+      if (!L.validBarcode(code)) return toast('That barcode does not look right. Check the digits.');
+      stopScanner();
+      return lookupBarcode(code);
+    }
+    if (type === 'food-search') { const q = form.q.value.trim(); if (q.length >= 2) searchFoods(q); return; }
+    if (type === 'food-manual') {
+      const n = (x) => Math.max(0, Number(form[x].value) || 0);
+      const food = { barcode: S.modal.barcode || null, name: form.name.value.trim().slice(0, 80), brand: '', image: null, custom: true, serving: { label: form.serving.value.trim().slice(0, 40) || '1 serving', grams: null }, perServing: { kcal: n('kcal'), protein: n('protein'), carbs: n('carbs'), fat: n('fat') }, per100: null };
+      if (food.barcode) S.data.customFoods[food.barcode] = food;
+      openFood(food);
+      return logFood();
+    }
     if (type === 'steps') { S.data.steps[todayKey()] = clamp(Number(form.steps.value) || 0, 0, 100000); S.modal = null; save(); render(); return toast('Steps updated'); }
     if (type === 'other') {
       S.data.workouts.push({ id: uid(), date: todayKey(), templateId: 'other', name: form.name.value.trim().slice(0, 60), minutes: clamp(Number(form.minutes.value) || 30, 5, 600), phase: cyc().phase });

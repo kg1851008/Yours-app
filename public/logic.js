@@ -321,9 +321,59 @@
     const swaps = ((data.mealSwaps || {})[dateKey(date)] || {})[slot] || 0;
     return { meal: list[swaps % list.length], count: list.length, compromised, phase };
   }
-  function proteinFor(data, key) {
-    const eaten = (data.eaten || {})[key] || {};
-    return Math.round(Object.values(eaten).reduce((n, m) => n + (m.protein || 0), 0) + ((data.proteinExtra || {})[key] || 0));
+  // ---------- food log (barcode scans, search, manual entries) ----------
+  const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) && n >= 0 ? n : null; };
+
+  // Normalise an Open Food Facts product into per-serving and per-100 g macros.
+  function parseOFF(product, barcode) {
+    if (!product) return null;
+    const n = product.nutriments || {};
+    const kcal100 = num(n['energy-kcal_100g']) ?? (num(n.energy_100g) != null ? num(n.energy_100g) / 4.184 : null);
+    const per100 = { kcal: kcal100, protein: num(n.proteins_100g), carbs: num(n.carbohydrates_100g), fat: num(n.fat_100g) };
+    const grams = num(product.serving_quantity);
+    let perServing = { kcal: num(n['energy-kcal_serving']), protein: num(n.proteins_serving), carbs: num(n.carbohydrates_serving), fat: num(n.fat_serving) };
+    if (perServing.kcal == null && grams && per100.kcal != null) {
+      perServing = Object.fromEntries(Object.entries(per100).map(([k, v]) => [k, v == null ? null : (v * grams) / 100]));
+    }
+    const hasServing = perServing.kcal != null;
+    const hasPer100 = per100.kcal != null;
+    if (!hasServing && !hasPer100) return null;
+    const name = (product.product_name || product.generic_name || '').trim() || 'Unnamed product';
+    const round1 = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, v == null ? 0 : Math.round(v * 10) / 10]));
+    return {
+      barcode: barcode || product.code || null,
+      name,
+      brand: (product.brands || '').split(',')[0].trim(),
+      image: product.image_front_small_url || null,
+      serving: hasServing ? { label: product.serving_size || (grams ? `${grams} g` : '1 serving'), grams: grams || null } : { label: '100 g', grams: 100 },
+      perServing: round1(hasServing ? perServing : per100),
+      per100: hasPer100 ? round1(per100) : null,
+    };
+  }
+
+  // Macros for an amount: servings of the label serving, or grams when per-100 g data exists.
+  function foodMacros(food, amount, mode) {
+    const base = mode === 'grams' && food.per100 ? food.per100 : food.perServing;
+    const factor = mode === 'grams' && food.per100 ? amount / 100 : amount;
+    return { kcal: Math.round(base.kcal * factor), protein: Math.round(base.protein * factor * 10) / 10, carbs: Math.round(base.carbs * factor * 10) / 10, fat: Math.round(base.fat * factor * 10) / 10 };
+  }
+
+  function macrosFor(data, key) {
+    const total = { kcal: 0, protein: 0, carbs: 0, fat: 0 };
+    Object.values((data.eaten || {})[key] || {}).forEach((m) => { total.kcal += m.kcal || 0; total.protein += m.protein || 0; total.carbs += m.carbs || 0; total.fat += m.fat || 0; });
+    ((data.foodLog || {})[key] || []).forEach((f) => { total.kcal += f.kcal; total.protein += f.protein; total.carbs += f.carbs; total.fat += f.fat; });
+    total.protein += (data.proteinExtra || {})[key] || 0;
+    return { kcal: Math.round(total.kcal), protein: Math.round(total.protein), carbs: Math.round(total.carbs), fat: Math.round(total.fat) };
+  }
+  const proteinFor = (data, key) => macrosFor(data, key).protein;
+
+  // EAN-13 / UPC-A / EAN-8 check digit validation, so a misread scan is rejected before lookup.
+  function validBarcode(code) {
+    if (!/^\d{8}$|^\d{12,14}$/.test(code)) return false;
+    const digits = code.split('').map(Number);
+    const check = digits.pop();
+    const sum = digits.reverse().reduce((s, d, i) => s + d * (i % 2 === 0 ? 3 : 1), 0);
+    return (10 - (sum % 10)) % 10 === check;
   }
 
   const CATS = { p: 'Protein', v: 'Produce', g: 'Pantry and grains', d: 'Dairy and eggs' };
@@ -477,7 +527,7 @@
     GOALS, LEVELS, ACTIVITY, goalOf, activityOf, STEADY_MODES,
     learnCycle, addPeriod, cycleInfo, targets, readiness, readinessLabel, patterns,
     workoutById, plannedWorkout, workoutFor, adjustSets, parseReps, e1rm, suggestLoad, detectPRs, strengthByPhase, exerciseHistory,
-    mealOptions, mealFor, proteinFor, groceryList, streak, weeklyStats, weeklyAdjust, applyAdjustments, weeklyDue,
+    mealOptions, mealFor, proteinFor, macrosFor, parseOFF, foodMacros, validBarcode, groceryList, streak, weeklyStats, weeklyAdjust, applyAdjustments, weeklyDue,
   };
   if (typeof window !== 'undefined') window.YOURS_LOGIC = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
