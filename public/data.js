@@ -193,6 +193,40 @@
       ],
     },
     {
+      id: 'mp-strength', phase: 'menopause', name: 'Bone-Building Strength', focus: 'Full body strength', minutes: 50, intensity: 'High',
+      summary: 'Heavy, controlled compound lifts. Loading your bones and muscles is the most effective training for this stage of life.',
+      exercises: [
+        e('Trap bar deadlift', 4, '6-8', '2 min', 'Brace, push the floor away, stand tall.', true),
+        e('Goblet squat', 4, '8', '90s', 'Sit between your heels, chest proud.', true),
+        e('Dumbbell bench press', 3, '8-10', '90s', 'Shoulder blades pinned back.', true),
+        e('One-arm dumbbell row', 3, '10 / side', '60s', 'Pull to the hip.'),
+        e('Step-up', 3, '8 / leg', '60s', 'Drive through the whole foot, control the way down.'),
+        e('Farmer carry', 3, '30 m', '60s', 'Heavy, tall and slow. Great for grip and posture.'),
+      ],
+    },
+    {
+      id: 'mp-power', phase: 'menopause', name: 'Power and Impact', focus: 'Power, bone density, balance', minutes: 35, intensity: 'Moderate',
+      summary: 'Short bursts of impact and speed that tell your bones to stay strong. Scale the jumps to what your joints and pelvic floor like.',
+      exercises: [
+        e('Low box jump or step-up hop', 4, '5', '60s', 'Land softly. Swap for fast step-ups if jumping does not feel right.'),
+        e('Kettlebell swing', 4, '12', '60s', 'Snap the hips, float the bell.', true),
+        e('Medicine ball slam', 3, '8', '45s', 'Reach tall, slam with intent.'),
+        e('Single-leg balance reach', 3, '6 / leg', '30s', 'Slow and steady. Hold a wall if needed.'),
+        e('Brisk walk', 1, '15 min', '-', 'Hills or stairs if you have them.'),
+      ],
+    },
+    {
+      id: 'mp-mobility', phase: 'menopause', name: 'Mobility and Balance', focus: 'Joints, balance, recovery', minutes: 30, intensity: 'Low',
+      summary: 'Keep joints happy and balance sharp. Good for days with poor sleep or joint aches.',
+      exercises: [
+        e('Hip airplane', 2, '5 / side', '30s', 'Hold something for support.'),
+        e('Thoracic rotations', 2, '8 / side', '30s', 'Follow your hand with your eyes.'),
+        e('Glute bridge', 3, '12', '45s', 'Squeeze for 2 seconds at the top.'),
+        e('Tandem walk', 2, '10 steps', '30s', 'Heel to toe in a straight line.'),
+        e('Easy walk', 1, '15 min', '-', 'Conversational pace.'),
+      ],
+    },
+    {
       id: 'rest', phase: 'any', name: 'Active Recovery', focus: 'Recovery', minutes: 25, intensity: 'Very low',
       summary: 'Rest is part of the plan. Walk, stretch and hit your step target.',
       exercises: [
@@ -369,6 +403,24 @@
     foods: ['Chicken', 'Salmon', 'Greek yogurt', 'Oats', 'Berries', 'Quinoa', 'Leafy greens', 'Eggs'],
   };
   ROTATION.steady = ['f-lower', 'f-upper', 'rest', 'o-glute', 'l-upper', 'f-hiit', 'rest']; // Monday first
+
+  // Menopause and postmenopause: a steady week built around bone density, muscle and balance.
+  PHASES.menopause = {
+    name: 'Menopause',
+    short: 'Strong for life',
+    energy: 'Steady energy',
+    hormones: 'With estrogen low and steady, muscle and bone need a stronger signal to stay strong. Heavy lifting, some impact work, enough protein and good sleep make the biggest difference.',
+    training: 'Lift heavy three times a week, add short impact or power work, and keep balance sharp. Progress the weights steadily.',
+    nutrition: 'High protein at every meal, calcium and vitamin D, plenty of fiber, and soy or flax if you enjoy them. Go easy on alcohol, which can worsen hot flashes and sleep.',
+    tips: [
+      'Strength training is the most effective way to protect bone density. Lift heavy enough that the last reps are hard.',
+      'Aim for protein at every meal. Muscle needs more of it after menopause.',
+      'Hot flashes or night sweats? Keep the bedroom cool, wear layers, and notice whether alcohol or spicy food triggers them.',
+    ],
+    foods: ['Greek yogurt', 'Salmon', 'Tofu', 'Leafy greens', 'Sardines', 'Lentils', 'Ground flax', 'Fortified milk'],
+  };
+  ROTATION.menopause = ['mp-strength', 'rest', 'mp-power', 'mp-mobility', 'mp-strength', 'rest', 'rest']; // Monday first
+  MEALS.menopause = MEALS.follicular;
   MEALS.steady = MEALS.follicular;
 
   const CYCLE_MODES = [
@@ -377,10 +429,13 @@
     { id: 'pcos', label: 'PCOS', desc: 'Diagnosed or suspected' },
     { id: 'perimenopause', label: 'Perimenopause', desc: 'Cycles changing in your 40s' },
     { id: 'hormonal', label: 'Hormonal contraception', desc: 'Pill, implant, injection or hormonal IUD' },
-    { id: 'none', label: 'No period right now', desc: 'Postpartum, menopause or other' },
+    { id: 'menopause', label: 'Menopause', desc: 'Postmenopause, or 12+ months without a period' },
+    { id: 'none', label: 'No period right now', desc: 'Postpartum or other' },
   ];
 
   const SYMPTOMS = ['Cramps', 'Bloating', 'Cravings', 'Headache', 'Tender breasts', 'Breakouts', 'Low mood', 'Poor sleep'];
+  // Shown in the check-in for perimenopause and menopause.
+  const MENO_SYMPTOMS = ['Hot flashes', 'Night sweats', 'Brain fog', 'Joint aches', 'Low mood', 'Poor sleep', 'Headache', 'Bloating'];
 
   // Grocery items per meal. Prefix: p protein, v produce, g grains and pantry, d dairy and eggs.
   const GROCERY = {
@@ -441,13 +496,14 @@
     ovulation: { serif: 'This is your moment.', cap: 'Peak . Power . Perform' },
     luteal: { serif: 'Steady wins this week.', cap: 'Sustain . Steady . Strong' },
     steady: { serif: 'Consistency is the plan.', cap: 'Train . Fuel . Recover' },
+    menopause: { serif: 'Stronger every year.', cap: 'Lift . Load . Balance' },
   };
 
   // Campaign photography slots. Drop images in public/img/ and set the paths, e.g. welcome: 'img/welcome.jpg'.
   // Until then, posters use grainy motion-blur art in the same palette.
-  const IMAGERY = { welcome: null, menstrual: null, follicular: null, ovulation: null, luteal: null, steady: null, session: null };
+  const IMAGERY = { welcome: null, menstrual: null, follicular: null, ovulation: null, luteal: null, steady: null, menopause: null, session: null };
 
-  const api = { PHASE_COPY, IMAGERY, PHASES, PHASE_ORDER, WORKOUTS, ROTATION, MEALS, FAVORITE_OPTIONS, AVOID_OPTIONS, MEMBERS, SEED_POSTS, AUTO_REPLIES, CYCLE_MODES, SYMPTOMS, GROCERY };
+  const api = { PHASE_COPY, IMAGERY, PHASES, PHASE_ORDER, WORKOUTS, ROTATION, MEALS, FAVORITE_OPTIONS, AVOID_OPTIONS, MEMBERS, SEED_POSTS, AUTO_REPLIES, CYCLE_MODES, SYMPTOMS, MENO_SYMPTOMS, GROCERY };
   if (typeof window !== 'undefined') window.YOURS_DATA = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

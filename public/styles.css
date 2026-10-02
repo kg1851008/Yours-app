@@ -434,3 +434,9 @@ h3 { font-size: 16px; font-weight: 600; }
 .scan-box::after { display: none; }
 .scan-box span { position: absolute; left: 6%; right: 6%; height: 2px; background: #D4845C; box-shadow: 0 0 12px #D4845C; top: 10%; animation: sweep 1.8s ease-in-out infinite alternate; }
 @keyframes sweep { to { top: 88%; } }
+
+/* ---------- menopause ---------- */
+:root { --menopause: #8B7A8C; }
+.art-menopause { background: radial-gradient(45% 55% at 30% 28%, #D9C6D3, transparent 70%), radial-gradient(55% 60% at 78% 75%, #4A3B4B, transparent 70%), linear-gradient(160deg, #8B7A8C, #3A2F3B); }
+.tint-menopause { background: #C3A9BC; }
+.ph-menopause { color: #6A4F66; }

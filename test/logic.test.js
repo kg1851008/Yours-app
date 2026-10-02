@@ -179,3 +179,38 @@ test('suggested meals carry estimated carbs and fat', () => {
   assert.ok(m.carbs > 0 && m.fat > 0);
   assert.ok(Math.abs(m.protein * 4 + m.carbs * 4 + m.fat * 9 - m.kcal) <= 15);
 });
+
+test('menopause mode: steady bone-density plan, higher protein', () => {
+  const p = profile({ cycleMode: 'menopause', age: 54, goal: 'lose' });
+  const c = L.cycleInfo(p);
+  assert.equal(c.steady, true);
+  assert.equal(c.phase, 'menopause');
+  const t = L.targets(p, c, {});
+  assert.ok(Number.isFinite(t.kcal) && Number.isFinite(t.steps));
+  const data = { profile: p, overrides: {} };
+  const ids = Array.from({ length: 7 }, (_, i) => L.plannedWorkout(data, L.addDays(T, i)).id);
+  assert.ok(ids.includes('mp-strength') && ids.includes('mp-power'));
+});
+
+test('menoInsights links hot flashes to readiness', () => {
+  const daily = {};
+  for (let i = 0; i < 10; i++) {
+    const hot = i % 2 === 0;
+    daily[k(-i)] = { energy: hot ? 2 : 4, sleep: hot ? 2 : 4, mood: 3, soreness: 2, symptoms: hot ? ['Hot flashes', 'Night sweats'] : [] };
+  }
+  const out = L.menoInsights(daily);
+  assert.ok(out.some((x) => x.startsWith('Hot flashes on 5 of your last 10') && x.includes('lower')));
+  assert.ok(out.some((x) => x.startsWith('Night sweats are costing you sleep')));
+});
+
+test('check-in day drives when the weekly check-in is due', () => {
+  const day = T.getDay();
+  const data = { profile: profile(), reviews: [], workouts: [], checkinDay: day };
+  assert.equal(L.weeklyDue(data), true);
+  data.checkinDay = (day + 3) % 7;
+  assert.equal(L.weeklyDue(data), false);
+  data.checkinDay = (day + 1) % 7;
+  assert.equal(L.checkinTomorrow(data), true);
+  data.checkinDay = day; data.reviews = [{ date: k(-2) }];
+  assert.equal(L.weeklyDue(data), false);
+});

@@ -254,7 +254,7 @@
     if (a.value === 'checkin') return 'Do my daily check-in';
     return `Open ${a.value[0].toUpperCase() + a.value.slice(1)}`;
   }
-  const lighterOption = (c) => (readinessToday() != null && readinessToday() < 30 ? 'm-restore' : { menstrual: 'm-restore', luteal: 'l-pilates' }[c.phase] || 'm-light');
+  const lighterOption = (c) => (readinessToday() != null && readinessToday() < 30 ? 'm-restore' : { menstrual: 'm-restore', luteal: 'l-pilates', menopause: 'mp-mobility' }[c.phase] || 'm-light');
 
   // On-device coach used when the live AI is not configured or unreachable.
   function localCoach(input) {
@@ -278,6 +278,10 @@
       const loads = todaysLoads();
       if (!loads.length) return `${hi}log a session with weights and reps and I will suggest your exact numbers from then on. Double progression works like this: stay at a weight until you hit the top of the rep range on every set, then add the smallest jump available. ${c.phase === 'luteal' ? 'In your luteal phase I hold weights steady.' : c.phase === 'menstrual' ? 'In your menstrual phase I take about 10% off.' : 'Your current phase is a great time to push.'}`;
       return `${hi}here are today's numbers for ${wk.name}:\n\n${loads.map((l) => `- ${l.exercise}: ${l.weight} ${l.unit} x ${l.reps}. ${l.why}`).join('\n')}\n\nThey are pre-filled when you start the workout.\n[[action:open:workouts]]`;
+    }
+    if (has('menopaus', 'hot flash', 'night sweat', 'hot flush', 'bone', 'osteo', 'brain fog')) {
+      const mi = L.menoInsights(S.data.daily);
+      return `${hi}${L.MENO_MODES.includes(p.cycleMode) ? 'here is what matters most at this stage' : 'for perimenopause and menopause, the priorities are'}:\n\n- Lift heavy 2-3 times a week. It is the most effective training for bone density and muscle.\n- Add a little impact or power work (step-up hops, swings) if your joints and pelvic floor are happy.\n- Protein at every meal: about ${Math.round(t.protein / 4)} g, four times a day.\n- Calcium, vitamin D and fiber. Soy or flax may ease hot flashes for some women.\n- Hot flashes and night sweats: a cool bedroom, layers, and watch alcohol, caffeine and spicy food as triggers.\n${mi.length ? `\nFrom your check-ins: ${mi[0]}` : '\nLog hot flashes, night sweats and sleep in your daily check-in and I will spot your patterns.'}\n\nYour doctor can talk you through hormone therapy and other options if symptoms are hard to live with.\n[[action:open:checkin]]`;
     }
     if (has('cramp', 'pain', 'hurt', 'bloat')) {
       return `${hi}that is really common${c.phase === 'menstrual' ? ' in the first days of your period' : ''}. What helps most women:\n\n- Gentle movement: a 20-minute walk or the Restore session increases blood flow and often eases cramps.\n- Heat on your lower belly and slow breathing (inhale 4, exhale 6).\n- Magnesium-rich food: dark chocolate, pumpkin seeds, leafy greens.\n- Stay on top of water today: ${t.water} L.\n\nIf pain is severe, stops you functioning, or comes with very heavy bleeding, please check in with a doctor.\n[[action:swap_workout:m-restore]]\n[[action:log_water:500]]`;
@@ -450,7 +454,7 @@
     } catch { S.photos = []; }
   }
   async function storePhoto(photo) {
-    const rec = { id: photo.id, owner: photo.owner, date: photo.date, created: photo.created, pose: photo.pose, phase: photo.phase };
+    const rec = { id: photo.id, owner: photo.owner, date: photo.date, created: photo.created, pose: photo.pose, phase: photo.phase, checkin: !!photo.checkin };
     if (S.photoKey) rec.enc = await encryptText(S.photoKey, photo.data);
     else rec.data = photo.data;
     await photoTx('readwrite', (s) => s.put(rec));
@@ -555,12 +559,43 @@
     return parts.join('\n\n');
   }
 
-  async function runWeekly(answers) {
+  // Last check-in that had photos, for side-by-side comparison.
+  function previousCheckinPhotos() {
+    const prev = S.data.reviews.slice().reverse().find((r) => r.photos && Object.keys(r.photos).length);
+    return prev ? { date: prev.date, photos: prev.photos } : null;
+  }
+
+  async function runWeekly(answers, photos) {
+    photos = photos || {};
     const stats = L.weeklyStats(S.data);
     const result = L.weeklyAdjust(stats, answers, S.data);
-    S.modal = { type: 'weeklyResult', stats, answers, result, selected: result.adjustments.map(() => true), text: localWeeklyText(stats, result), loading: !!S.ai };
+    const hasPhotos = Object.keys(photos).length > 0;
+    const prev = previousCheckinPhotos();
+    S.modal = { type: 'weeklyResult', stats, answers, result, photos, prev, selected: result.adjustments.map(() => true), text: localWeeklyText(stats, result) + (hasPhotos ? `\n\nPhotos saved to your vault.${prev ? ' Compare them with your last check-in below. Judge the trend over a few weeks, not one set of photos.' : ' Next week you will see them side by side.'}` : ''), loading: !!S.ai };
     render();
     if (!S.ai) return;
+    if (hasPhotos) {
+      // Advisor reviews this week's photos (and last check-in's, same poses) together with the week's data.
+      const byId = (id) => S.photos.find((p) => p.id === id);
+      const imgs = [];
+      const notes = [];
+      ['front', 'side', 'back'].forEach((pose) => {
+        const now = byId(photos[pose]);
+        const before = prev && byId(prev.photos[pose]);
+        if (before && imgs.length < 6) { imgs.push(before.data); notes.push(`Photo ${imgs.length}: ${pose}, last check-in ${prev.date}`); }
+        if (now && imgs.length < 6) { imgs.push(now.data); notes.push(`Photo ${imgs.length}: ${pose}, this check-in ${todayKey()}`); }
+      });
+      try {
+        const r = await fetch('/api/coach', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: 'progress', context: { ...buildContext(), weekly: stats, answers, proposedChanges: result.adjustments.map((a) => a.label) }, images: imgs, imageNote: notes.join('. ') + '. This is her weekly check-in: compare matching poses and connect what you see to her week.' }),
+        });
+        if (r.ok && S.modal && S.modal.type === 'weeklyResult') { const j = await r.json(); S.modal.text = j.text; S.modal.verdict = j.verdict; }
+      } catch { /* keep local text */ }
+      if (S.modal && S.modal.type === 'weeklyResult') { S.modal.loading = false; render(); }
+      return;
+    }
     try {
       const r = await fetch('/api/coach', {
         method: 'POST',
@@ -576,11 +611,32 @@
     if (S.modal && S.modal.type === 'weeklyResult') { S.modal.loading = false; render(); }
   }
 
+  const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  // Average weigh-in over a 7-day window ending `offset` days ago (kg), or null.
+  function weekAvg(offset) {
+    const end = addDays(today(), -offset);
+    const vals = S.data.checkins.filter((c) => { const g = daysBetween(parseKey(c.date), end); return g >= 0 && g < 7; }).map((c) => c.kg);
+    return vals.length ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10 : null;
+  }
+
+  function blurThumb(id, label) {
+    const ph = S.photos.find((p) => p.id === id);
+    if (!ph) return `<div class="photo" style="display:flex;align-items:center;justify-content:center"><span class="tiny muted">${esc(label)}</span></div>`;
+    return `<div class="photo ${S.revealed[id] ? '' : 'blur'}"><button style="display:block;width:100%;height:100%" data-action="reveal" data-id="${id}" aria-label="Reveal ${esc(label)} photo"><img src="${ph.data}" alt="${esc(label)} check-in photo"></button><div class="meta">${esc(label)}</div></div>`;
+  }
+
+  function checkinCompare(photos, prev) {
+    const poses = ['front', 'side', 'back'].filter((p) => photos[p]);
+    if (!poses.length) return '';
+    return `<div class="card" style="margin-top:12px"><div class="row between"><div class="eyebrow">${prev ? `Last check-in vs today` : 'Today'}</div><span class="tiny muted">Tap to reveal</span></div>
+      ${poses.map((p) => `<div style="display:grid;grid-template-columns:${prev ? '1fr 1fr' : '1fr'};gap:6px;margin-top:10px">${prev ? blurThumb(prev.photos[p], `${p} · ${shortDate(prev.date)}`) : ''}${blurThumb(photos[p], `${p} · today`)}</div>`).join('')}</div>`;
+  }
+
   // ---------- share cards ----------
   // Poster-style share card: motion art, grain, condensed headline.
   const CARD_ART = {
     menstrual: ['#6E3A2C', '#2A1C17', '#C9765A'], follicular: ['#6F7D45', '#2C331D', '#D3DC94'], ovulation: ['#E89A5F', '#8E4524', '#FFD6A8'],
-    luteal: ['#9A8466', '#3E3127', '#CDB89A'], steady: ['#B9AD9C', '#5C5145', '#EDE6DA'], session: ['#2F3720', '#121409', '#6A7A48'],
+    luteal: ['#9A8466', '#3E3127', '#CDB89A'], steady: ['#B9AD9C', '#5C5145', '#EDE6DA'], menopause: ['#8B7A8C', '#3A2F3B', '#D9C6D3'], session: ['#2F3720', '#121409', '#6A7A48'],
   };
   async function makeCard(card) {
     const W = 1080, H = 1350;
@@ -946,7 +1002,7 @@
   function stepValid(step, p) {
     if (step === 0) return !!p.level;
     if (step === 1) return !!p.goal;
-    if (step === 2) return p.cycleMode === 'none' || (!!p.periodStart && p.periodStart <= todayKey()) || (p.cycleMode === 'hormonal');
+    if (step === 2) return ['none', 'menopause'].includes(p.cycleMode) || (!!p.periodStart && p.periodStart <= todayKey()) || (p.cycleMode === 'hormonal');
     if (step === 3) return p.heightCm >= 120 && p.heightCm <= 220 && p.weightKg >= 35 && p.weightKg <= 250 && p.age >= 14 && p.age <= 90;
     if (step === 4) return !!p.activity;
     return true;
@@ -968,7 +1024,8 @@
       body = `<h1>Your cycle</h1><p class="muted" style="margin:8px 0 20px">Which describes you best? Every body is supported.</p>
         <div class="chips">${D.CYCLE_MODES.map((m) => `<button type="button" class="chip ${p.cycleMode === m.id ? 'selected' : ''}" data-action="ob-pick" data-field="cycleMode" data-value="${m.id}">${esc(m.label)}</button>`).join('')}</div>
         <p class="small muted" style="margin-top:10px">${esc((D.CYCLE_MODES.find((m) => m.id === p.cycleMode) || {}).desc || '')}</p>
-        ${p.cycleMode === 'none' ? '<div class="card soft" style="margin-top:20px"><p class="small">Your plan will follow a steady weekly rhythm and your daily check-in instead of cycle phases.</p></div>'
+        ${p.cycleMode === 'menopause' ? '<div class="card soft" style="margin-top:20px"><p class="small">Your plan is built for this stage: heavy strength and impact work for bone density, balance, higher protein, and check-ins that track hot flashes, sleep and joint aches. Any bleeding after menopause should be checked by a doctor.</p></div>'
+          : p.cycleMode === 'none' ? '<div class="card soft" style="margin-top:20px"><p class="small">Your plan will follow a steady weekly rhythm and your daily check-in instead of cycle phases.</p></div>'
           : `<label class="field" style="margin-top:22px"><span class="label">${p.cycleMode === 'hormonal' ? 'Start of your last bleed (optional)' : 'When did your last period start?'}</span><input class="input" type="date" data-bind="periodStart" value="${esc(p.periodStart || '')}" max="${todayKey()}"></label>
              <p class="tiny muted" style="margin-top:8px">${p.cycleMode === 'hormonal' ? 'Hormonal contraception keeps hormones fairly steady, so your plan follows your daily readiness rather than phases.' : 'The first day of bleeding. Your best guess is fine. YOURS learns your real cycle as you log periods.'}</p>`}`;
     } else if (step === 3) {
@@ -987,7 +1044,10 @@
     } else if (step === 4) {
       body = `<h1>How active are you day to day?</h1><p class="muted" style="margin:8px 0 24px">Outside of your workouts.</p><div class="options">${ACTIVITY.map((o) => opt('activity', o)).join('')}</div>`;
     } else if (step === 5) {
-      body = steadyMode
+      body = p.cycleMode === 'menopause'
+        ? `<h1>Your rhythm</h1><p class="muted" style="margin:8px 0 24px">After menopause, muscle and bone respond best to heavy lifting, a little impact, and balance work. Your week is built around that, and adjusts each day to your check-in.</p>
+           <div class="card soft"><div class="eyebrow">Your week</div><p style="margin-top:8px">Bone-building strength, walk, power and impact, mobility and balance, strength, then two easier days.</p></div>`
+        : steadyMode
         ? `<h1>Your rhythm</h1><p class="muted" style="margin:8px 0 24px">Without a natural cycle to follow, YOURS plans a steady week of strength, conditioning and recovery, and adjusts each day to your check-in.</p>
            <div class="card soft"><div class="eyebrow">Your week</div><p style="margin-top:8px">Lower strength, upper strength, rest, glutes, upper sculpt, conditioning, rest.</p></div>`
         : `<h1>Cycle and period length</h1><p class="muted" style="margin:8px 0 28px">Most cycles are 21-35 days. Not sure? Leave it at 28. YOURS replaces this with your real average once you log a couple of periods.</p>
@@ -1106,6 +1166,23 @@
     return `<div class="banner">${icon('shield', 20)}<div class="grow">You are using YOURS as a guest. Create an account so you do not lose your plan.</div><button class="btn accent xs" data-action="open-signup">Save</button></div>`;
   }
 
+  function checkinDayBanner() {
+    if (!L.weeklyDue(S.data)) return '';
+    const onDay = today().getDay() === L.checkinDay(S.data);
+    return `<div class="taped" style="margin:20px 6px 18px;transform:rotate(-.8deg)"><div class="eyebrow">${onDay ? `${WEEKDAYS[L.checkinDay(S.data)]} · weekly` : `Weekly check-in · your day is ${WEEKDAYS[L.checkinDay(S.data)]}`}</div>
+      <div class="stack-caps" style="font-size:38px;margin-top:8px;color:#F7F2EA">${onDay ? "It's check-in day." : 'Time for your check-in.'}</div>
+      <p class="small" style="margin-top:8px;opacity:.85">Photos, weigh-in and your weekly review. About 3 minutes, and your coach updates next week's plan.</p>
+      <button class="btn sm" style="margin-top:14px;background:#F7F2EA;color:#1E2114" data-action="open-weekly">Start check-in</button></div>`;
+  }
+
+  function weighInCard() {
+    if (S.data.weighDaily === false || S.data.checkins.some((c) => c.date === todayKey()) || (S.data.tips || {})['weigh-' + todayKey()]) return '';
+    const avg = weekAvg(1);
+    return `<form class="card" style="margin-top:12px" data-form="checkin"><div class="row between"><div class="serif" style="font-size:24px;line-height:1">Morning weigh-in</div><button type="button" class="icon-btn" style="width:30px;height:30px" data-action="dismiss-tip" data-tip="weigh-${todayKey()}" aria-label="Skip today">${icon('x', 14)}</button></div>
+      <p class="small muted" style="margin-top:6px">After the bathroom, before food. Daily weigh-ins plus a weekly average tell the real story, so one high day is just water.${avg ? ` Last 7 days: ${bw(avg)}.` : ''}</p>
+      <div class="row" style="margin-top:12px"><input class="input grow" type="number" step="0.1" inputmode="decimal" name="w" placeholder="Weight (${unit()})" required aria-label="Today's weight"><button class="btn primary sm" type="submit">Log</button></div></form>`;
+  }
+
   function checkinCard() {
     const ci = S.data.daily[todayKey()];
     if (!ci) {
@@ -1134,7 +1211,7 @@
 
   function comingUp(c) {
     const items = [];
-    if (L.weeklyDue(S.data)) items.push(`<button class="list-item" style="width:100%;text-align:left" data-action="open-weekly">${icon('calendar', 20)}<div class="grow"><strong>Your weekly check-in is ready</strong><div class="small muted">Review the week and update next week's plan</div></div></button>`);
+    if (!L.weeklyDue(S.data) && L.checkinTomorrow(S.data)) items.push(`<div class="list-item">${icon('camera', 20)}<div class="grow"><strong>Check-in tomorrow</strong><div class="small muted">Photos, weigh-in and your weekly review. Same spot and light as last time.</div></div></div>`);
     if (!c.steady) {
       if (c.late) items.push(`<button class="list-item" style="width:100%;text-align:left" data-action="log-period-today">${icon('calendar', 20)}<div class="grow"><strong>Period ${plural(c.daysLate, 'day')} later than predicted</strong><div class="small muted">Tap when it starts to keep predictions accurate</div></div></button>`);
       else if (c.daysToPeriod <= 3) items.push(`<div class="list-item">${icon('calendar', 20)}<div class="grow"><strong>Period expected in ${plural(c.daysToPeriod, 'day')}</strong><div class="small muted">Expect the scale to read higher. That is water, not fat.</div></div></div>`);
@@ -1160,12 +1237,12 @@
     return `<div class="screen">
       ${header(`${greet}${name ? `, ${esc(name)}` : ''}`, fmtDate(today()))}
       ${st.count >= 2 ? `<button class="tag accent" style="margin:-8px 0 16px;height:30px;gap:6px" data-action="share-streak">${icon('flame', 15)} ${st.count}-day streak${st.todayDone ? '' : ' · keep it alive today'}</button>` : ''}
-      ${resumeBanner()}${guestBanner()}
+      ${resumeBanner()}${guestBanner()}${checkinDayBanner()}
       ${studio(c.phase, `
-        ${corners(c.steady ? 'Steady mode' : `Day ${c.day} / ${c.len}${c.estimate ? ' · est.' : ''}`, c.steady ? 'Readiness' : c.late ? 'Period late' : `${esc(phaseName(c.next))} in ${plural(c.daysToNext, 'day')}`, '', '')}
+        ${corners(c.phase === 'menopause' ? 'Life stage' : c.steady ? 'Steady mode' : `Day ${c.day} / ${c.len}${c.estimate ? ' · est.' : ''}`, c.steady ? 'Readiness' : c.late ? 'Period late' : `${esc(phaseName(c.next))} in ${plural(c.daysToNext, 'day')}`, '', '')}
         <div class="p-body">
           <div class="p-serif">${esc(copyFor(c.phase).serif)}</div>
-          <div class="serif-tight ph-${c.phase}" style="font-size:${ph.name.length > 9 ? 84 : 104}px;margin:8px 0 4px -4px">${ph.name.toLowerCase()}</div>
+          <div class="serif-tight ph-${c.phase}" style="font-size:${ph.name.length > 8 ? 84 : 104}px;margin:8px 0 4px -4px">${ph.name.toLowerCase()}</div>
           <div class="row between" style="margin-top:14px;align-items:flex-end"><div><span class="tag glass">${c.late ? 'Period late' : esc(ph.energy)}</span><div class="p-cap">${esc(copyFor(c.phase).cap)}</div></div>${phaseRing(c, 78)}</div>
         </div>`)}
       <div class="card" style="margin-top:12px">
@@ -1175,6 +1252,7 @@
         ${c.late ? '<button class="btn primary sm" style="margin-top:10px" data-action="log-period-today">My period started</button>' : ''}
       </div>
       ${checkinCard()}
+      ${weighInCard()}
       ${smartSuggestion(c, wk)}
 
       <div class="section-title"><h2>Today's workout</h2><button class="link" data-action="tab" data-tab="workouts">See plan</button></div>
@@ -1216,6 +1294,7 @@
     if (c.phase === 'follicular') return 'Estrogen is rising, so this is your strength window. Try to beat last week\'s numbers on your main lifts by one rep or a small amount of weight.';
     if (c.phase === 'ovulation') return 'Peak-strength days. If a lift feels great, go for a rep PR, but warm up thoroughly and keep your knees tracking over your toes.';
     if (c.phase === 'menstrual') return 'Lower intensity is still progress. Walk, move and eat iron-rich food. You will come back stronger in a few days.';
+    if (c.phase === 'menopause') return 'Lift heavy enough that the last two reps are hard. That signal is what keeps bone and muscle strong. Log hot flashes and sleep in your check-in and I will adjust around them.';
     if (c.steady) return 'Check in daily so I can match today\'s session to how you actually feel. Consistency is what wins here.';
     return `Your luteal phase needs about ${t.kcal.toLocaleString()} ${calWord()} today, including roughly 150 extra. Eat them on purpose with complex carbs and magnesium-rich foods.`;
   }
@@ -1240,7 +1319,7 @@
     const days = weekDays();
     const weekKeys = days.map(dateKey);
     const thisWeek = S.data.workouts.filter((w) => weekKeys.includes(w.date)).sort((a, b) => (a.date < b.date ? 1 : -1));
-    const lib = S.libPhase || (c.steady ? 'follicular' : c.phase);
+    const lib = S.libPhase || (c.phase === 'menopause' ? 'menopause' : c.steady ? 'follicular' : c.phase);
     const levelNote = { beginner: 'Sets are reduced for your level. Leave 2-3 reps in reserve.', intermediate: 'Leave 1-2 reps in reserve on main lifts.', advanced: 'Main lifts include an extra set for your level.' }[S.data.profile.level] || '';
     const vol = S.data.plan.volume;
     return `<div class="screen">
@@ -1268,7 +1347,7 @@
       <div class="card">${thisWeek.length ? thisWeek.map((w) => `<div class="list-item"><div class="ex-num">${icon('check', 14, 2.4)}</div><div class="grow"><strong>${esc(w.name)}</strong><div class="small muted">${fmtDate(parseKey(w.date), { weekday: 'short', month: 'short', day: 'numeric' })} · ${w.minutes} min${w.sets ? ` · ${w.sets} sets` : ''}</div></div>${(S.data.prs || []).some((p) => p.workoutId === w.id) ? '<span class="tag accent">PR</span>' : ''}</div>`).join('') : '<div class="empty">No sessions logged yet this week. Today is a great day to start.</div>'}</div>
 
       <div class="section-title"><h2>Workout library</h2></div>
-      <div class="chips">${D.PHASE_ORDER.map((p) => `<button class="chip ${lib === p ? 'selected' : ''}" data-action="lib-phase" data-phase="${p}"><span class="dot" style="background:var(--${p})"></span>${phaseName(p)}</button>`).join('')}</div>
+      <div class="chips">${D.PHASE_ORDER.concat(['menopause']).map((p) => `<button class="chip ${lib === p ? 'selected' : ''}" data-action="lib-phase" data-phase="${p}"><span class="dot" style="background:var(--${p})"></span>${phaseName(p)}</button>`).join('')}</div>
       <div class="h-scroll" style="margin-top:14px">${D.WORKOUTS.filter((w) => w.phase === lib).map((w) => `<button class="poster mini" data-action="view-workout" data-id="${w.id}">${backdrop(lib)}<div class="p-row"><span>${w.minutes} min</span><span>${esc(w.intensity)}</span></div><div class="p-body"><div class="p-title">${esc(w.name)}</div><div class="p-cap" style="letter-spacing:.2em">${esc(w.focus)}</div></div></button>`).join('')}</div>
     </div>`;
   }
@@ -1440,10 +1519,11 @@
     return `
       <div class="card ${due ? 'accent' : ''}">
         <div class="row between"><div class="eyebrow">Weekly check-in</div>${last ? `<span class="tiny muted">Last: ${shortDate(last.date)}</span>` : ''}</div>
-        ${due ? '<div class="stack-caps" style="font-size:38px;margin-top:10px">Ready to review your week?</div>' : `<h2 style="margin-top:6px">${last ? 'Plan updated' : 'Every Sunday'}</h2>`}
-        <p class="small muted" style="margin-top:4px">${due ? 'Three quick questions, then I adjust next week\'s training, steps and calories.' : last ? esc(last.text.split('\n')[0]).slice(0, 180) : 'I review your sessions, steps, readiness and weight trend and adjust next week\'s plan.'}</p>
+        ${due ? `<div class="stack-caps" style="font-size:38px;margin-top:10px">${today().getDay() === L.checkinDay(d) ? 'It\'s check-in day.' : 'Time for your check-in.'}</div>` : `<h2 style="margin-top:6px">${last ? 'Plan updated' : 'Every Sunday'}</h2>`}
+        <p class="small muted" style="margin-top:4px">${due ? 'Photos, weigh-in and three quick questions. Then I review it all and adjust next week\'s training, steps and calories.' : last ? esc(last.text.split('\n')[0]).slice(0, 180) : 'I review your sessions, steps, readiness and weight trend and adjust next week\'s plan.'}</p>
         ${planBits.length ? `<div class="chips" style="margin-top:10px">${planBits.map((b) => `<span class="tag">${esc(b)}</span>`).join('')}</div>` : ''}
-        <button class="btn ${due ? 'primary' : 'ghost'} sm" style="margin-top:14px" data-action="open-weekly">${due ? 'Start check-in' : 'Run it now'}</button>
+        <div class="row wrap" style="margin-top:12px;gap:6px"><span class="eyebrow" style="margin-right:4px">Your day</span>${WEEKDAYS.map((w, i) => `<button class="chip ${L.checkinDay(d) === i ? 'selected' : ''}" style="height:30px;padding:0 10px;font-size:12px" data-action="set-checkin-day" data-value="${i}">${w.slice(0, 3)}</button>`).join('')}</div>
+        <button class="btn ${due ? 'primary' : 'ghost'} sm" style="margin-top:14px" data-action="open-weekly">${due ? 'Start check-in' : 'Check in now'}</button>
       </div>
 
       <div class="section-title"><h2>Readiness</h2><button class="link" data-action="open-checkin">${d.daily[todayKey()] ? 'Edit today' : 'Check in'}</button></div>
@@ -1461,7 +1541,7 @@
       </div>`}
 
       <div class="section-title"><h2>Your patterns</h2></div>
-      <div class="card">${pt.insights.length ? `<ul class="phase-list" style="margin-top:0">${pt.insights.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>`
+      <div class="card">${pt.insights.concat(L.MENO_MODES.includes(d.profile.cycleMode) ? L.menoInsights(d.daily) : []).length ? `<ul class="phase-list" style="margin-top:0">${pt.insights.concat(L.MENO_MODES.includes(d.profile.cycleMode) ? L.menoInsights(d.daily) : []).map((s) => `<li>${esc(s)}</li>`).join('')}</ul>`
         : `<p class="small">Check in daily and YOURS will spot your patterns: when your energy dips, when cramps or cravings show up, and how it changes across your cycle.</p><div class="meter" style="margin-top:12px"><div style="width:${clamp((checkCount / 14) * 100, 4, 100)}%"></div></div><p class="tiny muted" style="margin-top:6px">${checkCount} of 14 check-ins to unlock your first patterns</p>`}</div>
 
       <div class="section-title"><h2>Strength by phase</h2>${sbp ? `<button class="link" data-action="share-strength">Share</button>` : ''}</div>
@@ -1482,7 +1562,7 @@
     }
     if (S.data.pinHash && !S.vaultUnlocked) {
       return `<form class="card lock" data-form="unlock">${icon('lock', 32)}<h2 style="margin-top:14px">Photo vault locked</h2><p class="muted small" style="margin:8px 0 18px">Enter your 4-digit PIN.</p>
-        <input class="input pin-input" name="pin" type="password" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" autocomplete="off" required>
+        <input class="input pin-input" name="pin" type="password" inputmode="numeric" maxlength="6" pattern="[0-9]{4,6}" autocomplete="off" required>
         ${S.authError ? `<p class="error" style="margin-top:10px">${esc(S.authError)}</p>` : ''}
         <button class="btn primary" style="margin-top:16px" type="submit">Unlock</button></form>`;
     }
@@ -1514,7 +1594,8 @@
         <div class="rich small" style="margin-top:12px">${rich(review.text)}</div>
         ${review.local ? `<p class="tiny muted" style="margin-top:10px">Based on your logged data. ${S.ai ? '' : 'Visual photo review needs the live AI coach.'}</p>` : ''}</div>` : ''}
 
-      <div class="section-title"><h2>Weight check-ins</h2></div>
+      ${checkinHistory()}
+      <div class="section-title"><h2>Weight check-ins</h2>${weekAvg(0) ? `<span>7-day avg ${bw(weekAvg(0))}${weekAvg(7) ? ` · ${(() => { const dlt = (weekAvg(0) - weekAvg(7)) * (unit() === 'lb' ? 2.20462 : 1); return `${dlt > 0 ? '+' : ''}${dlt.toFixed(1)}`; })()}` : ''}</span>` : ''}</div>
       <div class="card">
         ${ws.length > 1 ? sparkline(ws.map((w) => w.kg)) : ''}
         <form class="row" data-form="checkin" style="margin-top:${ws.length > 1 ? 12 : 0}px"><input class="input grow" type="number" step="0.1" inputmode="decimal" name="w" placeholder="Today's weight (${unit()})" required><button class="btn primary sm" type="submit">Log</button></form>
@@ -1522,6 +1603,15 @@
         <p class="tiny muted" style="margin-top:8px">Weigh in at the same time of day. Compare across the same cycle phase.</p>
       </div>
       <div class="row" style="margin-top:16px"><button class="btn ghost sm grow" data-action="pin-settings">${icon('lock', 16)} ${S.data.pinHash ? 'Change or remove PIN' : 'Set a PIN and encrypt photos'}</button>${S.data.pinHash ? '<button class="btn ghost sm" data-action="lock-vault">Lock</button>' : ''}</div>`;
+  }
+
+  function checkinHistory() {
+    const list = S.data.reviews.filter((r) => r.photos && Object.keys(r.photos).length).slice(-6).reverse();
+    if (!list.length) return '';
+    return `<div class="section-title"><h2>Check-ins</h2><span>${plural(list.length, 'week')}</span></div>
+      <div class="card">${list.map((r) => `<div style="padding:10px 0;border-bottom:1px solid var(--line)"><div class="row between"><strong class="small">${fmtDate(parseKey(r.date), { month: 'short', day: 'numeric' })}</strong><span class="tiny muted">${r.weightAvg ? `7-day avg ${bw(r.weightAvg)}` : ''}</span></div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px">${['front', 'side', 'back'].map((p) => r.photos[p] ? blurThumb(r.photos[p], p) : '<div></div>').join('')}</div>
+        ${r.text ? `<p class="tiny muted" style="margin-top:8px">${esc(r.text.split('\n')[0]).slice(0, 160)}</p>` : ''}</div>`).join('')}</div>`;
   }
 
   function compareView() {
@@ -1624,9 +1714,12 @@
         ${scale('mood', 'Mood', 'low', 'great', f.mood)}
         ${scale('soreness', 'Soreness', 'none', 'very sore', f.soreness)}
         <div class="label" style="margin-top:18px">Symptoms</div>
-        <div class="chips">${D.SYMPTOMS.map((s) => `<button type="button" class="chip ${f.symptoms.includes(s) ? 'selected' : ''}" data-action="ci-symptom" data-value="${esc(s)}">${esc(s)}</button>`).join('')}</div>
+        <div class="chips">${(L.MENO_MODES.includes(c.mode) ? D.MENO_SYMPTOMS : D.SYMPTOMS).map((s) => `<button type="button" class="chip ${f.symptoms.includes(s) ? 'selected' : ''}" data-action="ci-symptom" data-value="${esc(s)}">${esc(s)}</button>`).join('')}</div>
         ${c.mode === 'none' ? '' : `<div class="label" style="margin-top:18px">Bleeding</div><div class="chips">${['none', 'spotting', 'light', 'medium', 'heavy'].map((x) => `<button type="button" class="chip ${f.flow === x ? 'selected' : ''}" data-action="ci-set" data-field="flow" data-value="${x}">${x[0].toUpperCase() + x.slice(1)}</button>`).join('')}</div>`}
         <button class="btn primary block" style="margin-top:22px" data-action="ci-save">Save check-in</button>`);
+    }
+    if (m.type === 'menoBleed') {
+      return sheet('Please check in with your doctor', `<p class="small">Bleeding after menopause is usually not serious, but it should always be checked by a doctor. Please book an appointment soon.</p><p class="small muted" style="margin-top:10px">Your check-in is saved. Train lightly or rest until you have spoken to someone.</p><button class="btn primary block" style="margin-top:18px" data-action="close-modal">Got it</button>`);
     }
     if (m.type === 'periodConfirm') {
       return sheet('Did your period start today?', `<p class="small muted">You logged bleeding${cyc().late ? ' and your period was due' : ' outside your predicted period'}. If this is day 1 of your period, I will update your cycle and learn from it.</p>
@@ -1636,10 +1729,33 @@
       return sheet('Log your period', `<form data-form="period"><label class="field"><span class="label">First day of bleeding</span><input class="input" type="date" name="date" value="${todayKey()}" max="${todayKey()}" required></label>
         <p class="tiny muted" style="margin-top:8px">Logging a date within a week of an existing entry corrects that period.</p><button class="btn primary block" style="margin-top:16px" type="submit">Save</button></form>`);
     }
+    if (m.type === 'ciPhotos') {
+      const intro = `<p class="small">Front, side and back. Wear whatever you are comfortable in: a bikini, or shorts and a sports bra. Same spot, same light and same time of day each week makes the comparison fair.</p>`;
+      if (isGuest()) {
+        return sheet('Check-in photos', `${intro}<p class="small muted" style="margin-top:12px">Check-in photos are private to your account. Create a free account to add them, or skip photos this week.</p>
+          <button class="btn primary block" style="margin-top:16px" data-action="open-signup" data-reason="progress">Create account</button><button class="btn ghost block" style="margin-top:10px" data-action="ci-skip-photos">Skip photos this week</button>`);
+      }
+      if (!S.data.pinHash) {
+        return sheet('Secure your photos first', `${intro}
+          <div class="banner" style="margin-top:14px;background:var(--green-soft)">${icon('shield', 20)}<div class="grow small">Check-in photos need a vault PIN. Photos are encrypted on this phone with your PIN, the vault locks whenever you leave the app, and photos are never shared or exported. Only you can open them.</div></div>
+          <form data-form="pin" style="margin-top:12px"><label class="field"><span class="label">Choose a 4 to 6 digit PIN (6 is more secure)</span><input class="input pin-input" style="max-width:none" name="pin" type="password" inputmode="numeric" maxlength="6" pattern="[0-9]{4,6}" required autocomplete="off"></label><p class="tiny muted" style="margin-top:6px">If you forget it, encrypted photos cannot be recovered.</p><button class="btn primary block" style="margin-top:14px" type="submit">Set PIN and continue</button></form>
+          <button class="btn ghost block" style="margin-top:10px" data-action="ci-skip-photos">Skip photos this week</button>`);
+      }
+      if (!S.vaultUnlocked) {
+        return sheet('Unlock your vault', `<form data-form="unlock">${intro}<label class="field" style="margin-top:14px"><span class="label">Vault PIN</span><input class="input pin-input" style="max-width:none" name="pin" type="password" inputmode="numeric" maxlength="6" pattern="[0-9]{4,6}" autocomplete="off" required></label>${S.authError ? `<p class="error" style="margin-top:8px">${esc(S.authError)}</p>` : ''}<button class="btn primary block" style="margin-top:14px" type="submit">Unlock</button></form><button class="btn ghost block" style="margin-top:10px" data-action="ci-skip-photos">Skip photos this week</button>`);
+      }
+      const todayW = S.data.checkins.find((x) => x.date === todayKey());
+      return sheet('Check-in photos', `${intro}
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px">${['front', 'side', 'back'].map((pose) => `<label style="cursor:pointer">${m.photos[pose] ? blurThumb(m.photos[pose], pose) : `<div class="photo" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;border:1.5px dashed var(--line)">${icon('camera', 22)}<span class="eyebrow">${pose}</span></div>`}<input type="file" accept="image/*" data-ci-photo="${pose}" hidden></label>`).join('')}</div>
+        <p class="tiny muted" style="margin-top:8px">Encrypted with your PIN and stored only on this phone.${S.ai ? ' Your coach reviews them when you finish, and they are not stored anywhere else.' : ''}</p>
+        <form data-form="ci-continue" style="margin-top:16px"><label class="field"><span class="label">This morning's weight (${unit()})</span><input class="input" name="w" type="number" step="0.1" inputmode="decimal" value="${todayW ? (unit() === 'lb' ? Math.round(todayW.kg * 22.0462) / 10 : todayW.kg) : ''}" placeholder="Optional"></label>
+          <button class="btn primary block" style="margin-top:16px" type="submit">Continue</button></form>
+        <button class="btn ghost block" style="margin-top:10px" data-action="ci-skip-photos">Skip photos this week</button>`);
+    }
     if (m.type === 'weekly') {
       const a = m.answers;
       const group = (field, label, opts) => `<div class="label" style="margin-top:18px">${label}</div><div class="options">${opts.map(([v, l]) => `<button type="button" class="option ${a[field] === v ? 'selected' : ''}" style="padding:12px 16px" data-action="wk-set" data-field="${field}" data-value="${v}"><strong>${l}</strong></button>`).join('')}</div>`;
-      return sheet('Weekly check-in', `<p class="small muted">Three quick questions, then I review your numbers and update next week's plan.</p>
+      return sheet('Weekly check-in', `<p class="small muted">${m.photos && Object.keys(m.photos).length ? `${plural(Object.keys(m.photos).length, 'photo')} saved. ` : ''}Three quick questions, then I review your week and update next week's plan.</p>
         ${group('feel', 'How did training feel this week?', [['easy', 'Too easy'], ['right', 'Just right'], ['hard', 'Too hard']])}
         ${group('hunger', 'How was your hunger?', [['low', 'Low'], ['ok', 'Normal'], ['high', 'Very hungry']])}
         ${group('next', 'What does next week look like?', [['normal', 'A normal week'], ['busy', 'Busy'], ['travel', 'Travelling'], ['push', 'I want to push']])}
@@ -1652,7 +1768,8 @@
           ${statTile('Sessions', `${s.sessions}/${s.planned}`, '')}${statTile('Avg steps', s.stepAvg.toLocaleString(), '')}
           ${statTile('Readiness', s.readinessAvg == null ? '-' : s.readinessAvg, s.readinessAvg == null ? '' : '/100')}${statTile('Weight', s.weightChange == null ? '-' : rate(s.weightChange).split(' ')[0], s.weightChange == null ? '' : `${unit()}/wk`)}
         </div>
-        <div class="card accent" style="margin-top:12px"><div class="eyebrow">Coach</div><div class="rich small" style="margin-top:6px">${rich(m.text)}</div>${m.loading ? '<p class="tiny muted" style="margin-top:6px">Your coach is writing a personal note...</p>' : ''}</div>
+        ${m.photos && Object.keys(m.photos).length ? checkinCompare(m.photos, m.prev) : ''}
+        <div class="card accent" style="margin-top:12px"><div class="row between"><div class="eyebrow">Coach</div>${m.verdict ? `<span class="verdict ${m.verdict}">${{ on_track: 'On track', progressing: 'Making progress', adjust: 'Needs adjustment' }[m.verdict] || ''}</span>` : ''}</div><div class="rich small" style="margin-top:6px">${rich(m.text)}</div>${m.loading ? `<p class="tiny muted" style="margin-top:6px">${m.photos && Object.keys(m.photos).length ? 'Your coach is reviewing your photos and your week...' : 'Your coach is writing a personal note...'}</p>` : ''}</div>
         ${m.result.adjustments.length ? `<div class="label" style="margin-top:16px">Changes for next week</div>${m.result.adjustments.map((a, i) => `<button class="option ${m.selected[i] ? 'selected' : ''}" style="margin-top:8px" data-action="wk-toggle" data-i="${i}"><strong>${m.selected[i] ? 'Apply: ' : 'Skip: '}${esc(a.label)}</strong><span>${esc(a.why)}</span></button>`).join('')}` : ''}
         ${m.result.notes.length ? `<ul class="phase-list">${m.result.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}
         <button class="btn primary block" style="margin-top:18px" data-action="wk-apply">${m.result.adjustments.length ? 'Update next week\'s plan' : 'Done'}</button>`);
@@ -1792,7 +1909,7 @@
       return sheet('Log activity', `<form data-form="other"><label class="field"><span class="label">Activity</span><input class="input" name="name" placeholder="e.g. Pilates class, run, hike" required maxlength="60"></label><label class="field"><span class="label">Minutes</span><input class="input" name="minutes" type="number" inputmode="numeric" min="5" max="600" value="45" required></label><button class="btn primary block" style="margin-top:16px" type="submit">Log it</button></form>`);
     }
     if (m.type === 'pin') {
-      return sheet('Vault PIN', `<form data-form="pin"><p class="small muted" style="margin-bottom:14px">A 4-digit PIN locks your vault${hasSubtle() ? ' and encrypts your photos on this device. If you forget it, encrypted photos cannot be recovered.' : '. Encryption needs a secure (https) connection, which this page does not have.'}</p><label class="field"><span class="label">New PIN</span><input class="input pin-input" style="max-width:none" name="pin" type="password" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" required autocomplete="off"></label><button class="btn primary block" style="margin-top:16px" type="submit">Save PIN</button></form>${S.data.pinHash ? '<button class="btn ghost block" style="margin-top:10px" data-action="remove-pin">Remove PIN and decrypt photos</button>' : ''}`);
+      return sheet('Vault PIN', `<form data-form="pin"><p class="small muted" style="margin-bottom:14px">A 4 to 6 digit PIN (6 is more secure) locks your vault${hasSubtle() ? ' and encrypts your photos on this device. If you forget it, encrypted photos cannot be recovered.' : '. Encryption needs a secure (https) connection, which this page does not have.'}</p><label class="field"><span class="label">New PIN</span><input class="input pin-input" style="max-width:none" name="pin" type="password" inputmode="numeric" maxlength="6" pattern="[0-9]{4,6}" required autocomplete="off"></label><button class="btn primary block" style="margin-top:16px" type="submit">Save PIN</button></form>${S.data.pinHash ? '<button class="btn ghost block" style="margin-top:10px" data-action="remove-pin">Remove PIN and decrypt photos</button>' : ''}`);
     }
     if (m.type === 'settings') {
       const p = S.data.profile;
@@ -1806,6 +1923,8 @@
         <div class="card flat small"><div class="row between"><span class="muted">Goal</span><strong>${esc(goalOf(p).label)}</strong></div><div class="row between" style="margin-top:6px"><span class="muted">Level</span><strong>${esc((LEVELS.find((l) => l.id === p.level) || {}).label || '')}</strong></div><div class="row between" style="margin-top:6px"><span class="muted">Cycle type</span><strong>${esc((D.CYCLE_MODES.find((x) => x.id === p.cycleMode) || {}).label || '')}</strong></div>${c.steady ? '' : `<div class="row between" style="margin-top:6px"><span class="muted">Cycle length</span><strong>${learned ? `${learned.length} days (learned)` : `${p.cycleLength} days`}</strong></div><div class="row between" style="margin-top:6px"><span class="muted">Last period</span><strong>${esc(shortDate(p.periodStart))}</strong></div>`}
           <button class="btn ghost sm block" style="margin-top:14px" data-action="edit-plan">Edit my plan</button></div>
         ${c.steady ? '' : '<button class="btn soft block" style="margin-top:12px" data-action="open-period">Log a period start</button>'}
+        <div class="card flat"><div class="label">Weekly check-in day</div><div class="chips">${WEEKDAYS.map((w, i) => `<button class="chip ${L.checkinDay(S.data) === i ? 'selected' : ''}" data-action="set-checkin-day" data-value="${i}">${w.slice(0, 3)}</button>`).join('')}</div>
+          <div class="row between" style="margin-top:14px"><span class="small">Daily weigh-in prompt</span><button class="chip ${S.data.weighDaily === false ? '' : 'selected'}" data-action="toggle-weigh">${S.data.weighDaily === false ? 'Off' : 'On'}</button></div></div>
         <div class="card flat"><div class="label">Units</div><div class="segment">${[['imperial', 'lb · ft'], ['metric', 'kg · cm']].map(([v, l]) => `<button class="${(p.units === 'metric' ? 'metric' : 'imperial') === v ? 'active' : ''}" data-action="set-units" data-value="${v}">${l}</button>`).join('')}</div><p class="tiny muted" style="margin-top:8px">Past workouts keep the unit they were logged in. Suggested weights convert automatically.</p></div>
         <div class="card flat"><div class="label">Appearance</div><div class="segment">${['system', 'light', 'dark'].map((x) => `<button class="${theme === x ? 'active' : ''}" data-action="theme" data-value="${x}">${x[0].toUpperCase() + x.slice(1)}</button>`).join('')}</div></div>
         ${S.installPrompt ? '<button class="btn primary block" style="margin-top:12px" data-action="install">Install YOURS on this device</button>' : ios ? '<div class="card flat small"><div class="label">Install on iPhone</div><p class="muted">Tap the Share button in Safari, then Add to Home Screen.</p></div>' : ''}
@@ -1962,7 +2081,9 @@
       { id: 'i4', name: 'Crushed tomatoes', label: '400 g', kcal: 128, protein: 6, carbs: 28, fat: 1 },
       { id: 'i5', name: 'Olive oil', label: '1 tbsp', kcal: 119, protein: 0, carbs: 0, fat: 14 },
     ] } };
-    [65.2, 64.9, 65.1, 64.6, 64.2, 64.4, 63.8, 63.5].forEach((kg, i) => d.checkins.push({ date: dateKey(addDays(t, -(7 - i) * 7)), kg }));
+    // Weekly weigh-ins for two months, then daily for the last two weeks (water noise included), none yet today.
+    [65.4, 65.2, 64.9, 65.1, 64.6, 64.4].forEach((kg, i) => d.checkins.push({ date: dateKey(addDays(t, -(8 - i) * 7)), kg }));
+    for (let i = 14; i >= 1; i--) d.checkins.push({ date: dateKey(addDays(t, -i)), kg: Math.round((64.3 - (14 - i) * 0.05 + (rnd(i + 21) - 0.5) * 0.8) * 10) / 10 });
     store.set(`yours.data.${email}`, d);
     await startSession({ kind: 'user', email });
     render();
@@ -2091,6 +2212,7 @@
       const bleeding = ['light', 'medium', 'heavy'].includes(f.flow);
       const lastPeriod = S.data.periods[S.data.periods.length - 1];
       const recentlyLogged = lastPeriod && daysBetween(parseKey(lastPeriod), today()) < 10;
+      if (bleeding && c.mode === 'menopause') { S.modal = { type: 'menoBleed' }; render(); return; }
       if (bleeding && !c.steady && !recentlyLogged) { S.modal = { type: 'periodConfirm' }; render(); return; }
       S.modal = null;
       render();
@@ -2100,15 +2222,19 @@
     'log-period-today': () => logPeriod(todayKey()),
     'open-period': () => { S.modal = { type: 'period' }; render(); },
 
-    'open-weekly': () => { S.modal = { type: 'weekly', answers: {} }; render(); },
+    'open-weekly': () => { S.modal = { type: 'ciPhotos', photos: {} }; render(); },
+    'ci-skip-photos': () => { S.modal = { type: 'weekly', answers: {}, photos: {} }; render(); },
+    'reveal': (el) => { S.revealed[el.dataset.id] = true; render(); },
+    'set-checkin-day': (el) => { S.data.checkinDay = Number(el.dataset.value); save(); render(); toast(`Check-in day: ${WEEKDAYS[S.data.checkinDay]}`); },
+    'toggle-weigh': () => { S.data.weighDaily = S.data.weighDaily === false; save(); render(); },
     'wk-set': (el) => { S.modal.answers[el.dataset.field] = el.dataset.value; render(); },
-    'wk-run': () => runWeekly(S.modal.answers),
+    'wk-run': () => runWeekly(S.modal.answers, S.modal.photos),
     'wk-toggle': (el) => { S.modal.selected[el.dataset.i] = !S.modal.selected[el.dataset.i]; render(); },
     'wk-apply': () => {
       const m = S.modal;
       const chosen = m.result.adjustments.filter((_, i) => m.selected[i]);
       L.applyAdjustments(S.data.plan, chosen);
-      S.data.reviews.push({ date: todayKey(), stats: m.stats, answers: m.answers, adjustments: chosen, notes: m.result.notes, text: m.text });
+      S.data.reviews.push({ date: todayKey(), stats: m.stats, answers: m.answers, adjustments: chosen, notes: m.result.notes, text: m.text, verdict: m.verdict || null, photos: m.photos || {}, weightAvg: weekAvg(0) });
       S.modal = null;
       save(); render();
       toast(chosen.length ? 'Next week\'s plan is updated' : 'Check-in saved');
@@ -2326,6 +2452,19 @@
     const el = ev.target;
     if (el.dataset.bindUi === 'pose') { S.pose = el.value; return; }
     if (el.matches('[data-scan-photo]') && el.files && el.files[0]) { scanPhoto(el.files[0]); return; }
+    if (el.dataset.ciPhoto && el.files && el.files[0] && S.modal && S.modal.type === 'ciPhotos') {
+      const pose = el.dataset.ciPhoto;
+      try {
+        const data = await compressImage(el.files[0]);
+        const photo = { id: uid(), owner: S.session.email, date: todayKey(), created: Date.now(), pose, phase: cyc().phase, checkin: true, data };
+        await storePhoto(photo);
+        await loadPhotos();
+        S.modal.photos[pose] = photo.id;
+        render();
+      } catch { toast('Could not save that photo'); }
+      S.pickingFile = 0;
+      return;
+    }
     if (el.matches('[data-upload]') && el.files && el.files[0]) {
       const file = el.files[0];
       if (!file.type.startsWith('image/')) return toast('Choose an image file');
@@ -2358,6 +2497,19 @@
     if (type === 'login') return login(form);
     if (type === 'signup') return signup(form);
     if (type === 'chat') { const v = form.msg.value; form.msg.value = ''; return sendChat(v); }
+    if (type === 'ci-continue') {
+      const v = Number(form.w.value);
+      if (v) {
+        let kg = unit() === 'lb' ? v / 2.20462 : v;
+        kg = Math.round(kg * 10) / 10;
+        if (!(kg >= 30 && kg <= 300)) return toast('Enter a realistic weight');
+        S.data.checkins = S.data.checkins.filter((c) => c.date !== todayKey()).concat([{ date: todayKey(), kg }]).sort((a, b) => (a.date < b.date ? -1 : 1));
+        S.data.profile.weightKg = kg;
+        save();
+      }
+      S.modal = { type: 'weekly', answers: {}, photos: { ...S.modal.photos } };
+      return render();
+    }
     if (type === 'barcode') {
       const code = form.code.value.replace(/\D/g, '');
       if (!L.validBarcode(code)) return toast('That barcode does not look right. Check the digits.');
@@ -2401,7 +2553,7 @@
     }
     if (type === 'pin') {
       const pin = form.pin.value;
-      if (!/^\d{4}$/.test(pin)) return toast('Use 4 digits');
+      if (!/^\d{4,6}$/.test(pin)) return toast('Use 4 to 6 digits. 6 is more secure.');
       const salt = newSalt();
       const key = await photoKeyFrom(pin, salt);
       S.data.pinSalt = salt;
@@ -2409,11 +2561,16 @@
       S.photoKey = key;
       S.vaultUnlocked = true;
       await rewriteAllPhotos();
-      S.modal = null; save(); render();
+      if (!(S.modal && S.modal.type === 'ciPhotos')) S.modal = null;
+      save(); render();
       return toast(key ? 'PIN set. Photos are encrypted.' : 'PIN set');
     }
     if (type === 'unlock') {
+      // Slow down guessing: after 5 wrong PINs, wait 30 seconds per further attempt.
+      if (S.pinFails >= 5 && Date.now() - S.pinFailAt < 30000) { S.authError = 'Too many attempts. Wait 30 seconds.'; return render(); }
       const ok = (await hashSecret(form.pin.value, S.data.pinSalt)) === S.data.pinHash;
+      S.pinFails = ok ? 0 : (S.pinFails || 0) + 1;
+      if (!ok) S.pinFailAt = Date.now();
       S.authError = ok ? '' : 'Incorrect PIN';
       S.vaultUnlocked = ok;
       if (ok) { S.photoKey = await photoKeyFrom(form.pin.value, S.data.pinSalt); await loadPhotos(); }
@@ -2457,6 +2614,21 @@
   });
 
   if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => render());
+
+  // Vault auto-lock: whenever she leaves the app, and after 5 minutes without activity.
+  // Opening the camera or photo picker briefly hides the page, so that does not count.
+  function lockVault() {
+    if (!S.data || !S.data.pinHash || !S.vaultUnlocked) return;
+    S.vaultUnlocked = false; S.photoKey = null; S.photos = []; S.revealed = {}; S.compare = [];
+  }
+  document.addEventListener('click', (ev) => { if (ev.target.closest('label') && ev.target.closest('label').querySelector('input[type=file]')) S.pickingFile = Date.now(); }, true);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden' && !(S.pickingFile && Date.now() - S.pickingFile < 120000)) { lockVault(); }
+    if (document.visibilityState === 'visible') render();
+  });
+  let lastActivity = Date.now();
+  ['click', 'keydown', 'touchstart'].forEach((t) => document.addEventListener(t, () => { lastActivity = Date.now(); }, { passive: true }));
+  setInterval(() => { if (Date.now() - lastActivity > 5 * 60000 && S.vaultUnlocked) { lockVault(); render(); } }, 30000);
 
   // ---------- installable app ----------
   window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); S.installPrompt = e; });

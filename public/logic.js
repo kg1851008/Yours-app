@@ -15,7 +15,8 @@
   const weekdayIndex = (d) => (d.getDay() + 6) % 7; // Monday = 0
 
   // ---------- cycle ----------
-  const STEADY_MODES = ['hormonal', 'none'];
+  const STEADY_MODES = ['hormonal', 'none', 'menopause'];
+  const MENO_MODES = ['perimenopause', 'menopause'];
   const ESTIMATE_MODES = ['irregular', 'pcos', 'perimenopause'];
 
   // Average of recent gaps between logged period starts.
@@ -48,7 +49,7 @@
     date = date || today();
     const mode = profile.cycleMode || 'natural';
     if (STEADY_MODES.includes(mode) || !profile.periodStart) {
-      return { steady: true, phase: 'steady', mode, day: null, len: null, dayInPhase: weekdayIndex(date), next: null, daysToNext: null, daysToPeriod: null, estimate: false, late: false, ranges: null };
+      return { steady: true, phase: mode === 'menopause' ? 'menopause' : 'steady', mode, day: null, len: null, dayInPhase: weekdayIndex(date), next: null, daysToNext: null, daysToPeriod: null, estimate: false, late: false, ranges: null };
     }
     const len = clamp(Number(profile.learnedLength || profile.cycleLength) || 28, 21, 45);
     const periodLen = clamp(Number(profile.periodLength) || 5, 2, 8);
@@ -104,14 +105,14 @@
     const goal = goalOf(profile);
     const act = activityOf(profile);
     const bmr = 10 * w + 6.25 * h - 5 * age - 161;
-    const phaseKcal = { menstrual: 50, follicular: 0, ovulation: 0, luteal: 150, steady: 0 }[cyc.phase];
+    const phaseKcal = { menstrual: 50, luteal: 150 }[cyc.phase] || 0;
     const kcal = round(Math.max(bmr * 1.1, bmr * act.mult * goal.kcal + (plan.kcalAdjust || 0)) + phaseKcal, 10);
-    const perKg = profile.cycleMode === 'perimenopause' ? Math.max(goal.protein, 2.0) : goal.protein;
+    const perKg = MENO_MODES.includes(profile.cycleMode) ? Math.max(goal.protein, 2.0) : goal.protein;
     const protein = round(Math.min(w * perKg, (kcal * 0.35) / 4) + (cyc.phase === 'luteal' ? 5 : 0), 5);
     const fat = round(w * 0.9, 5);
     const carbs = Math.max(80, round((kcal - protein * 4 - fat * 9) / 4, 5));
     const waterMl = w * 35 + act.water + (cyc.phase === 'luteal' || cyc.phase === 'menstrual' ? 250 : 0);
-    const stepPhase = { menstrual: -1500, follicular: 1000, ovulation: 1500, luteal: 0, steady: 0 }[cyc.phase];
+    const stepPhase = { menstrual: -1500, follicular: 1000, ovulation: 1500 }[cyc.phase] || 0;
     const steps = Math.max(4000, round(act.steps + (profile.goal === 'lose' || profile.goal === 'recomp' ? 2000 : 0) + stepPhase + (plan.stepBonus || 0), 500));
     return { kcal, protein, fat, carbs, water: Math.round(waterMl / 100) / 10, waterMl: round(waterMl, 50), steps, bmr: Math.round(bmr) };
   }
@@ -128,7 +129,7 @@
 
   // Patterns across cycles from daily check-ins (each stores its cycle day and phase).
   function patterns(daily) {
-    const entries = Object.entries(daily || {}).map(([date, c]) => ({ date, ...c })).filter((c) => c.cycleDay && c.phase && c.phase !== 'steady');
+    const entries = Object.entries(daily || {}).map(([date, c]) => ({ date, ...c })).filter((c) => c.cycleDay && D.PHASE_ORDER.includes(c.phase));
     const out = { insights: [], dipDays: [], byPhase: {} };
     if (entries.length < 6) return out;
 
@@ -276,7 +277,7 @@
   function strengthByPhase(workouts) {
     const byEx = {};
     (workouts || []).forEach((w) => {
-      if (!w.detail || !w.phase || w.phase === 'steady') return;
+      if (!w.detail || !D.PHASE_ORDER.includes(w.phase)) return;
       w.detail.forEach((ex) => { const v = bestE1rm(ex, w.unit); if (v) (byEx[ex.name] = byEx[ex.name] || []).push({ phase: w.phase, v }); });
     });
     const ratios = {};
@@ -533,19 +534,46 @@
     return plan;
   }
 
+  // Perimenopause / menopause: how often key symptoms show up, and what they do to readiness.
+  function menoInsights(daily, now) {
+    now = now || today();
+    const days = Array.from({ length: 28 }, (_, i) => dateKey(addDays(now, -i))).map((k) => (daily || {})[k]).filter(Boolean);
+    const out = [];
+    if (days.length < 5) return out;
+    ['Hot flashes', 'Night sweats', 'Brain fog', 'Joint aches'].forEach((sym) => {
+      const withS = days.filter((d) => (d.symptoms || []).includes(sym));
+      if (withS.length < 2) return;
+      const without = days.filter((d) => !(d.symptoms || []).includes(sym));
+      let text = `${sym} on ${withS.length} of your last ${days.length} check-ins.`;
+      if (without.length >= 2) {
+        const diff = Math.round(mean(without.map(readiness)) - mean(withS.map(readiness)));
+        if (diff >= 8) text += ` Readiness runs about ${diff} points lower on those days, so I go lighter when you log them.`;
+      }
+      out.push(text);
+    });
+    const ns = days.filter((d) => (d.symptoms || []).includes('Night sweats'));
+    if (ns.length >= 2 && mean(ns.map((d) => d.sleep)) <= 2.5) out.push('Night sweats are costing you sleep. A cooler room, lighter bedding and less alcohol in the evening are worth trying, and talk to your doctor if they are frequent.');
+    return out;
+  }
+
+  // Check-in day: her chosen weekday (0 = Sunday). Due on that day or the day after, once a week.
+  const checkinDay = (data) => (Number.isInteger(data.checkinDay) ? data.checkinDay : 0);
   function weeklyDue(data, now) {
     now = now || today();
-    const last = (data.reviews || [])[data.reviews ? data.reviews.length - 1 : 0];
+    const reviews = data.reviews || [];
+    const last = reviews[reviews.length - 1];
     if (last && daysBetween(parseKey(last.date), now) < 6) return false;
+    const day = checkinDay(data);
     const wd = now.getDay();
-    if (wd === 0 || wd === 1) return true;
+    if (wd === day || wd === (day + 1) % 7) return true;
     const dates = (data.workouts || []).map((w) => w.date).sort();
     return !last && dates.length > 0 && daysBetween(parseKey(dates[0]), now) >= 7;
   }
+  const checkinTomorrow = (data, now) => ((now || today()).getDay() + 1) % 7 === checkinDay(data);
 
   const api = {
     dateKey, parseKey, today, addDays, daysBetween, clamp, round, mean, weekdayIndex,
-    GOALS, LEVELS, ACTIVITY, goalOf, activityOf, STEADY_MODES,
+    GOALS, LEVELS, ACTIVITY, goalOf, activityOf, STEADY_MODES, MENO_MODES, menoInsights, checkinDay, checkinTomorrow,
     learnCycle, addPeriod, cycleInfo, targets, readiness, readinessLabel, patterns,
     workoutById, plannedWorkout, workoutFor, adjustSets, parseReps, e1rm, suggestLoad, detectPRs, strengthByPhase, exerciseHistory,
     mealOptions, mealFor, proteinFor, macrosFor, parseOFF, foodMacros, validBarcode, recipeTotals, recipeFood, groceryList, streak, weeklyStats, weeklyAdjust, applyAdjustments, weeklyDue,

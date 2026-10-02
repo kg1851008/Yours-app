@@ -17,12 +17,15 @@
 ### Coaching intelligence
 
 - **Learns her cycle.** Each logged period start updates her predicted cycle length (average of recent cycles, with range and regularity). A late period stays in luteal and is flagged, instead of silently starting a new cycle. Logging bleeding at check-in asks whether her period started.
-- **Supports every cycle type.** Natural, irregular, PCOS and perimenopause use phase predictions, labelled as estimates where appropriate. Hormonal contraception and no current period use a steady weekly plan driven by readiness.
+- **Supports every cycle type and life stage.** Natural, irregular, PCOS and perimenopause use phase predictions, labelled as estimates where appropriate. Hormonal contraception and no current period use a steady weekly plan driven by readiness.
+- **Menopause.** A dedicated life stage with a bone-density and muscle plan (bone-building strength, power and impact, mobility and balance), higher protein, calcium and vitamin D guidance, check-in symptoms for hot flashes, night sweats, brain fog and joint aches, insights on how those affect readiness and sleep, and a prompt to see a doctor if bleeding is logged after menopause. Perimenopause gets the same symptom tracking alongside cycle estimates.
 - **Daily check-in.** Energy, sleep, mood, soreness, symptoms and bleeding produce a 0-100 readiness score. Low readiness offers a lighter session with one tap and lowers suggested weights.
 - **Patterns.** After about 6 check-ins, YOURS shows when her energy dips (for example "around day 24"), which phase each symptom clusters in, and how energy varies by phase. Known dip days trigger a lighter-session suggestion.
 - **Suggested weights.** Every main lift gets a target weight and rep count from her last session, using double progression. Loads are about 10% lighter when menstrual or low on readiness and held steady in the luteal phase. Suggestions are pre-filled in the workout logger.
 - **PR detection** using estimated one-rep max, plus **strength by phase**, which compares her relative strength across phases on the same lifts.
-- **Weekly check-in.** Three questions (how training felt, hunger, next week's plans) plus her numbers (sessions, steps, readiness, weight trend, upcoming phase changes) produce plan changes she can accept or skip: sets on main lifts, step target and calories, all within safe limits.
+- **Check-in day.** She picks her weekday. The coach reminds her the day before and on the day. The check-in takes front, side and back photos ("wear whatever you are comfortable in"), her weigh-in, and three questions. The advisor then reviews this week's photos against her last check-in's (same poses) together with the week's data, and updates next week's plan. Past check-ins appear in Progress with their 7-day average weight.
+- **Daily weigh-in** prompt on Home (can be turned off), with trends shown as 7-day averages.
+- **Weekly review.** Three questions (how training felt, hunger, next week's plans) plus her numbers (sessions, steps, readiness, weight trend, upcoming phase changes) produce plan changes she can accept or skip: sets on main lifts, step target and calories, all within safe limits.
 - **Forgiving streak.** A day counts for training, a check-in, or 60% of her step target, and one missed day a week is forgiven.
 - **Recipes.** Build a meal from its ingredients (scan, search or create each), set how many servings it makes and optionally the cooked weight, then log a serving or any number of grams. Recipes are saved and editable. Quick add covers meals out.
 - **Food scale guidance.** A dismissible tip on the diary, plus hints in recipes and grams entry. Always optional.
@@ -30,7 +33,7 @@
 - **Protein tracking** by marking meals as eaten, plus a **grocery list** for the next 7 days of meals that she can tick off and share.
 - **Share cards** (PRs, streak, strength by phase): 1080x1350 branded images, shared through the phone's share menu or downloaded.
 - **Installable app (PWA).** Home-screen icon, an offline app shell, and the Android install prompt. On iPhone, Safari's Add to Home Screen.
-- **Privacy.** With a vault PIN, photos are encrypted on the device with AES-GCM (key derived from the PIN with PBKDF2). She can export her data as JSON and delete everything.
+- **Privacy.** Check-in photos require a vault PIN (4-6 digits). Photos are encrypted on the device with AES-GCM (key derived from the PIN with PBKDF2). The vault locks whenever the app goes to the background and after 5 minutes idle; wrong PINs are throttled; photos stay blurred until tapped and are never included in exports. She can export her data as JSON and delete everything.
 
 ## Design
 
