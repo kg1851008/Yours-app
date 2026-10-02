@@ -70,7 +70,7 @@
         try { const d = must(await sb.auth.getSession()); return setUser(d && d.session ? d.session.user : null); } catch { return null; }
       },
       async signUp(email, password, name) {
-        const d = must(await sb.auth.signUp({ email, password, options: { data: { name } } }));
+        const d = must(await sb.auth.signUp({ email, password, options: { data: { name }, emailRedirectTo: typeof location !== 'undefined' ? location.origin : undefined } }));
         // With "Confirm email" on (the Supabase default) there is no session until she clicks the link.
         if (d.user && Array.isArray(d.user.identities) && d.user.identities.length === 0) throw new Error('User already registered');
         setUser(d.session ? d.session.user : null);
