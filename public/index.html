@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YOURS - Fitness Coach</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #F9F7F4; color: #2F3720; }
+    .container { max-width: 500px; margin: 0 auto; padding: 20px; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; }
+    .logo { font-size: 48px; font-weight: 700; margin-bottom: 12px; }
+    .tagline { font-size: 14px; color: #8B7D6B; margin-bottom: 40px; }
+    .heading { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
+    .subheading { font-size: 14px; color: #8B7D6B; margin-bottom: 24px; }
+    .form-group { margin-bottom: 16px; }
+    .form-input { width: 100%; padding: 12px; border: 1px solid #E0D7CE; border-radius: 8px; font-size: 14px; background: white; }
+    .btn { width: 100%; padding: 12px; background: #D4845C; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 14px; margin-top: 20px; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .link { text-align: center; margin-top: 16px; font-size: 13px; }
+    .link a { color: #D4845C; cursor: pointer; text-decoration: none; }
+    .error { color: #D4845C; font-size: 13px; margin-bottom: 12px; }
+    .card { background: white; border-left: 4px solid #D4845C; padding: 16px; border-radius: 8px; margin: 12px 0; }
+    .card-title { font-size: 12px; color: #8B7D6B; font-weight: 600; margin-bottom: 6px; }
+    .card-value { font-size: 18px; font-weight: 700; color: #2F3720; }
+    .option { padding: 12px; margin: 8px 0; border: 2px solid #E0D7CE; border-radius: 8px; cursor: pointer; background: white; }
+    .option.selected { border-color: #D4845C; background: #D4845C; color: white; }
+    .hidden { display: none; }
+    .greeting { margin-bottom: 24px; }
+    .greeting h1 { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
+    .date { font-size: 12px; color: #8B7D6B; }
+  </style>
+</head>
+<body>
+  <div id="app" class="container">
+    <!-- Auth Page -->
+    <div id="authPage" class="hidden">
+      <div class="logo">yours.</div>
+      <div class="tagline">Made for your body.</div>
+      <form onsubmit="handleSignup(event)">
+        <h2 class="heading">Create your account</h2>
+        <p class="subheading">7-day free trial. No card required.</p>
+        <div id="authError" class="error hidden"></div>
+        <div class="form-group">
+          <input type="email" id="signupEmail" class="form-input" placeholder="Email" required>
+        </div>
+        <div class="form-group">
+          <input type="password" id="signupPassword" class="form-input" placeholder="Password" required>
+        </div>
+        <div class="form-group">
+          <input type="password" id="signupConfirm" class="form-input" placeholder="Confirm password" required>
+        </div>
+        <button type="submit" class="btn">Start free trial</button>
+      </form>
+      <div class="link">Already have an account? <a onclick="showLogin()">Log in</a></div>
+    </div>
+
+    <!-- Login Page -->
+    <div id="loginPage" class="hidden">
+      <div class="logo">yours.</div>
+      <div class="tagline">Made for your body.</div>
+      <form onsubmit="handleLogin(event)">
+        <h2 class="heading">Welcome back</h2>
+        <p class="subheading">Log in to your account</p>
+        <div id="loginError" class="error hidden"></div>
+        <div class="form-group">
+          <input type="email" id="loginEmail" class="form-input" placeholder="Email" required>
+        </div>
+        <div class="form-group">
+          <input type="password" id="loginPassword" class="form-input" placeholder="Password" required>
+        </div>
+        <button type="submit" class="btn">Log in</button>
+      </form>
+      <div class="link">Don't have an account? <a onclick="showAuth()">Sign up</a></div>
+    </div>
+
+    <!-- Onboarding Page -->
+    <div id="onboardingPage" class="hidden">
+      <div class="logo">yours.</div>
+      <div style="font-size: 12px; color: #8B7D6B; margin-bottom: 40px;" id="stepIndicator">1 of 3</div>
+
+      <div id="step1" class="hidden">
+        <h2 class="heading">What's your fitness level?</h2>
+        <p class="subheading">We'll personalize your workouts</p>
+        <div class="option" onclick="selectOption('fitness', 'Beginner', this)">Beginner</div>
+        <div class="option" onclick="selectOption('fitness', 'Intermediate', this)">Intermediate</div>
+        <div class="option" onclick="selectOption('fitness', 'Advanced', this)">Advanced</div>
+        <button class="btn" onclick="nextStep()">Next</button>
+      </div>
+
+      <div id="step2" class="hidden">
+        <h2 class="heading">What's your main goal?</h2>
+        <p class="subheading">We'll adjust your macros accordingly</p>
+        <div class="option" onclick="selectOption('goal', 'Build muscle', this)">Build muscle</div>
+        <div class="option" onclick="selectOption('goal', 'Lose fat', this)">Lose fat</div>
+        <div class="option" onclick="selectOption('goal', 'Get stronger', this)">Get stronger</div>
+        <div class="option" onclick="selectOption('goal', 'Feel energized', this)">Feel energized</div>
+        <button class="btn" onclick="nextStep()">Next</button>
+      </div>
+
+      <div id="step3" class="hidden">
+        <h2 class="heading">Your cycle length</h2>
+        <p class="subheading">Standard is 28 days. Adjust if yours is different.</p>
+        <div style="display: flex; gap: 8px; margin-bottom: 24px;">
+          <button onclick="selectCycle(21, this)" style="flex: 1; padding: 12px; border: 2px solid #E0D7CE; border-radius: 8px; background: white; cursor: pointer;">21</button>
+          <button onclick="selectCycle(24, this)" style="flex: 1; padding: 12px; border: 2px solid #E0D7CE; border-radius: 8px; background: white; cursor: pointer;">24</button>
+          <button onclick="selectCycle(28, this)" style="flex: 1; padding: 12px; border: 2px solid #D4845C; border-radius: 8px; background: #D4845C; color: white; cursor: pointer;">28</button>
+          <button onclick="selectCycle(31, this)" style="flex: 1; padding: 12px; border: 2px solid #E0D7CE; border-radius: 8px; background: white; cursor: pointer;">31</button>
+          <button onclick="selectCycle(35, this)" style="flex: 1; padding: 12px; border: 2px solid #E0D7CE; border-radius: 8px; background: white; cursor: pointer;">35</button>
+        </div>
+        <button class="btn" onclick="completeOnboarding()">Get started</button>
+      </div>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="dashboard" class="hidden">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px;">
+        <div class="greeting">
+          <h1>Good morning</h1>
+          <div class="date" id="currentDate">Wednesday, Oct 2</div>
+        </div>
+        <button onclick="logout()" style="width: 44px; height: 44px; border-radius: 50%; background: white; border: none; cursor: pointer; font-size: 20px;">👤</button>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Cycle phase</div>
+        <div class="card-value">Ovulation phase</div>
+        <p style="font-size: 13px; color: #8B7D6B; margin-top: 8px;">High energy phase — perfect for heavy lifts</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Today's Workout</div>
+        <div class="card-value">Strength - Upper Body</div>
+        <p style="font-size: 13px; color: #8B7D6B; margin: 8px 0;">45 mins</p>
+        <button class="btn" style="margin-top: 12px; margin-bottom: 0;">Start workout</button>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0;">
+        <div class="card">
+          <div class="card-title">Protein</div>
+          <div class="card-value">124g</div>
+          <p style="font-size: 12px; color: #8B7D6B; margin-top: 4px;">Target: 160g</p>
+        </div>
+        <div class="card">
+          <div class="card-title">Water</div>
+          <div class="card-value">48oz/64oz</div>
+          <p style="font-size: 12px; color: #8B7D6B; margin-top: 4px;">today</p>
+        </div>
+      </div>
+
+      <div style="background: rgba(212, 132, 92, 0.15); border-radius: 12px; padding: 16px; text-align: center; margin-top: 20px;">
+        <p style="font-size: 14px; color: #2F3720; margin-bottom: 12px;">Upload a check-in photo to get personalized coaching</p>
+        <button class="btn" style="margin-top: 0;">Upload photo</button>
+      </div>
+    </div>
+  </div>
+
+  
