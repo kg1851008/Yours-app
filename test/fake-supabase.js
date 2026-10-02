@@ -6,7 +6,7 @@ const crypto = require('node:crypto');
 
 function createBackend(opts) {
   const confirmEmail = !!(opts && opts.confirmEmail);
-  const db = { users: [], profiles: [], user_data: [], posts: [], comments: [], likes: [], messages: [], reports: [], files: {} };
+  const db = { users: [], profiles: [], user_data: [], posts: [], comments: [], likes: [], messages: [], reports: [], subscriptions: [], files: {} };
   const tokens = {};
   const now = () => new Date(Date.now() + (db.tick = (db.tick || 0) + 1)).toISOString();
   const err = (message) => ({ data: null, error: { message } });
@@ -55,7 +55,7 @@ function createBackend(opts) {
     const t = db[q.table];
     if (q.action === 'select') {
       let rows = t.filter((r) => match(r, q.filters));
-      if (q.table === 'user_data') rows = rows.filter((r) => r.user_id === u.id);
+      if (q.table === 'user_data' || q.table === 'subscriptions') rows = rows.filter((r) => r.user_id === u.id);
       if (q.table === 'messages') rows = rows.filter((r) => r.from_id === u.id || r.to_id === u.id);
       if (q.order) rows = rows.slice().sort((a, b) => (a[q.order.col] < b[q.order.col] ? -1 : 1) * (q.order.ascending ? 1 : -1));
       if (q.limit) rows = rows.slice(0, q.limit);
@@ -118,7 +118,8 @@ function createBackend(opts) {
     if (op.kind === 'rpc') return rpc(op.token, op.name);
     return err('unknown op');
   }
-  return { db, handle, confirm };
+  const tokenUser = (token) => { const u = userOf(token); return u ? { id: u.id, email: u.email } : null; };
+  return { db, handle, confirm, tokenUser };
 }
 
 // Runs in the page. Session persists in localStorage like supabase-js.

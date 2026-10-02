@@ -94,6 +94,11 @@
       async pushData(data, updated) {
         must(await sb.from('user_data').upsert({ user_id: user.id, data, updated }, { onConflict: 'user_id' }));
       },
+      async accessToken() { const d = must(await sb.auth.getSession()); return d && d.session ? d.session.access_token : null; },
+      async subscription() {
+        const rows = must(await sb.from('subscriptions').select('status, plan, trial_used, trial_end, current_period_end, cancel_at_period_end').eq('user_id', user.id).limit(1));
+        return rows && rows[0] ? rows[0] : null;
+      },
       async setName(name) { must(await sb.from('profiles').update({ name }).eq('id', user.id)); },
       async deleteAccount() {
         const names = await api.listBackups();
@@ -167,7 +172,14 @@
     return api;
   }
 
-  const exported = { create, pickNewer, mapFeed, mapThreads, friendlyError, ID, UID };
+  // Same rule as the server (lib/billing.js): trialing, active, or past due for up to 7 days.
+  function hasAccess(row, now) {
+    if (!row || !['trialing', 'active', 'past_due', 'comp'].includes(row.status)) return false;
+    if (row.status === 'past_due' && row.current_period_end) return new Date(row.current_period_end).getTime() + 7 * 864e5 > (now || Date.now());
+    return true;
+  }
+
+  const exported = { create, hasAccess, pickNewer, mapFeed, mapThreads, friendlyError, ID, UID };
   if (typeof window !== 'undefined') window.YOURS_CLOUD = exported;
   if (typeof module !== 'undefined' && module.exports) module.exports = exported;
 })();

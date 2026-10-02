@@ -196,3 +196,21 @@ begin
   begin alter publication supabase_realtime add table public.likes; exception when duplicate_object then null; end;
   begin alter publication supabase_realtime add table public.messages; exception when duplicate_object then null; end;
 end $$;
+
+-- Memberships (Stripe). Written only by the server (api/stripe-webhook.js) with the secret key; members read their own row.
+-- status 'comp' grants free access by hand.
+create table if not exists public.subscriptions (
+  user_id uuid primary key references auth.users (id) on delete cascade,
+  customer_id text unique,
+  subscription_id text,
+  status text not null default 'none',
+  plan text,
+  trial_used boolean not null default false,
+  trial_end timestamptz,
+  current_period_end timestamptz,
+  cancel_at_period_end boolean not null default false,
+  updated_at timestamptz not null default now()
+);
+alter table public.subscriptions enable row level security;
+drop policy if exists "subscriptions read own" on public.subscriptions;
+create policy "subscriptions read own" on public.subscriptions for select to authenticated using (user_id = (select auth.uid()));

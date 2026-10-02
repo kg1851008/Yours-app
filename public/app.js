@@ -172,7 +172,7 @@
   window.addEventListener('online', () => { if (isCloud() && S.syncState === 'offline') pushNow(); });
   let lastPull = 0;
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && isCloud() && Date.now() - lastPull > 30000) { lastPull = Date.now(); syncPull(); if (S.tab === 'community') refreshCommunity(); }
+    if (document.visibilityState === 'visible' && isCloud() && Date.now() - lastPull > 30000) { lastPull = Date.now(); syncPull(); refreshSub().then(render); if (S.tab === 'community') refreshCommunity(); }
     if (document.visibilityState === 'hidden' && isCloud() && S.syncState === 'saving') pushNow();
   });
 
@@ -1377,7 +1377,7 @@
       <div class="stack">
         <button class="btn primary block" data-action="start">Get started</button>
         <button class="btn ghost block" data-action="go-login">I have an account</button>
-        <button class="btn soft block" data-action="demo">Try the demo</button>
+        ${billingOn() ? '' : '<button class="btn soft block" data-action="demo">Try the demo</button>'}
         <div class="p-row" style="margin-top:18px;opacity:.7"><span>Cycle</span><span>Vol. 01</span></div>
       </div>
     </div>`;
@@ -1396,7 +1396,7 @@
         ${cloud ? '<p class="center small" style="margin-top:12px"><button type="button" class="link" data-action="forgot-password">Forgot password?</button></p>' : ''}
       </form>
       <p class="center small muted" style="margin-top:20px">New here? <button class="link" data-action="start">Build your plan</button></p>
-      <p class="center small" style="margin-top:8px"><button class="link" data-action="demo">Try the demo</button></p>
+      ${billingOn() ? '' : '<p class="center small" style="margin-top:8px"><button class="link" data-action="demo">Try the demo</button></p>'}
     </div>`;
   }
 
@@ -1518,8 +1518,8 @@
         <p class="muted small" style="margin:4px 0 16px">Create a free account to keep your plan and unlock progress photos and the community.</p>
         ${signupForm('reveal')}
       </div>
-      <button class="btn ghost block" style="margin-top:12px" data-action="continue-guest">Continue as guest</button>
-      <p class="center small" style="margin-top:14px"><button class="link" data-action="go-login">I already have an account</button></p>` : `<button class="btn primary block" style="margin-top:24px" data-action="start-plan">Start my plan</button>
+      ${billingOn() ? `<p class="center small muted" style="margin-top:12px">Then start your ${trialDays()}-day free trial.</p>` : '<button class="btn ghost block" style="margin-top:12px" data-action="continue-guest">Continue as guest</button>'}
+      <p class="center small" style="margin-top:14px"><button class="link" data-action="go-login">I already have an account</button></p>` : `<button class="btn primary block" style="margin-top:24px" data-action="start-plan">${billingOn() && !memberHasAccess() ? `Start my ${trialDays()}-day free trial` : 'Start my plan'}</button>
       <p class="center small muted" style="margin-top:10px">Saved to your account${isCloud() ? ' and synced to your devices' : ''}.</p>`}
     </div>`;
   }
@@ -1665,6 +1665,7 @@
         <ul class="phase-list">${ph.tips.map((tip) => `<li>${esc(tip)}</li>`).join('')}</ul>
         ${c.late ? '<button class="btn primary sm" style="margin-top:10px" data-action="log-period-today">My period started</button>' : ''}
       </div>
+      ${trialEndingBanner()}
       ${checkinCard()}
       ${weighInCard()}
       ${smartSuggestion(c, wk)}
@@ -1768,6 +1769,90 @@
       <div class="section-title"><h2>Workout library</h2></div>
       <div class="chips">${D.PHASE_ORDER.concat(['menopause']).map((p) => `<button class="chip ${lib === p ? 'selected' : ''}" data-action="lib-phase" data-phase="${p}"><span class="dot" style="background:var(--${p})"></span>${phaseName(p)}</button>`).join('')}</div>
       <div class="h-scroll" style="margin-top:14px">${D.WORKOUTS.filter((w) => w.phase === lib).map((w) => `<button class="poster mini" data-action="view-workout" data-id="${w.id}">${backdrop(lib)}<div class="p-row"><span>${w.minutes} min</span><span>${esc(w.intensity)}</span></div><div class="p-body"><div class="p-title">${esc(w.name)}</div><div class="p-cap" style="letter-spacing:.2em">${esc(w.focus)}</div></div></button>`).join('')}</div>
+    </div>`;
+  }
+
+  // ---------- membership (Stripe via /api/billing; status mirrored in Supabase) ----------
+  const billingOn = () => !!(S.billing && S.billing.enabled && cloud);
+  const trialDays = () => (S.billing && S.billing.trialDays) || 7;
+  // Paid access needs a cloud account with an active, trialing or recently past-due membership.
+  const memberHasAccess = () => isCloud() && window.YOURS_CLOUD.hasAccess(S.sub);
+  const money = (p) => (p ? new Intl.NumberFormat(undefined, { style: 'currency', currency: p.currency.toUpperCase(), minimumFractionDigits: p.amount % 1 ? 2 : 0 }).format(p.amount) : '');
+  function priceFor(plan) {
+    const pr = S.billing && S.billing.prices;
+    return pr ? pr[plan] : plan === 'yearly' ? { amount: 99, currency: 'usd' } : { amount: 14.99, currency: 'usd' };
+  }
+  async function loadBilling() {
+    try { const r = await fetch('/api/billing'); S.billing = r.ok ? await r.json() : { enabled: false }; } catch { S.billing = S.billing || { enabled: false }; }
+  }
+  async function refreshSub() {
+    if (!isCloud()) { S.sub = null; return; }
+    try { S.sub = await cloud.subscription(); S.subLoaded = true; } catch { /* keep the last known status */ }
+  }
+  async function billingCall(action, extra) {
+    const token = await cloud.accessToken();
+    const r = await fetch('/api/billing', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ action, ...(extra || {}) }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.url) throw new Error(j.error || 'Could not reach payments. Try again in a moment.');
+    return j.url;
+  }
+  // Back from Stripe Checkout: the webhook usually lands within seconds, so check a few times.
+  async function awaitMembership() {
+    S.billingBusy = 'confirming'; render();
+    for (let i = 0; i < 15 && !memberHasAccess(); i++) { await refreshSub(); if (!memberHasAccess()) await new Promise((r) => setTimeout(r, 2000)); }
+    S.billingBusy = null;
+    render();
+    if (memberHasAccess()) toast(S.sub.status === 'trialing' ? 'Your free trial has started' : 'Welcome to YOURS');
+  }
+  function membershipLine() {
+    const sub = S.sub;
+    if (!sub || sub.status === 'none') return 'No membership yet.';
+    const d = (x) => (x ? fmtDate(new Date(x), { month: 'short', day: 'numeric' }) : '');
+    const plan = sub.plan === 'yearly' ? 'Yearly' : 'Monthly';
+    if (sub.status === 'trialing') return `Free trial${sub.cancel_at_period_end ? `, ends ${d(sub.trial_end)} (cancelled, you won't be charged)` : ` until ${d(sub.trial_end)}, then ${money(priceFor(sub.plan))} ${sub.plan === 'yearly' ? 'a year' : 'a month'}`}.`;
+    if (sub.status === 'active') return `${plan} membership${sub.cancel_at_period_end ? `, ends ${d(sub.current_period_end)}` : `, renews ${d(sub.current_period_end)}`}.`;
+    if (sub.status === 'comp') return 'Complimentary membership.';
+    if (sub.status === 'past_due') return 'Your last payment did not go through. Update your card to keep access.';
+    return 'Membership ended.';
+  }
+  function trialEndingBanner() {
+    const sub = S.sub;
+    if (!billingOn() || !sub || sub.status !== 'trialing' || sub.cancel_at_period_end || !sub.trial_end) return '';
+    const days = Math.ceil((new Date(sub.trial_end).getTime() - Date.now()) / 864e5);
+    if (days > 2) return '';
+    return `<div class="banner" style="margin-bottom:12px">${icon('flame', 18)}<div class="grow small">Your free trial ends ${days <= 0 ? 'today' : days === 1 ? 'tomorrow' : `in ${days} days`}. Your membership then continues at ${money(priceFor(sub.plan))} ${sub.plan === 'yearly' ? 'a year' : 'a month'}.</div><button class="link small" data-action="billing-portal">Manage</button></div>`;
+  }
+  function viewPaywall() {
+    const plan = S.payPlan || 'yearly';
+    const m = priceFor('monthly');
+    const y = priceFor('yearly');
+    const save = m && y ? Math.round((1 - y.amount / (m.amount * 12)) * 100) : 0;
+    const trial = !(S.sub && S.sub.trial_used);
+    const t = tgt();
+    const ended = S.sub && S.sub.status && S.sub.status !== 'none';
+    const option = (id, label, price, note) => `<button class="card" style="width:100%;text-align:left;margin:10px 0 0;${plan === id ? 'border:2px solid var(--green)' : ''}" data-action="pay-plan" data-plan="${id}" aria-pressed="${plan === id}">
+        <div class="row between"><strong>${label}</strong>${note ? `<span class="tag accent">${esc(note)}</span>` : ''}</div>
+        <div class="serif" style="font-size:30px;margin-top:4px">${money(price)}<span class="small muted" style="font-family:var(--body, inherit)"> / ${id === 'yearly' ? 'year' : 'month'}</span></div>
+        ${id === 'yearly' && price ? `<div class="tiny muted">${money({ amount: Math.round((price.amount / 12) * 100) / 100, currency: price.currency })} a month, billed yearly</div>` : ''}</button>`;
+    const charge = trial ? fmtDate(addDays(today(), trialDays()), { month: 'long', day: 'numeric' }) : null;
+    if (!isCloud()) {
+      return `<div class="screen no-nav"><div class="top"><div class="wordmark sm">yours.</div></div>
+        <h1 style="margin-top:24px">Create your account</h1><p class="muted" style="margin-top:6px">Your plan is ready. Create an account to start your ${trialDays()}-day free trial.</p>
+        <div class="card" style="margin-top:20px">${signupForm('paywall')}</div>
+        <p class="center small" style="margin-top:14px"><button class="link" data-action="logout">${isGuest() ? 'Start over' : 'Sign out'}</button> · <button class="link" data-action="go-login">I already have an account</button></p></div>`;
+    }
+    return `<div class="screen no-nav">
+      <div class="top"><div class="wordmark sm">yours.</div><button class="link small" data-action="logout">Sign out</button></div>
+      <div class="eyebrow" style="margin-top:22px">${ended && !trial ? 'Welcome back' : 'Your plan is ready'}</div>
+      <h1 style="margin-top:6px">${trial ? `${trialDays()} days free.<br>Then it's yours.` : 'Pick up where<br>you left off.'}</h1>
+      <ul class="phase-list" style="margin-top:16px"><li>Training, meals and steps that change with your cycle</li><li>Suggested weights for every lift and an AI coach</li><li>Food diary with barcode, photo and voice logging</li><li>8-week programs, progress check-ins and the community</li></ul>
+      ${t ? `<p class="small muted" style="margin-top:10px">Your targets: ${t.kcal.toLocaleString()} ${calWord()}, ${t.protein} g protein, ${t.steps.toLocaleString()} steps.</p>` : ''}
+      ${option('yearly', 'Yearly', y, save > 0 ? `Save ${save}%` : '')}
+      ${option('monthly', 'Monthly', m, '')}
+      ${S.billingError ? `<p class="error" style="margin-top:12px">${esc(S.billingError)}</p>` : ''}
+      <button class="btn primary block" style="margin-top:18px" data-action="pay-start" ${S.billingBusy ? 'disabled' : ''}>${S.billingBusy === 'confirming' ? 'Confirming your membership...' : S.billingBusy ? 'Opening secure checkout...' : trial ? `Start my ${trialDays()}-day free trial` : 'Continue'}</button>
+      <p class="tiny muted center" style="margin-top:10px">${trial ? `Free until ${charge}. Then ${money(priceFor(plan))} ${plan === 'yearly' ? 'a year' : 'a month'}, renewing automatically. Cancel anytime before ${charge} in Profile and you won't be charged. Secure payment by Stripe.` : `${money(priceFor(plan))} ${plan === 'yearly' ? 'a year' : 'a month'}, renewing automatically. Cancel anytime in Profile. Secure payment by Stripe.`}</p>
+      <p class="center small" style="margin-top:14px"><button class="link" data-action="billing-recheck">I already subscribed</button>${S.sub && S.sub.status && S.sub.status !== 'none' ? ' · <button class="link" data-action="billing-portal">Manage billing</button>' : ''}</p>
     </div>`;
   }
 
@@ -2521,6 +2606,7 @@
         <div class="card flat"><div class="label">Appearance</div><div class="segment">${['system', 'light', 'dark'].map((x) => `<button class="${theme === x ? 'active' : ''}" data-action="theme" data-value="${x}">${x[0].toUpperCase() + x.slice(1)}</button>`).join('')}</div></div>
         ${S.installPrompt ? '<button class="btn primary block" style="margin-top:12px" data-action="install">Install YOURS on this device</button>' : ios ? '<div class="card flat small"><div class="label">Install on iPhone</div><p class="muted">Tap the Share button in Safari, then Add to Home Screen.</p></div>' : ''}
         <div class="card flat small"><div class="label">Coach</div><p class="muted">${S.ai ? 'Live AI coach is connected.' : 'Running the on-device coach. Set ANTHROPIC_API_KEY on the server to enable the live AI coach and photo reviews.'}</p></div>
+        ${billingOn() && isCloud() ? `<div class="card flat small"><div class="label">Membership</div><p class="muted">${esc(membershipLine())}</p>${S.sub && S.sub.status && !['none', 'comp'].includes(S.sub.status) ? '<button class="btn ghost sm block" style="margin-top:10px" data-action="billing-portal">Manage membership</button>' : ''}<p class="tiny muted" style="margin-top:8px">Cancel, switch plans or update your card on Stripe's secure page.</p></div>` : ''}
         ${isCloud() ? `<div class="card flat small"><div class="label">Account sync</div><p class="muted">${S.syncState === 'offline' ? 'Offline. Changes are saved on this device and sync when you are back online.' : S.syncState === 'saving' ? 'Saving...' : `Synced across your devices${S.syncedAt ? ` · ${timeAgo(S.syncedAt)}` : ''}.`}</p><button class="btn ghost sm block" style="margin-top:10px" data-action="sync-now">Sync now</button>${(S.data.blocked || []).length ? `<button class="link small" style="margin-top:10px" data-action="unblock-all">Show ${plural(S.data.blocked.length, 'hidden member')} again</button>` : ''}</div>` : cloud && !isGuest() ? '<div class="card flat small"><div class="label">Account sync</div><p class="muted">This account lives on this device only. Sign out and sign in again with the same email and password to move it to your YOURS account and sync across devices.</p></div>' : ''}
         <div class="card flat small"><div class="label">Your data</div><p class="muted">${isCloud() ? 'Your plan and history are stored in your private YOURS account and on this device. Progress photos stay on this device unless you turn on encrypted backup. Nothing is used to train AI models.' : 'Everything is stored on this device. Nothing is used to train AI models.'}</p><button class="btn ghost sm block" style="margin-top:10px" data-action="export-data">${icon('download', 16)} Export my data</button></div>
         <button class="btn ghost block" style="margin-top:12px" data-action="logout">${isGuest() ? 'Start over' : 'Sign out'}</button>
@@ -2540,6 +2626,7 @@
     if (!S.session) html = S.screen === 'login' ? viewLogin() : viewWelcome();
     else if (!S.data.onboarded) html = viewOnboarding();
     else if (!S.data.planSeen) html = viewReveal();
+    else if (billingOn() && !memberHasAccess()) html = viewPaywall();
     else {
       const views = { home: viewHome, workouts: viewWorkouts, meals: viewMeals, advisor: viewAdvisor, community: viewCommunity };
       html = (views[S.tab] || viewHome)() + nav();
@@ -2570,7 +2657,7 @@
     S.backupKey = null; S.backupNames = null;
     stopCloudCommunity();
     await loadPhotos();
-    if (session.cloud) { await syncPull(); startCloudCommunity(); }
+    if (session.cloud) { await syncPull(); await refreshSub(); startCloudCommunity(); }
   }
   // Keep a local name entry for cloud accounts so the app can greet her offline.
   function rememberCloudUser(email, name) {
@@ -2850,6 +2937,16 @@
     },
     'go-welcome': () => { S.screen = 'welcome'; S.authError = ''; render(); },
     demo: () => demo(),
+    'pay-plan': (el) => { S.payPlan = el.dataset.plan; S.billingError = ''; render(); },
+    'pay-start': async () => {
+      S.billingBusy = 'opening'; S.billingError = ''; render();
+      try { location.href = await billingCall('checkout', { plan: S.payPlan || 'yearly' }); }
+      catch (e) { S.billingBusy = null; S.billingError = e.message; render(); }
+    },
+    'billing-portal': async () => {
+      try { location.href = await billingCall('portal'); } catch (e) { toast(e.message); }
+    },
+    'billing-recheck': () => awaitMembership(),
     'start-plan': () => { S.data.planSeen = true; S.tab = 'home'; save(); render(); window.scrollTo(0, 0); },
     'continue-guest': () => { S.data.planSeen = true; save(); render(); window.scrollTo(0, 0); },
     'open-signup': (el) => { S.authError = ''; S.modal = { type: 'signup', reason: el.dataset.reason }; render(); },
@@ -3483,14 +3580,14 @@
 
   // ---------- boot ----------
   (async function boot() {
-    await initCloud();
+    await Promise.all([initCloud(), loadBilling()]);
     if (S.session) {
       if (S.session.kind === 'user' && !users()[S.session.email]) { S.session = null; store.del('yours.session'); }
       else if (S.session.cloud) {
         // Show cached data right away; then confirm the account session and sync.
         loadData(); await loadPhotos(); render();
         const u = cloud ? await cloud.init() : null;
-        if (u) { await syncPull(); startCloudCommunity(); }
+        if (u) { await syncPull(); await refreshSub(); startCloudCommunity(); }
         else if (cloud && navigator.onLine) { S.session = null; S.data = null; store.del('yours.session'); S.screen = 'login'; S.authError = 'Please sign in again.'; }
       } else {
         loadData(); await loadPhotos();
@@ -3503,6 +3600,13 @@
       if (u) await enterCloudAccount(u);
     }
     render();
+    // Back from Stripe: tidy the address bar, then confirm the membership.
+    const billingReturn = new URLSearchParams(location.search).get('billing');
+    if (billingReturn) {
+      history.replaceState(null, '', location.pathname);
+      if (billingReturn === 'success' && isCloud()) awaitMembership();
+      else if (isCloud()) refreshSub().then(render);
+    }
     checkAI();
     fetch('/api/food').then((r) => r.json()).then((j) => { S.foodApi = !!j.available; }).catch(() => { S.foodApi = false; });
   })();
