@@ -1,18 +1,18 @@
 {
   "name": "yours-app",
   "version": "1.0.0",
-  "description": "AI fitness coaching app for women",
+  "description": "YOURS - cycle-synced AI fitness coaching for women",
   "main": "server.js",
+  "private": true,
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js"
   },
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
-    "express": "^4.18.2",
-    "cors": "^2.8.5",
-    "sqlite3": "^5.1.6",
-    "bcryptjs": "^2.4.3",
-    "jsonwebtoken": "^9.0.0",
-    "dotenv": "^16.0.3"
+    "@anthropic-ai/sdk": "^0.131.0",
+    "express": "^4.18.2"
   }
 }
