@@ -12,6 +12,7 @@
 - **Advisor:** an AI coach chat that knows her phase, targets, workouts and steps. It can suggest in-app actions (swap today's workout, log water, open a tab) as buttons she can tap.
 - **Progress:** a private photo vault with an optional PIN. Photos are blurred until tapped, can be compared side by side, and can be sent for an AI review that says whether she is on track. Also tracks weight check-ins.
 - **Community:** a feed for wins, questions and tips, with likes and comments, plus direct messages.
+- **Opening splash:** the YOURS logo full screen on cream, then a fade into the app. Shown once per visit (not on refresh), shortened for reduce-motion users.
 - Light and dark mode, mobile-first layout, no emojis.
 
 ### Coaching intelligence
