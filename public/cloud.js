@@ -10,6 +10,7 @@
   function pickNewer(local, localUpdated, remote) {
     if (!remote || !remote.data) return local ? 'push' : 'none';
     if (!local || !local.onboarded) return 'pull';
+    if (!remote.data.onboarded) return 'push'; // never let an empty plan replace a finished one
     return (remote.updated || 0) > (localUpdated || 0) ? 'pull' : (remote.updated || 0) < (localUpdated || 0) ? 'push' : 'none';
   }
 

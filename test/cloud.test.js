@@ -6,9 +6,10 @@ test('sync picks whichever copy changed last', () => {
   assert.equal(C.pickNewer({ onboarded: true }, 100, null), 'push');
   assert.equal(C.pickNewer(null, 0, { data: { a: 1 }, updated: 5 }), 'pull');
   assert.equal(C.pickNewer({ onboarded: false }, 999, { data: { a: 1 }, updated: 5 }), 'pull'); // fresh device
-  assert.equal(C.pickNewer({ onboarded: true }, 100, { data: {}, updated: 200 }), 'pull');
+  assert.equal(C.pickNewer({ onboarded: true }, 100, { data: { onboarded: true }, updated: 200 }), 'pull');
   assert.equal(C.pickNewer({ onboarded: true }, 300, { data: {}, updated: 200 }), 'push');
-  assert.equal(C.pickNewer({ onboarded: true }, 200, { data: {}, updated: 200 }), 'none');
+  assert.equal(C.pickNewer({ onboarded: true }, 200, { data: { onboarded: true }, updated: 200 }), 'none');
+  assert.equal(C.pickNewer({ onboarded: true }, 100, { data: { onboarded: false }, updated: 900 }), 'push'); // blank account copy never wins
 });
 
 test('feed and threads map to the app shape and respect hidden members', () => {
