@@ -1781,6 +1781,10 @@
     </div>`;
   }
 
+  // ---------- contact ----------
+  const SUPPORT_EMAIL = 'yoursfitapp@gmail.com';
+  const mailLink = (subject, label) => `<a class="link" href="mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}">${esc(label || SUPPORT_EMAIL)}</a>`;
+
   // ---------- membership (Stripe via /api/billing; status mirrored in Supabase) ----------
   const billingOn = () => !!(S.billing && S.billing.enabled && cloud);
   const trialDays = () => (S.billing && S.billing.trialDays) || 7;
@@ -1861,7 +1865,7 @@
       ${S.billingError ? `<p class="error" style="margin-top:12px">${esc(S.billingError)}</p>` : ''}
       <button class="btn primary block" style="margin-top:18px" data-action="pay-start" ${S.billingBusy ? 'disabled' : ''}>${S.billingBusy === 'confirming' ? 'Confirming your membership...' : S.billingBusy ? 'Opening secure checkout...' : trial ? `Start my ${trialDays()}-day free trial` : 'Continue'}</button>
       <p class="tiny muted center" style="margin-top:10px">${trial ? `Free until ${charge}. Then ${money(priceFor(plan))} ${plan === 'yearly' ? 'a year' : 'a month'}, renewing automatically. Cancel anytime before ${charge} in Profile and you won't be charged. Secure payment by Stripe.` : `${money(priceFor(plan))} ${plan === 'yearly' ? 'a year' : 'a month'}, renewing automatically. Cancel anytime in Profile. Secure payment by Stripe.`}</p>
-      <p class="tiny muted center" style="margin-top:8px">We never sell your data. <button class="link tiny" data-action="open-privacy">Privacy</button></p>
+      <p class="tiny muted center" style="margin-top:8px">We never sell your data. <button class="link tiny" data-action="open-privacy">Privacy</button> · Questions? ${mailLink('Membership question', 'Email us')}</p>
       <p class="center small" style="margin-top:14px"><button class="link" data-action="billing-recheck">I already subscribed</button>${S.sub && S.sub.status && S.sub.status !== 'none' ? ' · <button class="link" data-action="billing-portal">Manage billing</button>' : ''}</p>
     </div>`;
   }
@@ -2568,6 +2572,8 @@
         ${li(['<strong>Supabase</strong>: accounts and storage.', '<strong>Vercel</strong>: hosts the app.', '<strong>Stripe</strong>: payments.', '<strong>Anthropic (Claude)</strong>: AI coach answers, food estimates and photo reviews, only when you use them. Photos are sent only when you tap Analyze or snap a plate, and are not stored or used to train AI models.', '<strong>Open Food Facts</strong>: the barcode number when you scan.', '<strong>Nutritionix</strong>: what you type when you search restaurant menus.', '<strong>Have I Been Pwned</strong>: a 5-character fragment of a scrambled version of a new password, to check it has not been leaked. Never the password itself.'])}
         ${h('Your choices')}
         ${li(['Export everything as a file from Profile.', 'Delete your account from Profile. It removes your data, posts, messages and photo backup, and cancels your membership.', 'Hide or report anyone in the community.'])}
+        ${h('Questions')}
+        <p class="small" style="margin-top:6px">Email us at ${mailLink('Privacy question')}. You can also ask us to delete your data this way.</p>
         <p class="tiny muted" style="margin-top:16px">Last updated October 2026.</p>`);
     }
     if (m.type === 'confirmEmail') {
@@ -2635,6 +2641,7 @@
         <div class="card flat small"><div class="label">Coach</div><p class="muted">${S.ai ? 'Live AI coach is connected.' : 'Running the on-device coach. Set ANTHROPIC_API_KEY on the server to enable the live AI coach and photo reviews.'}</p></div>
         ${billingOn() && isCloud() ? `<div class="card flat small"><div class="label">Membership</div><p class="muted">${esc(membershipLine())}</p>${S.sub && S.sub.status && !['none', 'comp'].includes(S.sub.status) ? '<button class="btn ghost sm block" style="margin-top:10px" data-action="billing-portal">Manage membership</button>' : ''}<p class="tiny muted" style="margin-top:8px">Cancel, switch plans or update your card on Stripe's secure page.</p></div>` : ''}
         ${isCloud() ? `<div class="card flat small"><div class="label">Account sync</div><p class="muted">${S.syncState === 'offline' ? 'Offline. Changes are saved on this device and sync when you are back online.' : S.syncState === 'saving' ? 'Saving...' : `Synced across your devices${S.syncedAt ? ` · ${timeAgo(S.syncedAt)}` : ''}.`}</p><button class="btn ghost sm block" style="margin-top:10px" data-action="sync-now">Sync now</button>${(S.data.blocked || []).length ? `<button class="link small" style="margin-top:10px" data-action="unblock-all">Show ${plural(S.data.blocked.length, 'hidden member')} again</button>` : ''}</div>` : cloud && !isGuest() ? '<div class="card flat small"><div class="label">Account sync</div><p class="muted">This account lives on this device only. Sign out and sign in again with the same email and password to move it to your YOURS account and sync across devices.</p></div>' : ''}
+        <div class="card flat small"><div class="label">Help & contact</div><p class="muted">Questions, feedback or a problem with your membership? We read every email.</p><p style="margin-top:8px">${mailLink('YOURS help')}</p></div>
         <div class="card flat small"><div class="label">Your data</div><p><strong>We never sell your data</strong> or share it with advertisers. No ads, no tracking.</p><p class="muted" style="margin-top:6px">${isCloud() ? 'Your plan and history are stored in your private YOURS account and on this device. Progress photos stay on this device unless you turn on encrypted backup. Nothing is used to train AI models.' : 'Everything is stored on this device. Nothing is used to train AI models.'}</p><button class="btn ghost sm block" style="margin-top:10px" data-action="export-data">${icon('download', 16)} Export my data</button><button class="link small" style="margin-top:10px" data-action="open-privacy">Read our privacy promise</button></div>
         <button class="btn ghost block" style="margin-top:12px" data-action="logout">${isGuest() ? 'Start over' : 'Sign out'}</button>
         <button class="btn block" style="margin-top:8px;color:var(--danger)" data-action="delete-data">Delete my data</button>`);
