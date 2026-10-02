@@ -36,3 +36,21 @@ test('cloud stays off without a key', () => {
   assert.equal(C.create({ supabaseUrl: 'https://x.supabase.co', supabaseAnonKey: '' }, () => ({})), null);
   assert.equal(C.friendlyError({ message: 'Invalid login credentials' }), 'That email and password do not match.');
 });
+
+test('leaked-password check only sends a 5-character hash prefix and finds breached passwords', async () => {
+  const crypto = require('node:crypto');
+  const sha = (p) => crypto.createHash('sha1').update(p).digest('hex').toUpperCase();
+  const asked = [];
+  const fakeFetch = async (url) => {
+    asked.push(url);
+    const prefix = url.slice(-5);
+    const body = [sha('password123'), sha('Tr0ub4dor&3')].filter((h) => h.startsWith(prefix)).map((h) => `${h.slice(5)}:4120`).concat(['0000000000000000000000000000000000A:0']).join('\r\n');
+    return { ok: true, text: async () => body };
+  };
+  assert.equal(await C.passwordLeaks('password123', fakeFetch), 4120);
+  assert.equal(await C.passwordLeaks('kettle-orbit-velvet-71', fakeFetch), 0);
+  assert.ok(asked.every((u) => /\/range\/[0-9A-F]{5}$/.test(u)));
+  assert.ok(!asked.some((u) => u.includes('password123')));
+  // If the service is down, sign-up is not blocked.
+  assert.equal(await C.passwordLeaks('x', async () => { throw new Error('offline'); }), null);
+});
