@@ -2,15 +2,26 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>YOURS - Fitness Coach</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #F9F7F4; color: #2F3720; }
-    .container { max-width: 500px; margin: 0 auto; padding: 20px; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; }
-    .logo { font-size: 48px; font-weight: 700; margin-bottom: 12px; }
-    .tagline { font-size: 14px; color: #8B7D6B; margin-bottom: 40px; }
-    .heading { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
-    .subheading { font-size: 14px; color: #8B7D6B; margin-bottom: 24px; }
-    .form-group { margin-bottom: 16px; }
-    .form-input { width: 100%; padding: 12px; border: 1px solid #E0D7CE; border-radius: 8px; font-size: 14px; background: white; }
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>YOURS</title>
+  <meta name="description" content="YOURS - cycle-synced fitness coaching for women. For your body.">
+  <meta name="theme-color" content="#F9F7F4" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#14160F" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="YOURS">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232F3720'/%3E%3Ctext x='32' y='44' font-family='Arial Black,Arial' font-weight='900' font-size='34' text-anchor='middle' fill='%23F9F7F4'%3Ey.%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@125,900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script>
+    // Apply the saved theme before first paint to avoid a flash.
+    try { var t = localStorage.getItem('yours.theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
+</head>
+<body>
+  <div id="app" class="app"></div>
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
