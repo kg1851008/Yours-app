@@ -503,7 +503,48 @@
   // Until then, posters use grainy motion-blur art in the same palette.
   const IMAGERY = { welcome: null, menstrual: null, follicular: null, ovulation: null, luteal: null, steady: null, menopause: null, session: null };
 
-  const api = { PHASE_COPY, IMAGERY, PHASES, PHASE_ORDER, WORKOUTS, ROTATION, MEALS, FAVORITE_OPTIONS, AVOID_OPTIONS, MEMBERS, SEED_POSTS, AUTO_REPLIES, CYCLE_MODES, SYMPTOMS, MENO_SYMPTOMS, GROCERY };
+  // Built-in restaurant starter menus. Values are approximate, taken from each chain's published
+  // nutrition information; menus and recipes change, so the app labels them as approximate.
+  // n(name, kcal, protein, carbs, fat, serving)
+  const n = (name, kcal, protein, carbs, fat, serving) => ({ name, kcal, protein, carbs, fat, serving: serving || '1 item' });
+  const RESTAURANTS = [
+    {
+      id: 'chipotle', name: 'Chipotle', cuisine: 'Mexican grill',
+      build: {
+        title: 'Build your own',
+        sections: [
+          { id: 'base', label: 'Base', type: 'one', options: [n('Bowl', 0, 0, 0, 0), n('Burrito (flour tortilla)', 320, 8, 50, 9), n('Salad (romaine)', 5, 0, 1, 0), n('3 crispy corn tacos', 210, 3, 30, 9), n('3 soft flour tacos', 240, 6, 39, 7.5)] },
+          { id: 'protein', label: 'Protein', type: 'many', options: [n('Chicken', 180, 32, 0, 7), n('Steak', 150, 21, 1, 6), n('Barbacoa', 170, 24, 2, 7), n('Carnitas', 210, 23, 0, 12), n('Sofritas', 150, 8, 9, 10)] },
+          { id: 'rice', label: 'Rice', type: 'many', options: [n('White rice', 210, 4, 40, 4), n('Brown rice', 210, 4, 36, 6)] },
+          { id: 'beans', label: 'Beans', type: 'many', options: [n('Black beans', 130, 8, 22, 1.5), n('Pinto beans', 130, 8, 21, 1.5)] },
+          { id: 'toppings', label: 'Toppings', type: 'many', options: [n('Fajita veggies', 20, 1, 5, 0), n('Fresh tomato salsa', 25, 0, 4, 0), n('Roasted chili-corn salsa', 80, 3, 16, 1.5), n('Tomatillo-green chili salsa', 15, 0, 4, 0), n('Tomatillo-red chili salsa', 30, 0, 4, 0), n('Sour cream', 110, 2, 2, 9), n('Cheese', 110, 6, 1, 8), n('Queso blanco', 120, 5, 4, 9), n('Guacamole', 230, 2, 8, 22), n('Romaine lettuce', 5, 0, 1, 0)] },
+        ],
+      },
+      items: [n('Chips', 540, 7, 73, 25, '1 bag'), n('Side of guacamole', 230, 2, 8, 22, '4 oz'), n('Side of chicken', 180, 32, 0, 7, '4 oz')],
+    },
+    {
+      id: 'chickfila', name: 'Chick-fil-A', cuisine: 'Chicken',
+      items: [n('Grilled Nuggets, 8 ct', 130, 25, 1, 3), n('Grilled Nuggets, 12 ct', 200, 38, 2, 4.5), n('Chick-fil-A Nuggets, 8 ct', 250, 27, 11, 11), n('Grilled Chicken Sandwich', 390, 28, 44, 11), n('Chick-fil-A Chicken Sandwich', 420, 29, 41, 18), n('Waffle Potato Fries, medium', 420, 5, 45, 24)],
+    },
+    {
+      id: 'starbucks', name: 'Starbucks', cuisine: 'Coffee and breakfast',
+      items: [n('Egg White & Roasted Red Pepper Egg Bites', 170, 12, 11, 8, '2 bites'), n('Bacon & Gruyere Egg Bites', 300, 19, 9, 20, '2 bites'), n('Spinach, Feta & Egg White Wrap', 290, 20, 34, 8), n('Caffe Latte, grande, 2% milk', 190, 13, 19, 7, 'grande'), n('Iced Brown Sugar Oatmilk Shaken Espresso, grande', 120, 1, 20, 3, 'grande')],
+    },
+  ];
+
+  // Grocery stores: each link opens that store's own product search for an item.
+  const STORES = [
+    { id: 'walmart', name: 'Walmart', search: 'https://www.walmart.com/search?q=' },
+    { id: 'target', name: 'Target', search: 'https://www.target.com/s?searchTerm=' },
+    { id: 'kroger', name: 'Kroger', search: 'https://www.kroger.com/search?query=' },
+    { id: 'wholefoods', name: 'Whole Foods', search: 'https://www.wholefoodsmarket.com/search?text=' },
+    { id: 'traderjoes', name: "Trader Joe's", search: 'https://www.traderjoes.com/home/search?section=products&q=' },
+    { id: 'costco', name: 'Costco', search: 'https://www.costco.com/CatalogSearch?keyword=' },
+    { id: 'instacart', name: 'Instacart', search: 'https://www.instacart.com/store/s?k=' },
+    { id: 'amazonfresh', name: 'Amazon Fresh', search: 'https://www.amazon.com/s?i=amazonfresh&k=' },
+  ];
+
+  const api = { RESTAURANTS, STORES, PHASE_COPY, IMAGERY, PHASES, PHASE_ORDER, WORKOUTS, ROTATION, MEALS, FAVORITE_OPTIONS, AVOID_OPTIONS, MEMBERS, SEED_POSTS, AUTO_REPLIES, CYCLE_MODES, SYMPTOMS, MENO_SYMPTOMS, GROCERY };
   if (typeof window !== 'undefined') window.YOURS_DATA = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

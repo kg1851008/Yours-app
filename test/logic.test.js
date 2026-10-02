@@ -214,3 +214,26 @@ test('check-in day drives when the weekly check-in is due', () => {
   data.checkinDay = day; data.reviews = [{ date: k(-2) }];
   assert.equal(L.weeklyDue(data), false);
 });
+
+test('grocery list combines ideas, recipes and own items by aisle', () => {
+  const data = { profile: profile(), mealSwaps: {} };
+  const recipe = { ingredients: [{ name: 'Chicken breast, raw' }, { name: 'Jasmine Rice, uncooked' }, { name: 'Baby spinach' }] };
+  const list = L.groceryList(data, T, 7, { ideas: false, recipes: [recipe], custom: ['Oat milk', 'Paper towels'] });
+  const find = (n) => Object.entries(list).find(([, items]) => items.some((i) => i.name === n));
+  assert.equal(find('Chicken breast')[0], 'Protein');
+  assert.equal(find('Baby spinach')[0], 'Produce');
+  assert.equal(find('Oat milk')[0], 'Dairy and eggs');
+  assert.equal(find('Paper towels')[0], 'Pantry and grains');
+  assert.ok(find('Jasmine Rice'));
+});
+
+test('store links and restaurant bowl builder', () => {
+  const D = require('../public/data.js');
+  assert.equal(L.storeLink(D.STORES[0], 'greek yogurt'), 'https://www.walmart.com/search?q=greek%20yogurt');
+  const chip = D.RESTAURANTS.find((r) => r.id === 'chipotle');
+  const sec = (id) => chip.build.sections.findIndex((x) => x.id === id);
+  const { totals, names } = L.buildTotals(chip, { base: [0], protein: [0], rice: [0], beans: [0], toppings: [1, 9] });
+  assert.deepEqual(totals, { kcal: 550, protein: 44, carbs: 67, fat: 12.5 }); // bowl, chicken, white rice, black beans, tomato salsa, romaine
+  assert.deepEqual(names, ['Chicken', 'White rice', 'Black beans', 'Fresh tomato salsa', 'Romaine lettuce']);
+  assert.ok(sec('protein') > 0);
+});

@@ -398,23 +398,54 @@
   }
 
   const CATS = { p: 'Protein', v: 'Produce', g: 'Pantry and grains', d: 'Dairy and eggs' };
-  function groceryList(data, start, days) {
+  // Best-guess aisle for free-text items (recipe ingredients, items she adds).
+  function aisleFor(name) {
+    const x = name.toLowerCase();
+    if (/milk|yogurt|cheese|butter|cream|egg|kefir|cottage/.test(x)) return CATS.d;
+    if (/chicken|turkey|beef|steak|pork|bacon|salmon|tuna|cod|shrimp|fish|tofu|tempeh|sausage|ham|lamb/.test(x)) return CATS.p;
+    if (/lettuce|spinach|kale|arugula|tomato|onion|garlic|pepper|potato|berr|banana|apple|avocado|lemon|lime|orange|broccoli|carrot|cucumber|zucchini|squash|herb|cilantro|parsley|mushroom|celery|cabbage|fruit|grape|mango|pineapple|ginger/.test(x)) return CATS.v;
+    return CATS.g;
+  }
+  // Ingredient names from foods can carry prep notes ("Jasmine rice, uncooked"); keep the shopping part.
+  const shopName = (name) => name.split(/,|\(/)[0].trim();
+
+  // Sources: meal ideas for the next `days` days, chosen saved recipes, and her own items.
+  function groceryList(data, start, days, opts) {
+    opts = opts || {};
     const items = {};
-    for (let i = 0; i < (days || 7); i++) {
-      const date = addDays(start, i);
-      ['breakfast', 'lunch', 'dinner', 'snack'].forEach((slot) => {
-        const { meal } = mealFor(data, date, slot);
-        (D.GROCERY[meal.name] || []).forEach((code) => {
-          const [c, name] = code.split(':');
-          const k = name.toLowerCase();
-          items[k] = items[k] || { name, cat: CATS[c] || 'Other', count: 0 };
-          items[k].count++;
+    const add = (name, cat) => {
+      const k = name.toLowerCase();
+      items[k] = items[k] || { name, cat, count: 0 };
+      items[k].count++;
+    };
+    if (opts.ideas !== false) {
+      for (let i = 0; i < (days || 7); i++) {
+        const date = addDays(start, i);
+        ['breakfast', 'lunch', 'dinner', 'snack'].forEach((slot) => {
+          const { meal } = mealFor(data, date, slot);
+          (D.GROCERY[meal.name] || []).forEach((code) => { const [c, name] = code.split(':'); add(name, CATS[c] || 'Other'); });
         });
-      });
+      }
     }
+    (opts.recipes || []).forEach((r) => (r.ingredients || []).forEach((g) => { const nm = shopName(g.name); if (nm) add(nm, aisleFor(nm)); }));
+    (opts.custom || []).forEach((nm) => add(nm, aisleFor(nm)));
     const out = {};
     Object.values(items).sort((a, b) => a.name.localeCompare(b.name)).forEach((it) => { (out[it.cat] = out[it.cat] || []).push(it); });
     return out;
+  }
+  const storeLink = (store, item) => store.search + encodeURIComponent(item);
+
+  // Restaurant build-your-own: total the chosen options.
+  function buildTotals(restaurant, picks) {
+    const t = { kcal: 0, protein: 0, carbs: 0, fat: 0 };
+    const names = [];
+    (restaurant.build ? restaurant.build.sections : []).forEach((sec) => (picks[sec.id] || []).forEach((i) => {
+      const o = sec.options[i];
+      if (!o) return;
+      t.kcal += o.kcal; t.protein += o.protein; t.carbs += o.carbs; t.fat += o.fat;
+      if (o.kcal || sec.id !== 'base') names.push(o.name);
+    }));
+    return { totals: { kcal: Math.round(t.kcal), protein: Math.round(t.protein * 10) / 10, carbs: Math.round(t.carbs * 10) / 10, fat: Math.round(t.fat * 10) / 10 }, names };
   }
 
   // ---------- streak ----------
@@ -576,7 +607,7 @@
     GOALS, LEVELS, ACTIVITY, goalOf, activityOf, STEADY_MODES, MENO_MODES, menoInsights, checkinDay, checkinTomorrow,
     learnCycle, addPeriod, cycleInfo, targets, readiness, readinessLabel, patterns,
     workoutById, plannedWorkout, workoutFor, adjustSets, parseReps, e1rm, suggestLoad, detectPRs, strengthByPhase, exerciseHistory,
-    mealOptions, mealFor, proteinFor, macrosFor, parseOFF, foodMacros, validBarcode, recipeTotals, recipeFood, groceryList, streak, weeklyStats, weeklyAdjust, applyAdjustments, weeklyDue,
+    mealOptions, mealFor, proteinFor, aisleFor, storeLink, buildTotals, macrosFor, parseOFF, foodMacros, validBarcode, recipeTotals, recipeFood, groceryList, streak, weeklyStats, weeklyAdjust, applyAdjustments, weeklyDue,
   };
   if (typeof window !== 'undefined') window.YOURS_LOGIC = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

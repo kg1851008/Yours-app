@@ -2,12 +2,14 @@
 const express = require('express');
 const path = require('path');
 const coach = require('./api/coach');
+const food = require('./api/food');
 
 const app = express();
 app.use(express.json({ limit: '12mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.all('/api/coach', coach);
+app.get('/api/food', food);
 
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));

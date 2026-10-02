@@ -28,8 +28,10 @@
 - **Weekly review.** Three questions (how training felt, hunger, next week's plans) plus her numbers (sessions, steps, readiness, weight trend, upcoming phase changes) produce plan changes she can accept or skip: sets on main lifts, step target and calories, all within safe limits.
 - **Forgiving streak.** A day counts for training, a check-in, or 60% of her step target, and one missed day a week is forgiven.
 - **Recipes.** Build a meal from its ingredients (scan, search or create each), set how many servings it makes and optionally the cooked weight, then log a serving or any number of grams. Recipes are saved and editable. Quick add covers meals out.
+- **Eating out.** A Restaurants option in Add food. Built-in starter menus (Chipotle build-your-own bowl, burrito or tacos with double protein; Chick-fil-A; Starbucks) use approximate values from published nutrition info and are labelled that way. With Nutritionix keys set, she can search every restaurant's menu. Anything missing can be saved once under its restaurant.
+- **Grocery shopping by store.** The grocery list combines the week's meal ideas, any saved recipes she picks, and her own items, sorted by aisle. She picks a store (Walmart, Target, Kroger, Whole Foods, Trader Joe's, Costco, Instacart, Amazon Fresh) and each item has a Find link to that store's search. Ticks, store and selections are remembered, and the list can be shared.
 - **Food scale guidance.** A dismissible tip on the diary, plus hints in recipes and grams entry. Always optional.
-- **Barcode food logging.** Scan a packaged food with the phone camera (native BarcodeDetector on Android Chrome, the bundled ZXing reader on iPhone and everywhere else), scan from a photo, or type the number. Nutrition comes from Open Food Facts, a free open database; only the barcode is sent. Log by servings or grams to a meal. Products missing from the database can be added once from the label and are remembered. Also: food search, recent foods, and manual entries. Calories, protein, carbs and fat roll up into daily totals on Home and Meals.
+- **Barcode food logging.** Scan a packaged food with the phone's back camera (it prefers the main back lens over ultra-wide or front, with a switch-camera button that remembers her choice, and a flashlight button where supported) (native BarcodeDetector on Android Chrome, the bundled ZXing reader on iPhone and everywhere else), scan from a photo, or type the number. Nutrition comes from Open Food Facts, a free open database; only the barcode is sent. Log by servings or grams to a meal. Products missing from the database can be added once from the label and are remembered. Also: food search, recent foods, and manual entries. Calories, protein, carbs and fat roll up into daily totals on Home and Meals.
 - **Protein tracking** by marking meals as eaten, plus a **grocery list** for the next 7 days of meals that she can tick off and share.
 - **Share cards** (PRs, streak, strength by phase): 1080x1350 branded images, shared through the phone's share menu or downloaded.
 - **Installable app (PWA).** Home-screen icon, an offline app shell, and the Android install prompt. On iPhone, Safari's Add to Home Screen.
@@ -55,6 +57,10 @@ The app stores everything on the user's device for now:
 
 - Set `ANTHROPIC_API_KEY` in your Vercel project, or in your shell for local runs, to turn on the live coach. `ANTHROPIC_MODEL` is optional and defaults to `claude-opus-5-5`.
 - Without a key, the app uses a built-in on-device coach. It gives phase-aware answers and reviews progress from logged data. Photo review needs the live coach.
+
+## Restaurant search (optional)
+
+`api/food.js` proxies the Nutritionix API so keys stay on the server. Set `NUTRITIONIX_APP_ID` and `NUTRITIONIX_APP_KEY` (from developer.nutritionix.com) to turn on "Search every restaurant". Without keys the built-in starter menus and saved restaurant items still work. The endpoint is written against Nutritionix's v2 instant search and item lookup; verify it with your real keys before launch.
 
 ## Tests
 
