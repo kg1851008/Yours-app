@@ -2844,6 +2844,7 @@
     'go-login': () => {
       // Guest progress stays saved on the device; signing in switches to that account's data.
       S.authError = ''; S.modal = null; S.screen = 'login';
+      if (S.session && !isGuest()) { S.data.planSeen = true; save(); S.tab = 'home'; render(); return; } // already signed in
       if (S.session && isGuest()) { S.session = null; store.del('yours.session'); }
       render(); window.scrollTo(0, 0);
     },
