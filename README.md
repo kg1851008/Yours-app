@@ -11,7 +11,7 @@
 - **Meals (food diary):** a MyFitnessPal-style diary with Breakfast, Lunch, Dinner and Snacks, calories remaining (goal minus food) and macro bars. She can add food per meal, tap an entry to change the amount, and move between days to log past meals. Phase meal ideas sit below as optional suggestions with a "Log this" button (portion-adjustable, macros estimated), plus a grocery list.
 - **Advisor:** an AI coach chat that knows her phase, targets, workouts and steps. It can suggest in-app actions (swap today's workout, log water, open a tab) as buttons she can tap.
 - **Progress:** a private photo vault with an optional PIN. Photos are blurred until tapped, can be compared side by side, and can be sent for an AI review that says whether she is on track. Also tracks weight check-ins.
-- **Community:** a feed for wins, questions and tips, with likes and comments, plus direct messages.
+- **Community:** a feed for wins, questions and tips, with likes and comments, plus direct messages, shared with every member when the cloud is on.
 - **Opening splash:** the YOURS logo full screen on cream, then a fade into the app. Shown once per visit (not on refresh), shortened for reduce-motion users.
 - Light and dark mode, mobile-first layout, no emojis.
 
@@ -47,13 +47,25 @@ The look is editorial athletic: grainy, motion-blurred campaign posters, condens
 
 **Photography.** Posters currently use grainy motion-blur art in the brand palette. To use real campaign photos, add images to `public/img/` and set the paths in `IMAGERY` in `public/data.js` (`welcome`, each phase, and `session` for workouts). Grain and a legibility shade are applied automatically. Use photos you own or have licensed.
 
-## How data is stored
+## Accounts, sync and community (Supabase)
 
-The app stores everything on the user's device for now:
+`public/config.js` holds the Supabase project URL and its publishable key. With a key set, the app uses the cloud; with it empty, everything stays on the device as before.
 
-- Accounts, profile and history are in `localStorage`. Passwords and the vault PIN are hashed with PBKDF2.
-- Progress photos are in IndexedDB, encrypted when a vault PIN is set. They are resized to at most 1024 px and never leave the device unless the user taps **Analyze**. The server only holds them in memory for that request and does not save them. A 4-digit PIN deters casual snooping but would not stop a determined attacker with the device.
-- Community posts and messages are shared only between accounts in the same browser. A real multi-user community needs a backend.
+- **Accounts across devices.** Email and password through Supabase Auth, with password reset. Her plan, logs, diary and settings sync as one private document per member (`user_data`); whichever copy changed last wins. Changes save on the device first and sync when online. Signing out clears the device's copy.
+- **Guest and older accounts carry over.** A guest plan moves into the new account. An account created on a device before the cloud existed moves up automatically the first time she signs in with the same email and password.
+- **Encrypted photo backup.** Optional, in Progress. Photos are encrypted on the phone with a key derived from a backup passphrase (PBKDF2, 600,000 rounds, AES-GCM) before upload to a private storage bucket. The passphrase never leaves the device, so neither you nor Supabase can view the photos. On a new phone she enters the passphrase once to restore. Forgetting it means the backup cannot be opened.
+- **Real community.** Posts, comments, likes and direct messages are shared between all members, with live updates. Members can delete their own posts, report a post or a member (reports land in the `reports` table for you to review in the Supabase dashboard), and hide a member. There is no public member directory. You can message people from the feed or from existing conversations.
+- **Delete account** removes her data, posts, messages and photo backup.
+
+The database schema is in `supabase/schema.sql` and is already applied to the `yours.` project. Every table has row-level security: members can only read and change what they are allowed to.
+
+**Before launch, in the Supabase dashboard:** Authentication > URL Configuration, set Site URL to your live address (for example your Vercel domain) and add it under Redirect URLs, so confirmation and password-reset emails link back to the app. The built-in email sender is rate-limited and for testing only; for real users, add your own SMTP provider under Authentication > Emails.
+
+## How data is stored on the device
+
+- Passwords for device-only accounts and the vault PIN are hashed with PBKDF2.
+- Progress photos are in IndexedDB, encrypted with the vault PIN. They are resized to at most 1024 px and leave the device only when she taps **Analyze** (held in memory for that request only) or turns on encrypted backup.
+- A 4-digit PIN deters casual snooping but would not stop a determined attacker with the device.
 
 ## AI coach
 

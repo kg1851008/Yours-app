@@ -117,7 +117,183 @@
     if (!d.periods.length && d.profile.periodStart) d.periods = [d.profile.periodStart];
     d.plan = Object.assign({ volume: 0, stepBonus: 0, kcalAdjust: 0 }, d.plan);
   }
-  function save() { if (S.session) store.set(dataKey(), S.data); }
+  function save() {
+    if (!S.session) return;
+    S.data._updated = Date.now();
+    store.set(dataKey(), S.data);
+    if (isCloud()) schedulePush();
+  }
+
+  // ---------- cloud (Supabase): accounts across devices, sync, photo backup, community ----------
+  let cloud = null;
+  const isCloud = () => !!(cloud && S.session && S.session.cloud && cloud.user());
+  async function initCloud() {
+    const cfg = window.YOURS_CONFIG || {};
+    if (!cfg.supabaseUrl || !cfg.supabaseAnonKey || !window.YOURS_CLOUD) return null;
+    try {
+      if (window.YOURS_TEST_CLIENT) cloud = window.YOURS_CLOUD.create(cfg, window.YOURS_TEST_CLIENT);
+      else {
+        if (!window.supabase) await new Promise((resolve, reject) => { const el = document.createElement('script'); el.src = '/vendor/supabase.min.js'; el.onload = resolve; el.onerror = reject; document.head.appendChild(el); });
+        cloud = window.YOURS_CLOUD.create(cfg, window.supabase.createClient);
+      }
+      cloud.onAuth((event) => { if (event === 'PASSWORD_RECOVERY') { S.modal = { type: 'newPassword' }; render(); } });
+      return cloud;
+    } catch { cloud = null; return null; }
+  }
+  let pushTimer = null;
+  function schedulePush() {
+    clearTimeout(pushTimer);
+    S.syncState = 'saving';
+    pushTimer = setTimeout(pushNow, 1500);
+  }
+  async function pushNow() {
+    clearTimeout(pushTimer);
+    if (!isCloud()) return false;
+    const { activeWorkout, ...rest } = S.data; // an in-progress workout stays on the device it was started on
+    try { await cloud.pushData({ ...rest, activeWorkout: null }, S.data._updated || Date.now()); S.syncState = 'synced'; S.syncedAt = Date.now(); return true; }
+    catch { S.syncState = 'offline'; return false; }
+  }
+  // Pull her latest data (another device may have changed it); whichever copy changed last wins.
+  async function syncPull() {
+    if (!isCloud()) return;
+    try {
+      const remote = await cloud.pullData();
+      const action = window.YOURS_CLOUD.pickNewer(S.data, S.data && S.data._updated, remote);
+      if (action === 'pull') {
+        const keepWorkout = S.data && S.data.activeWorkout;
+        S.data = Object.assign(blankData(), remote.data, { _updated: remote.updated, activeWorkout: keepWorkout || null });
+        store.set(dataKey(), S.data);
+        S.syncState = 'synced'; S.syncedAt = Date.now();
+        render();
+      } else if (action === 'push') await pushNow();
+      else { S.syncState = 'synced'; S.syncedAt = Date.now(); }
+    } catch { S.syncState = 'offline'; }
+  }
+  window.addEventListener('online', () => { if (isCloud() && S.syncState === 'offline') pushNow(); });
+  let lastPull = 0;
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && isCloud() && Date.now() - lastPull > 30000) { lastPull = Date.now(); syncPull(); if (S.tab === 'community') refreshCommunity(); }
+    if (document.visibilityState === 'hidden' && isCloud() && S.syncState === 'saving') pushNow();
+  });
+
+  // Community from the cloud, kept in the same shape as the on-device preview.
+  let unsubscribeCommunity = null;
+  let communityTimer = null;
+  async function refreshCommunity(which) {
+    if (!isCloud()) return;
+    const blocked = S.data.blocked || [];
+    try {
+      if (!which || which === 'feed') {
+        S.cloudFeed = await cloud.feed(blocked);
+        S.cloudFeed.forEach((p) => { S.cloudNames[p.author] = p.authorName; p.comments.forEach((c) => { S.cloudNames[c.author] = c.authorName; }); });
+      }
+      if (!which || which === 'messages') {
+        const t = await cloud.threads(blocked);
+        S.cloudThreads = t.threads;
+        Object.assign(S.cloudNames, t.names);
+      }
+      S.communityError = false;
+    } catch { S.communityError = true; }
+    if (S.tab === 'community' && !(S.modal && S.modal.type !== 'report')) {
+      const ta = root.querySelector('[data-form="post"] textarea, [data-form="dm"] textarea');
+      const keep = ta ? ta.value : null;
+      render();
+      if (keep) { const nt = root.querySelector('[data-form="post"] textarea, [data-form="dm"] textarea'); if (nt) nt.value = keep; }
+      if (S.openThread && which === 'messages') scrollChat();
+    }
+  }
+  function startCloudCommunity() {
+    if (unsubscribeCommunity || !isCloud()) return;
+    S.cloudNames = S.cloudNames || {};
+    unsubscribeCommunity = cloud.subscribe((which) => { clearTimeout(communityTimer); communityTimer = setTimeout(() => refreshCommunity(which), 400); });
+    refreshCommunity();
+  }
+  function stopCloudCommunity() {
+    if (unsubscribeCommunity) unsubscribeCommunity();
+    unsubscribeCommunity = null;
+    S.cloudFeed = null; S.cloudThreads = null; S.cloudNames = {};
+  }
+  async function cloudCall(fn, okMsg) {
+    try { await fn(); if (okMsg) toast(okMsg); return true; }
+    catch (e) { toast(window.YOURS_CLOUD.friendlyError(e)); return false; }
+    finally { refreshCommunity(); }
+  }
+
+  // ---------- encrypted photo backup ----------
+  // Photos are encrypted on the device with a key from her backup passphrase (never sent anywhere) before upload.
+  // On this device that key is kept wrapped with her vault PIN key, so unlocking the vault turns backup on.
+  const BK_ITER = 600000;
+  async function backupKeyFrom(passphrase, salt) {
+    const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveBits']);
+    const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: new TextEncoder().encode(salt + ':backup'), iterations: BK_ITER }, base, 256);
+    return { raw: toB64(bits), key: await crypto.subtle.importKey('raw', bits, 'AES-GCM', false, ['encrypt', 'decrypt']) };
+  }
+  const bkStoreKey = () => `yours.bk.${S.session.email}`;
+  async function rememberBackupKey(raw) {
+    if (S.photoKey) store.set(bkStoreKey(), await encryptText(S.photoKey, raw));
+  }
+  async function restoreBackupKey() {
+    S.backupKey = null;
+    const wrapped = !isGuest() && store.get(bkStoreKey(), null);
+    if (!wrapped || !S.photoKey || !S.data.backup) return;
+    try { const raw = await decryptText(S.photoKey, wrapped); S.backupRaw = raw; S.backupKey = await crypto.subtle.importKey('raw', fromB64(raw), 'AES-GCM', false, ['encrypt', 'decrypt']); } catch { store.del(bkStoreKey()); }
+  }
+  async function backupPhoto(photo) {
+    const payload = JSON.stringify({ id: photo.id, date: photo.date, created: photo.created, pose: photo.pose, phase: photo.phase, checkin: !!photo.checkin, data: photo.data });
+    await cloud.uploadBackup(`${photo.id}.bin`, JSON.stringify(await encryptText(S.backupKey, payload)));
+  }
+  async function refreshBackupList() {
+    if (!isCloud()) return;
+    try { S.backupNames = await cloud.listBackups(); } catch { S.backupNames = null; }
+    render();
+  }
+  async function backupAll() {
+    if (!isCloud() || !S.backupKey) return;
+    S.backingUp = true; render();
+    let done = 0;
+    try {
+      const have = new Set(await cloud.listBackups());
+      for (const ph of S.photos) if (!have.has(`${ph.id}.bin`)) { await backupPhoto(ph); done++; }
+      toast(done ? `Backed up ${plural(done, 'photo')}` : 'Everything is already backed up');
+    } catch { toast('Backup paused. Check your connection and try again.'); }
+    S.backingUp = false;
+    await refreshBackupList();
+  }
+  async function restoreAll() {
+    if (!isCloud() || !S.backupKey) return;
+    S.backingUp = true; render();
+    let done = 0;
+    try {
+      const local = new Set(S.photos.map((p) => `${p.id}.bin`));
+      for (const name of await cloud.listBackups()) {
+        if (local.has(name)) continue;
+        const ph = JSON.parse(await decryptText(S.backupKey, JSON.parse(await cloud.downloadBackup(name))));
+        await storePhoto({ ...ph, owner: S.session.email, noBackup: true });
+        done++;
+      }
+      await loadPhotos();
+      toast(done ? `Restored ${plural(done, 'photo')}` : 'This device already has every backed-up photo');
+    } catch { toast('Could not restore. Check your connection and try again.'); }
+    S.backingUp = false;
+    render();
+  }
+  function backupCard() {
+    if (!isCloud()) return '';
+    const b = S.data.backup;
+    const names = S.backupNames;
+    let body;
+    if (!S.data.pinHash) body = `<p class="small muted">Set a vault PIN first, so photos are encrypted on this device too.</p><button class="btn ghost sm block" style="margin-top:10px" data-action="pin-settings">Set a PIN</button>`;
+    else if (!b) body = `<p class="small muted">Keep an encrypted copy of your photos in your YOURS account, so a lost or new phone does not lose them. Only you can open it, with a backup passphrase that never leaves your device.</p><button class="btn primary sm block" style="margin-top:10px" data-action="backup-setup">Turn on backup</button>`;
+    else if (!S.backupKey) body = `<p class="small muted">Backup is on for your account. Enter your backup passphrase once on this device to back up and restore photos here.</p><button class="btn primary sm block" style="margin-top:10px" data-action="backup-unlock">Enter backup passphrase</button>`;
+    else {
+      const local = new Set(S.photos.map((p) => `${p.id}.bin`));
+      const backed = names ? S.photos.filter((p) => names.includes(`${p.id}.bin`)).length : null;
+      const remoteOnly = names ? names.filter((n) => !local.has(n)).length : 0;
+      body = `<p class="small">${names == null ? 'Checking your backup...' : `${backed} of ${plural(S.photos.length, 'photo')} on this device backed up${remoteOnly ? ` · ${remoteOnly} more in your backup` : ''}.`} New photos back up automatically.</p>
+        <div class="row" style="margin-top:10px"><button class="btn ghost sm grow" data-action="backup-now" ${S.backingUp ? 'disabled' : ''}>${S.backingUp ? 'Working...' : 'Back up now'}</button>${remoteOnly ? `<button class="btn primary sm grow" data-action="backup-restore" ${S.backingUp ? 'disabled' : ''}>Restore ${remoteOnly}</button>` : ''}</div>`;
+    }
+    return `<div class="card" style="margin-top:12px"><div class="row between"><span class="eyebrow" style="color:var(--text)">Encrypted backup</span>${icon('shield', 18)}</div><div style="margin-top:8px">${body}</div></div>`;
+  }
 
   // Derived values used across views.
   const cyc = (date) => L.cycleInfo(S.data.profile, date);
@@ -472,9 +648,10 @@
     if (S.photoKey) rec.enc = await encryptText(S.photoKey, photo.data);
     else rec.data = photo.data;
     await photoTx('readwrite', (s) => s.put(rec));
+    if (S.backupKey && isCloud() && !photo.noBackup) backupPhoto(photo).then(() => { if (S.backupNames && !S.backupNames.includes(`${photo.id}.bin`)) S.backupNames.push(`${photo.id}.bin`); }).catch(() => { /* retried by Back up now */ });
   }
   async function rewriteAllPhotos() {
-    for (const p of S.photos) await storePhoto(p);
+    for (const p of S.photos) await storePhoto({ ...p, noBackup: true });
   }
   function compressImage(file) {
     return new Promise((resolve, reject) => {
@@ -1121,6 +1298,7 @@
 
   // ---------- community (shared on this device) ----------
   function community() {
+    if (isCloud()) return { posts: S.cloudFeed || [], threads: S.cloudThreads || {} };
     let c = store.get('yours.community', null);
     if (!c) {
       c = {
@@ -1132,15 +1310,23 @@
     return c;
   }
   const saveCommunity = (c) => store.set('yours.community', c);
-  const meId = () => (isGuest() ? null : `u:${S.session.email}`);
+  const meId = () => (isGuest() ? null : isCloud() ? cloud.myId() : `u:${S.session.email}`);
   function memberName(id) {
     if (!id) return 'Member';
+    if (id.startsWith('c:')) return id === meId() ? myName() || 'You' : (S.cloudNames || {})[id] || 'Member';
     if (id.startsWith('u:')) { const u = users()[id.slice(2)]; return u ? u.name : 'Member'; }
     const m = D.MEMBERS.find((x) => x.id === id);
     return m ? m.name : 'Member';
   }
   function members() {
     const me = meId();
+    if (isCloud()) {
+      // People she has talked to, then people active in the feed. There is no public member directory.
+      const ids = [];
+      Object.keys(S.cloudThreads || {}).forEach((k) => k.split('|').forEach((x) => { if (x !== me && !ids.includes(x)) ids.push(x); }));
+      (S.cloudFeed || []).forEach((p) => { if (p.author !== me && !ids.includes(p.author)) ids.push(p.author); });
+      return ids.map((id) => ({ id, name: memberName(id), bio: 'YOURS member' }));
+    }
     const local = Object.values(users()).map((u) => ({ id: `u:${u.email}`, name: u.name, bio: 'YOURS member' })).filter((u) => u.id !== me);
     return D.MEMBERS.concat(local);
   }
@@ -1203,10 +1389,11 @@
       <h1 style="margin-top:24px">Welcome back</h1>
       <p class="muted" style="margin-top:6px">Sign in to pick up where you left off.</p>
       <form data-form="login" class="card" style="margin-top:24px">
-        <label class="field"><span class="label">Email</span><input class="input" type="email" name="email" autocomplete="email" required></label>
+        <label class="field"><span class="label">Email</span><input class="input" type="email" name="email" autocomplete="email" required value="${esc(S.prefillEmail || '')}"></label>
         <label class="field"><span class="label">Password</span><input class="input" type="password" name="password" autocomplete="current-password" required></label>
         ${S.authError ? `<p class="error" style="margin-top:12px">${esc(S.authError)}</p>` : ''}
-        <button class="btn primary block" style="margin-top:18px" type="submit">Sign in</button>
+        <button class="btn primary block" style="margin-top:18px" type="submit" ${S.authBusy ? 'disabled' : ''}>${S.authBusy ? 'Signing in...' : 'Sign in'}</button>
+        ${cloud ? '<p class="center small" style="margin-top:12px"><button type="button" class="link" data-action="forgot-password">Forgot password?</button></p>' : ''}
       </form>
       <p class="center small muted" style="margin-top:20px">New here? <button class="link" data-action="start">Build your plan</button></p>
       <p class="center small" style="margin-top:8px"><button class="link" data-action="demo">Try the demo</button></p>
@@ -1217,7 +1404,7 @@
     return `<form data-form="signup" data-context="${context}">
       <label class="field"><span class="label">First name</span><input class="input" name="name" autocomplete="given-name" required maxlength="40"></label>
       <label class="field"><span class="label">Email</span><input class="input" type="email" name="email" autocomplete="email" required></label>
-      <label class="field"><span class="label">Password</span><input class="input" type="password" name="password" autocomplete="new-password" minlength="6" required placeholder="At least 6 characters"></label>
+      <label class="field"><span class="label">Password</span><input class="input" type="password" name="password" autocomplete="new-password" minlength="${cloud ? 8 : 6}" required placeholder="At least ${cloud ? 8 : 6} characters"></label>
       ${S.authError ? `<p class="error" style="margin-top:12px">${esc(S.authError)}</p>` : ''}
       <button class="btn primary block" style="margin-top:18px" type="submit">Save my plan</button>
     </form>`;
@@ -1860,13 +2047,14 @@
     const verdictLabel = { on_track: 'On track', progressing: 'Making progress', adjust: 'Needs adjustment' };
     const encrypted = !!S.photoKey;
     return `
-      <div class="banner" style="background:var(--green-soft)">${icon('shield', 20)}<div class="grow">${encrypted ? 'Photos are encrypted with your PIN and' : 'Photos'} stay on this device. They are only sent to your coach when you tap Analyze, and are not stored anywhere else.${encrypted ? '' : ' Set a PIN to encrypt them.'}</div></div>
+      <div class="banner" style="background:var(--green-soft)">${icon('shield', 20)}<div class="grow">${encrypted ? 'Photos are encrypted with your PIN and' : 'Photos'} stay on this device. They are only sent to your coach when you tap Analyze${S.backupKey ? ', and backed up to your account encrypted with your passphrase' : ', and are not stored anywhere else'}.${encrypted ? '' : ' Set a PIN to encrypt them.'}</div></div>
       <div class="row" style="gap:10px">
         <label class="btn primary grow" style="cursor:pointer">${icon('camera', 18)} Add photo<input type="file" accept="image/*" data-upload hidden></label>
         <select class="select" style="width:auto;height:50px" data-bind-ui="pose" aria-label="Pose">${['front', 'side', 'back'].map((x) => `<option value="${x}" ${S.pose === x ? 'selected' : ''}>${x[0].toUpperCase() + x.slice(1)}</option>`).join('')}</select>
       </div>
       <p class="tiny muted" style="margin-top:8px">For fair comparisons: same light, same outfit, same time of day, and ideally the same cycle phase${cyc().steady ? '' : ` (you are in ${phaseName(cyc().phase).toLowerCase()} now)`}.</p>
 
+      ${backupCard()}
       <div class="section-title"><h2>Photo vault</h2><span class="small muted">${plural(S.photos.length, 'photo')}</span></div>
       ${S.photos.length ? `<p class="small muted" style="margin:-4px 0 10px">Tap to reveal. Select up to 4 to analyze or compare.</p>
         <div class="photo-grid">${S.photos.map((ph) => { const sel = S.compare.indexOf(ph.id); return `<div class="photo ${S.revealed[ph.id] ? '' : 'blur'} ${sel > -1 ? 'selected' : ''}">
@@ -1940,11 +2128,13 @@
       ${posts.map((p) => { const liked = me && p.likedBy.includes(me); const open = S.openComments[p.id]; return `<div class="card post">
         <div class="head"><div class="avatar sm ${p.author.startsWith('u:') ? '' : 'alt'}">${esc(initials(memberName(p.author)))}</div><div class="grow"><strong>${esc(memberName(p.author))}</strong><div class="tiny muted">${timeAgo(p.ts)}${p.phase && D.PHASES[p.phase] && p.phase !== 'steady' ? ` · ${esc(phaseName(p.phase))} phase` : ''}</div></div><span class="tag ${p.tag === 'Win' ? 'accent' : ''}">${esc(p.tag)}</span></div>
         <div class="body">${esc(p.text)}</div>
-        <div class="foot"><button class="${liked ? 'on' : ''}" data-action="like" data-id="${p.id}" aria-label="Like">${icon('heart', 18)} ${p.baseLikes + p.likedBy.length}</button><button data-action="toggle-comments" data-id="${p.id}">${icon('comment', 18)} ${p.comments.length}</button>${p.author !== me ? `<button data-action="message" data-id="${esc(p.author)}">Message</button>` : ''}</div>
+        <div class="foot"><button class="${liked ? 'on' : ''}" data-action="like" data-id="${p.id}" aria-label="Like">${icon('heart', 18)} ${p.baseLikes + p.likedBy.length}</button><button data-action="toggle-comments" data-id="${p.id}">${icon('comment', 18)} ${p.comments.length}</button>${p.author !== me ? `<button data-action="message" data-id="${esc(p.author)}">Message</button>` : ''}${isCloud() ? (p.author === me ? `<button data-action="post-delete" data-id="${p.id}" aria-label="Delete your post">${icon('trash', 16)}</button>` : `<button data-action="report" data-post="${p.id}" data-author="${esc(p.author)}" aria-label="Report or hide">More</button>`) : ''}</div>
         ${open ? `${p.comments.map((cm) => `<div class="comment"><div class="avatar sm ${cm.author.startsWith('u:') ? '' : 'alt'}">${esc(initials(memberName(cm.author)))}</div><div class="c"><strong class="small">${esc(memberName(cm.author))}</strong><div class="small">${esc(cm.text)}</div></div></div>`).join('')}
           <form class="row" style="margin-top:10px" data-form="comment" data-id="${p.id}"><input class="input grow" style="height:42px" name="text" placeholder="Add a comment" maxlength="300" required><button class="btn primary sm" type="submit">Reply</button></form>` : ''}
       </div>`; }).join('')}
-      <p class="tiny muted center" style="margin-top:16px">Community posts are shared between accounts on this device in this preview.</p>`;
+      ${isCloud() && S.cloudFeed && !posts.length ? '<div class="card empty">No posts yet. Share the first win.</div>' : ''}
+      ${isCloud() && !S.cloudFeed ? `<div class="empty">${S.communityError ? 'Could not load the community. Check your connection.' : 'Loading...'}</div>` : ''}
+      <p class="tiny muted center" style="margin-top:16px">${isCloud() ? 'Be kind. No body shaming, diet pills or selling. Tap More on any post to report it or hide that member.' : isGuest() && cloud ? 'This is a preview. Create a free account to join the real YOURS community.' : 'Community posts are shared between accounts on this device in this preview.'}</p>`;
   }
 
   function viewThreads() {
@@ -1953,6 +2143,7 @@
     }
     const c = community();
     const me = meId();
+    if (isCloud() && !members().length) return '<div class="card empty">No conversations yet. Tap Message on someone\'s post to start one.</div>';
     return `<div class="card">${members().map((m) => {
       const msgs = c.threads[threadKey(me, m.id)] || [];
       const last = msgs[msgs.length - 1];
@@ -1966,6 +2157,7 @@
     const other = S.openThread;
     const msgs = c.threads[threadKey(me, other)] || [];
     return `<div class="row" style="margin-bottom:16px"><button class="icon-btn" data-action="close-thread" aria-label="Back to messages">${icon('back', 20)}</button><div class="avatar alt sm">${esc(initials(memberName(other)))}</div><strong>${esc(memberName(other))}</strong></div>
+      ${isCloud() ? `<p class="tiny muted" style="margin:-6px 0 12px"><button class="link tiny" data-action="report" data-author="${esc(other)}">Report or block ${esc(firstName(memberName(other)))}</button></p>` : ''}
       <div class="chat" style="padding-bottom:110px">${msgs.length ? msgs.map((m) => `<div class="bubble ${m.from === me ? 'user' : 'coach'}">${esc(m.text)}</div>`).join('') : '<div class="empty">Say hello and share what you are working on.</div>'}</div>
       <form class="composer" data-form="dm"><div class="composer-inner"><textarea name="msg" rows="1" placeholder="Message ${esc(firstName(memberName(other)))}" maxlength="1000" aria-label="Message"></textarea><button class="send" type="submit" aria-label="Send">${icon('send', 20, 2.2)}</button></div></form>`;
   }
@@ -2265,6 +2457,30 @@
       return sheet(esc(wk.name), `${m.from ? `<button class="link small" style="margin-bottom:8px" data-action="modal-back">Back to program</button>` : ''}<div class="eyebrow">${esc(wk.focus)} · ${wk.minutes} min · ${esc(wk.intensity)}</div><p class="small" style="margin-top:8px">${esc(wk.summary)}</p><div class="divider"></div>${exerciseList(wk, true)}
         <div class="row" style="margin-top:16px"><button class="btn primary grow" data-action="start-workout" data-id="${wk.id}">Start now</button>${isToday ? '' : `<button class="btn ghost" data-action="set-today" data-id="${wk.id}">Make today's</button>`}</div>`);
     }
+    if (m.type === 'confirmEmail') {
+      return sheet('Check your email', `<p class="small">We sent a link to <strong>${esc(m.email)}</strong>. Tap it to confirm your account, then sign in here.</p>
+        <p class="small muted" style="margin-top:10px">${m.migrating ? 'Until then you are signed in on this device as before.' : 'Your plan is saved on this device and moves into your account when you sign in.'} No email? Check spam, or wait a minute.</p>
+        <button class="btn primary block" style="margin-top:18px" data-action="confirm-signin">I've confirmed, sign in</button>`);
+    }
+    if (m.type === 'newPassword') {
+      return sheet('Set a new password', `<form data-form="new-password"><label class="field"><span class="label">New password</span><input class="input" type="password" name="password" autocomplete="new-password" minlength="8" required></label>
+        <button class="btn primary block" style="margin-top:16px" type="submit">Save password</button></form>`);
+    }
+    if (m.type === 'report') {
+      const name = memberName(m.author);
+      return sheet(m.sent ? 'Thanks for telling us' : m.postId ? 'Report this post' : `Report ${esc(firstName(name))}`, m.sent ? `<p class="small">We will review it. You can also hide ${esc(firstName(name))} so you no longer see her posts or messages.</p><button class="btn ghost block" style="margin-top:16px" data-action="block-member">Hide ${esc(firstName(name))}</button>` : `<p class="small muted" style="margin-bottom:12px">What is wrong?</p>
+        ${['Body shaming or bullying', 'Unsafe diet or health advice', 'Spam or selling', 'Something else'].map((r) => `<button class="list-item" style="width:100%;text-align:left" data-action="report-send" data-reason="${esc(r)}"><span class="grow small">${esc(r)}</span>${icon('back', 14)}</button>`).join('')}
+        <button class="btn ghost block" style="margin-top:16px" data-action="block-member">Just hide ${esc(firstName(name))}</button>`);
+    }
+    if (m.type === 'backupSetup' || m.type === 'backupUnlock') {
+      const setup = m.type === 'backupSetup';
+      return sheet(setup ? 'Turn on encrypted backup' : 'Backup passphrase', `<form data-form="${setup ? 'backup-setup' : 'backup-unlock'}">
+        <p class="small muted">${setup ? 'Choose a backup passphrase: at least 10 characters, like three random words. Your photos are encrypted with it on this phone before upload, so not even YOURS can see them.' : 'Enter the backup passphrase you chose when you turned on backup.'}</p>
+        <label class="field" style="margin-top:12px"><span class="label">Passphrase</span><input class="input" type="password" name="pass" minlength="${setup ? 10 : 1}" autocomplete="off" required></label>
+        ${setup ? '<label class="field" style="margin-top:12px"><span class="label">Repeat it</span><input class="input" type="password" name="pass2" autocomplete="off" required></label><div class="banner" style="margin-top:14px">' + icon('lock', 18) + '<div class="grow small">Write it down somewhere safe. If you forget it, backed-up photos cannot be recovered by anyone.</div></div>' : ''}
+        ${m.error ? `<p class="error" style="margin-top:10px">${esc(m.error)}</p>` : ''}
+        <button class="btn primary block" style="margin-top:16px" type="submit" ${m.busy ? 'disabled' : ''}>${m.busy ? 'Securing...' : setup ? 'Turn on backup' : 'Unlock backup'}</button></form>`);
+    }
     if (m.type === 'program') {
       const pr = D.PROGRAMS.find((x) => x.id === m.id);
       return sheet(esc(pr.name), programSheet(m));
@@ -2304,7 +2520,8 @@
         <div class="card flat"><div class="label">Appearance</div><div class="segment">${['system', 'light', 'dark'].map((x) => `<button class="${theme === x ? 'active' : ''}" data-action="theme" data-value="${x}">${x[0].toUpperCase() + x.slice(1)}</button>`).join('')}</div></div>
         ${S.installPrompt ? '<button class="btn primary block" style="margin-top:12px" data-action="install">Install YOURS on this device</button>' : ios ? '<div class="card flat small"><div class="label">Install on iPhone</div><p class="muted">Tap the Share button in Safari, then Add to Home Screen.</p></div>' : ''}
         <div class="card flat small"><div class="label">Coach</div><p class="muted">${S.ai ? 'Live AI coach is connected.' : 'Running the on-device coach. Set ANTHROPIC_API_KEY on the server to enable the live AI coach and photo reviews.'}</p></div>
-        <div class="card flat small"><div class="label">Your data</div><p class="muted">Everything is stored on this device. Nothing is used to train AI models.</p><button class="btn ghost sm block" style="margin-top:10px" data-action="export-data">${icon('download', 16)} Export my data</button></div>
+        ${isCloud() ? `<div class="card flat small"><div class="label">Account sync</div><p class="muted">${S.syncState === 'offline' ? 'Offline. Changes are saved on this device and sync when you are back online.' : S.syncState === 'saving' ? 'Saving...' : `Synced across your devices${S.syncedAt ? ` · ${timeAgo(S.syncedAt)}` : ''}.`}</p><button class="btn ghost sm block" style="margin-top:10px" data-action="sync-now">Sync now</button>${(S.data.blocked || []).length ? `<button class="link small" style="margin-top:10px" data-action="unblock-all">Show ${plural(S.data.blocked.length, 'hidden member')} again</button>` : ''}</div>` : cloud && !isGuest() ? '<div class="card flat small"><div class="label">Account sync</div><p class="muted">This account lives on this device only. Sign out and sign in again with the same email and password to move it to your YOURS account and sync across devices.</p></div>' : ''}
+        <div class="card flat small"><div class="label">Your data</div><p class="muted">${isCloud() ? 'Your plan and history are stored in your private YOURS account and on this device. Progress photos stay on this device unless you turn on encrypted backup. Nothing is used to train AI models.' : 'Everything is stored on this device. Nothing is used to train AI models.'}</p><button class="btn ghost sm block" style="margin-top:10px" data-action="export-data">${icon('download', 16)} Export my data</button></div>
         <button class="btn ghost block" style="margin-top:12px" data-action="logout">${isGuest() ? 'Start over' : 'Sign out'}</button>
         <button class="btn block" style="margin-top:8px;color:var(--danger)" data-action="delete-data">Delete my data</button>`);
     }
@@ -2349,7 +2566,16 @@
     S.revealed = {};
     S.compare = [];
     S.tab = 'home';
+    S.backupKey = null; S.backupNames = null;
+    stopCloudCommunity();
     await loadPhotos();
+    if (session.cloud) { await syncPull(); startCloudCommunity(); }
+  }
+  // Keep a local name entry for cloud accounts so the app can greet her offline.
+  function rememberCloudUser(email, name) {
+    const all = users();
+    all[email] = { ...(all[email] || {}), email, name: name || (all[email] && all[email].name) || 'Member', cloud: true, createdAt: (all[email] && all[email].createdAt) || Date.now() };
+    store.set('yours.users', all);
   }
 
   async function signup(form) {
@@ -2357,7 +2583,8 @@
     const email = form.email.value.trim().toLowerCase();
     const password = form.password.value;
     if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { S.authError = 'Enter your name and a valid email.'; return render(); }
-    if (password.length < 6) { S.authError = 'Use at least 6 characters for your password.'; return render(); }
+    if (password.length < (cloud ? 8 : 6)) { S.authError = `Use at least ${cloud ? 8 : 6} characters for your password.`; return render(); }
+    if (cloud) return cloudSignup(name, email, password);
     const all = users();
     if (all[email]) { S.authError = 'An account with that email already exists on this device. Sign in instead.'; return render(); }
     const salt = newSalt();
@@ -2375,8 +2602,60 @@
     toast(`Welcome to YOURS, ${firstName(name)}`);
   }
 
+  async function cloudSignup(name, email, password) {
+    S.authBusy = true; render();
+    try {
+      const r = await cloud.signUp(email, password, name);
+      rememberCloudUser(email, name);
+      // Her guest plan becomes the account's data; it uploads on first sign-in.
+      if (S.data && isGuest()) { S.data.planSeen = true; S.data._updated = Date.now(); store.set(`yours.data.${email}`, S.data); }
+      S.authError = '';
+      S.authBusy = false;
+      if (r.needsConfirm) { S.modal = { type: 'confirmEmail', email }; return render(); }
+      store.del('yours.data.guest');
+      S.modal = null;
+      await startSession({ kind: 'user', email, cloud: true });
+      render();
+      toast(`Welcome to YOURS, ${firstName(name)}`);
+    } catch (e) { S.authBusy = false; S.authError = window.YOURS_CLOUD.friendlyError(e); render(); }
+  }
+
+  async function cloudLogin(email, password) {
+    S.authBusy = true; render();
+    try {
+      const u = await cloud.signIn(email, password);
+      rememberCloudUser(email, u.name);
+      const hasLocal = !!store.get(`yours.data.${email}`, null);
+      const guest = store.get('yours.data.guest', null);
+      if (!hasLocal && guest && guest.onboarded) { guest.planSeen = true; guest._updated = 0; store.set(`yours.data.${email}`, guest); }
+      if (guest) store.del('yours.data.guest');
+      S.authError = ''; S.authBusy = false; S.modal = null;
+      await startSession({ kind: 'user', email, cloud: true });
+      render();
+      return true;
+    } catch (e) {
+      S.authBusy = false;
+      // An account made on this device before the cloud existed: move it up with the same email and password.
+      const local = users()[email];
+      if (local && local.hash && (await hashSecret(password, local.salt)) === local.hash && /match/.test(window.YOURS_CLOUD.friendlyError(e))) {
+        try {
+          const r = await cloud.signUp(email, password, local.name);
+          rememberCloudUser(email, local.name);
+          if (!r.needsConfirm) { S.modal = null; await startSession({ kind: 'user', email, cloud: true }); render(); toast('Your account now syncs across devices'); return true; }
+          S.modal = null; await startSession({ kind: 'user', email }); render();
+          S.modal = { type: 'confirmEmail', email, migrating: true }; render();
+          return true;
+        } catch { /* fall through to the error */ }
+      }
+      S.authError = window.YOURS_CLOUD.friendlyError(e);
+      render();
+      return false;
+    }
+  }
+
   async function login(form) {
     const email = form.email.value.trim().toLowerCase();
+    if (cloud) return cloudLogin(email, form.password.value);
     const u = users()[email];
     if (!u || (await hashSecret(form.password.value, u.salt)) !== u.hash) { S.authError = 'That email and password do not match.'; return render(); }
     S.authError = '';
@@ -2478,6 +2757,15 @@
       if (!confirm('Start over? Your guest plan and history on this device will be deleted.')) return;
       store.del('yours.data.guest');
     }
+    if (isCloud()) {
+      // Save first; then clear this device's copy, since the account holds everything.
+      const saved = await pushNow();
+      if (!saved && !confirm('Your latest changes have not synced yet (no connection). Sign out anyway and lose them on this device?')) return;
+      if (saved) store.del(dataKey());
+      store.del(bkStoreKey());
+      stopCloudCommunity();
+      await cloud.signOut();
+    }
     S.session = null;
     S.data = null;
     S.modal = null;
@@ -2489,7 +2777,12 @@
   }
 
   async function deleteData() {
-    if (!confirm('Delete all of your YOURS data on this device? This cannot be undone.')) return;
+    if (isCloud()) {
+      if (!confirm('Delete your YOURS account? This removes your plan, history, posts, messages and photo backup from every device and from the cloud. It cannot be undone.')) return;
+      try { await cloud.deleteAccount(); } catch (e) { return toast(window.YOURS_CLOUD.friendlyError(e)); }
+      stopCloudCommunity();
+      store.del(bkStoreKey());
+    } else if (!confirm('Delete all of your YOURS data on this device? This cannot be undone.')) return;
     if (!isGuest()) {
       const email = S.session.email;
       const all = users();
@@ -2575,7 +2868,7 @@
       save(); render(); window.scrollTo(0, 0);
     },
 
-    tab: (el) => { goTab(el.dataset.tab); render(); if (S.tab === 'advisor' && S.advisorView === 'coach') scrollChat(); },
+    tab: (el) => { goTab(el.dataset.tab); if (S.tab === 'community' && isCloud()) refreshCommunity(); render(); if (S.tab === 'advisor' && S.advisorView === 'coach') scrollChat(); },
     'open-settings': () => { S.modal = { type: 'settings' }; render(); },
     'close-modal': () => { stopDictation(); if (S.modal && ['addFood', 'food', 'foodSearch', 'foodManual', 'quickAdd', 'scanner', 'talk', 'estimate', 'restaurants', 'restaurant', 'restaurantBuild', 'restaurantSearch'].includes(S.modal.type)) return closeFoodFlow(); if (S.modal && S.modal.type === 'recipe') { S.recipeDraft = null; S.foodTarget = null; } stopScanner(); S.modal = null; render(); },
     overlay: (el, ev) => { if (ev.target === el) actions['close-modal'](); },
@@ -2808,6 +3101,7 @@
       if (!confirm(`Delete ${plural(S.compare.length, 'photo')}? This cannot be undone.`)) return;
       const ids = S.compare.slice();
       await photoTx('readwrite', (s) => ids.forEach((id) => s.delete(id)));
+      if (isCloud()) { try { await cloud.removeBackups(ids.map((id) => `${id}.bin`)); if (S.backupNames) S.backupNames = S.backupNames.filter((n) => !ids.includes(n.replace(/\.bin$/, ''))); } catch { /* removed locally */ } }
       S.compare = [];
       await loadPhotos();
       render();
@@ -2819,7 +3113,7 @@
       await rewriteAllPhotos();
       S.data.pinHash = null; S.data.pinSalt = null; S.modal = null; save(); render(); toast('PIN removed. Photos are no longer encrypted.');
     },
-    'lock-vault': () => { S.vaultUnlocked = false; S.photoKey = null; S.photos = []; S.revealed = {}; S.compare = []; render(); },
+    'lock-vault': () => { S.vaultUnlocked = false; S.photoKey = null; S.backupKey = null; S.photos = []; S.revealed = {}; S.compare = []; render(); },
 
     'community-view': (el) => { S.communityView = el.dataset.value; S.openThread = null; render(); },
     'post-tag': (el) => { S.postTag = el.dataset.value; const ta = root.querySelector('[data-form="post"] textarea'); const keep = ta ? ta.value : ''; render(); const nt = root.querySelector('[data-form="post"] textarea'); if (nt) nt.value = keep; },
@@ -2830,9 +3124,41 @@
       const me = meId();
       const i = p.likedBy.indexOf(me);
       if (i > -1) p.likedBy.splice(i, 1); else p.likedBy.push(me);
+      if (isCloud()) { render(); cloudCall(() => cloud.like(p.id, i === -1)); return; }
       saveCommunity(c); render();
     },
     'toggle-comments': (el) => { S.openComments[el.dataset.id] = !S.openComments[el.dataset.id]; render(); },
+    'post-delete': (el) => { if (!confirm('Delete your post?')) return; cloudCall(() => cloud.deletePost(el.dataset.id), 'Post deleted'); },
+    report: (el) => { S.modal = { type: 'report', postId: el.dataset.post || null, author: el.dataset.author }; render(); },
+    'report-send': async (el) => {
+      const m = S.modal;
+      const reason = el.dataset.reason;
+      const ok = await cloudCall(() => cloud.report({ postId: m.postId }, `${reason}${m.postId ? '' : ` (member ${m.author})`}`));
+      if (ok) { S.modal = { ...m, sent: true }; render(); }
+    },
+    'block-member': () => {
+      const id = S.modal.author;
+      S.data.blocked = Array.from(new Set((S.data.blocked || []).concat(id)));
+      save();
+      if (S.openThread === id) S.openThread = null;
+      S.modal = null;
+      refreshCommunity();
+      toast(`You will no longer see ${memberName(id)}`);
+    },
+    'unblock-all': () => { S.data.blocked = []; save(); refreshCommunity(); render(); toast('Hidden members are visible again'); },
+    'forgot-password': async () => {
+      const el = root.querySelector('[data-form="login"] [name="email"]');
+      const email = el ? el.value.trim().toLowerCase() : '';
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { S.authError = 'Enter your email above, then tap Forgot password.'; return render(); }
+      try { await cloud.resetPassword(email, location.origin); S.authError = ''; render(); toast('Check your email for a reset link'); }
+      catch (e) { S.authError = window.YOURS_CLOUD.friendlyError(e); render(); }
+    },
+    'confirm-signin': () => { const email = S.modal.email; S.modal = null; S.session = null; S.data = null; store.del('yours.session'); S.screen = 'login'; S.prefillEmail = email; render(); },
+    'backup-setup': () => { S.modal = { type: 'backupSetup' }; render(); },
+    'backup-unlock': () => { S.modal = { type: 'backupUnlock' }; render(); },
+    'backup-now': () => backupAll(),
+    'backup-restore': () => restoreAll(),
+    'sync-now': async () => { await pushNow(); await syncPull(); render(); toast(S.syncState === 'synced' ? 'Synced' : 'Could not reach YOURS. Changes are saved here and will sync later.'); },
     message: (el) => {
       if (!requireAccount('community')) return;
       if (el.dataset.id === meId()) return;
@@ -2977,6 +3303,31 @@
       stopScanner();
       return lookupBarcode(code);
     }
+    if (type === 'new-password') {
+      const pw = form.password.value;
+      if (pw.length < 8) return toast('Use at least 8 characters');
+      try { await cloud.updatePassword(pw); S.modal = null; render(); return toast('Password updated'); } catch (e) { return toast(window.YOURS_CLOUD.friendlyError(e)); }
+    }
+    if (type === 'backup-setup' || type === 'backup-unlock') {
+      const m = S.modal;
+      const pass = form.pass.value;
+      if (type === 'backup-setup') {
+        if (pass.length < 10) { m.error = 'Use at least 10 characters.'; return render(); }
+        if (pass !== form.pass2.value) { m.error = 'The two passphrases do not match.'; return render(); }
+      }
+      m.busy = true; m.error = ''; render();
+      try {
+        const salt = type === 'backup-setup' ? newSalt() : S.data.backup.salt;
+        const { raw, key } = await backupKeyFrom(pass, salt);
+        if (type === 'backup-setup') { S.data.backup = { salt, check: await encryptText(key, 'yours-backup'), created: Date.now() }; save(); }
+        else if ((await decryptText(key, S.data.backup.check).catch(() => '')) !== 'yours-backup') { m.busy = false; m.error = 'That passphrase does not match.'; return render(); }
+        S.backupKey = key; S.backupRaw = raw;
+        await rememberBackupKey(raw);
+        S.modal = null; render();
+        if (type === 'backup-setup') backupAll(); else { await refreshBackupList(); toast('Backup unlocked on this device'); }
+      } catch { m.busy = false; m.error = 'Something went wrong. Try again.'; render(); }
+      return;
+    }
     if (type === 'talk') { stopDictation(); return processTalk(form.text.value); }
     if (type === 'food-search') { const q = form.q.value.trim(); if (q.length >= 2) searchFoods(q); return; }
     if (type === 'restaurant-filter') { S.modal.q = form.q.value.trim(); return render(); }
@@ -3042,6 +3393,7 @@
       S.photoKey = key;
       S.vaultUnlocked = true;
       await rewriteAllPhotos();
+      if (!isGuest()) { if (S.backupKey && S.backupRaw) await rememberBackupKey(S.backupRaw); else store.del(bkStoreKey()); }
       if (!(S.modal && S.modal.type === 'ciPhotos')) S.modal = null;
       save(); render();
       return toast(key ? 'PIN set. Photos are encrypted.' : 'PIN set');
@@ -3054,13 +3406,14 @@
       if (!ok) S.pinFailAt = Date.now();
       S.authError = ok ? '' : 'Incorrect PIN';
       S.vaultUnlocked = ok;
-      if (ok) { S.photoKey = await photoKeyFrom(form.pin.value, S.data.pinSalt); await loadPhotos(); }
+      if (ok) { S.photoKey = await photoKeyFrom(form.pin.value, S.data.pinSalt); await loadPhotos(); await restoreBackupKey(); refreshBackupList(); }
       return render();
     }
     if (type === 'post') {
       if (!requireAccount('community')) return;
       const text = form.text.value.trim();
       if (!text) return;
+      if (isCloud()) { form.text.value = ''; return cloudCall(() => cloud.post(text.slice(0, 600), S.postTag || 'Win', cyc().phase), 'Shared with the community'); }
       const c = community();
       c.posts.push({ id: uid(), author: meId(), text: text.slice(0, 600), tag: S.postTag || 'Win', phase: cyc().phase, ts: Date.now(), baseLikes: 0, likedBy: [], comments: [] });
       saveCommunity(c); render(); return toast('Shared with the community');
@@ -3069,6 +3422,7 @@
       if (!requireAccount('community')) return;
       const text = form.text.value.trim();
       if (!text) return;
+      if (isCloud()) { form.text.value = ''; return cloudCall(() => cloud.comment(form.dataset.id, text.slice(0, 300))); }
       const c = community();
       c.posts.find((p) => p.id === form.dataset.id).comments.push({ author: meId(), text: text.slice(0, 300), ts: Date.now() });
       saveCommunity(c); return render();
@@ -3081,8 +3435,9 @@
       const key = threadKey(me, other);
       const c = community();
       (c.threads[key] = c.threads[key] || []).push({ from: me, text: text.slice(0, 1000), ts: Date.now() });
+      if (isCloud()) { S.cloudThreads = c.threads; render(); scrollChat(); return cloudCall(() => cloud.send(other, text.slice(0, 1000))); }
       saveCommunity(c); render(); scrollChat();
-      if (!other.startsWith('u:')) {
+      if (D.MEMBERS.some((x) => x.id === other)) {
         setTimeout(() => {
           const c2 = community();
           const reply = D.AUTO_REPLIES[Math.floor(Math.random() * D.AUTO_REPLIES.length)];
@@ -3100,7 +3455,7 @@
   // Opening the camera or photo picker briefly hides the page, so that does not count.
   function lockVault() {
     if (!S.data || !S.data.pinHash || !S.vaultUnlocked) return;
-    S.vaultUnlocked = false; S.photoKey = null; S.photos = []; S.revealed = {}; S.compare = [];
+    S.vaultUnlocked = false; S.photoKey = null; S.backupKey = null; S.backupRaw = null; S.photos = []; S.revealed = {}; S.compare = [];
   }
   document.addEventListener('click', (ev) => { if (ev.target.closest('label') && ev.target.closest('label').querySelector('input[type=file]')) S.pickingFile = Date.now(); }, true);
   document.addEventListener('visibilitychange', () => {
@@ -3119,10 +3474,17 @@
 
   // ---------- boot ----------
   (async function boot() {
+    await initCloud();
     if (S.session) {
       if (S.session.kind === 'user' && !users()[S.session.email]) { S.session = null; store.del('yours.session'); }
-      else { loadData(); await loadPhotos(); }
-    }
+      else if (S.session.cloud) {
+        // Show cached data right away; then confirm the account session and sync.
+        loadData(); await loadPhotos(); render();
+        const u = cloud ? await cloud.init() : null;
+        if (u) { await syncPull(); startCloudCommunity(); }
+        else if (cloud && navigator.onLine) { S.session = null; S.data = null; store.del('yours.session'); S.screen = 'login'; S.authError = 'Please sign in again.'; }
+      } else { loadData(); await loadPhotos(); }
+    } else if (cloud) await cloud.init();
     render();
     checkAI();
     fetch('/api/food').then((r) => r.json()).then((j) => { S.foodApi = !!j.available; }).catch(() => { S.foodApi = false; });
