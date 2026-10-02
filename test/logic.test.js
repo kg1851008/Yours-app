@@ -124,3 +124,14 @@ test('grocery list aggregates a week of meals', () => {
   assert.ok(all.length > 10);
   assert.ok(!all.includes('Feta'));
 });
+
+test('suggestLoad works in pounds and converts kg history', () => {
+  const lb = [{ date: k(-7), phase: 'follicular', unit: 'lb', detail: [{ name: 'Barbell hip thrust', sets: [{ weight: 135, reps: 10 }, { weight: 135, reps: 10 }] }] }];
+  const s = L.suggestLoad('Barbell hip thrust', '8-10', lb, { phase: 'follicular', unit: 'lb' });
+  assert.equal(s.unit, 'lb');
+  assert.equal(s.weight, 145); // 135 >= 130 lb, so +10 lb
+  const kg = [{ date: k(-7), phase: 'follicular', unit: 'kg', detail: [{ name: 'Dumbbell curl', sets: [{ weight: 8, reps: 10 }] }] }];
+  const c = L.suggestLoad('Dumbbell curl', '12', kg, { phase: 'follicular', unit: 'lb' });
+  assert.equal(c.unit, 'lb');
+  assert.equal(c.weight, 17.5); // 8 kg = 17.6 lb, rounded to 2.5 lb steps; reps not yet at 12 so weight holds
+});

@@ -95,7 +95,7 @@
   function blankData() {
     return {
       onboarded: false, planSeen: false, obStep: 0,
-      profile: { units: 'metric', cycleMode: 'natural', cycleLength: 28, periodLength: 5, favorites: [], avoid: [], foodNotes: '' },
+      profile: { units: 'imperial', cycleMode: 'natural', cycleLength: 28, periodLength: 5, favorites: [], avoid: [], foodNotes: '' },
       periods: [], daily: {}, plan: { volume: 0, stepBonus: 0, kcalAdjust: 0 }, reviews: [], prs: [],
       workouts: [], steps: {}, water: {}, eaten: {}, proteinExtra: {}, checkins: [], chat: [], overrides: {}, mealSwaps: {}, grocery: { checked: {} },
       activeWorkout: null, pinHash: null, pinSalt: null,
@@ -119,7 +119,10 @@
   const adjustSets = (ex) => L.adjustSets(ex, S.data.profile.level, S.data.plan);
   const loggedOn = (key) => S.data.workouts.filter((w) => w.date === key);
   const readinessToday = () => L.readiness(S.data.daily[todayKey()]);
-  const unit = () => (S.data.profile.units === 'imperial' ? 'lb' : 'kg');
+  const unit = () => (S.data.profile.units === 'metric' ? 'kg' : 'lb');
+  // Body weight is stored in kg; show it in her units.
+  const bw = (kg) => (unit() === 'lb' ? `${Math.round(kg * 2.20462 * 10) / 10} lb` : `${kg} kg`);
+  const rate = (kgPerWeek) => { const v = unit() === 'lb' ? kgPerWeek * 2.20462 : kgPerWeek; return `${v > 0 ? '+' : ''}${v.toFixed(unit() === 'lb' ? 1 : 2)} ${unit()} a week`; };
   let patternCache = { n: -1, value: null };
   function pats() {
     const n = Object.keys(S.data.daily).length;
@@ -303,7 +306,7 @@
     }
     if (has('plateau', 'stuck', 'not working', 'no progress', 'on track', 'progress', 'week')) {
       const s = L.weeklyStats(S.data);
-      return `${hi}here is your last 7 days:\n\n- Sessions: ${s.sessions} of ${s.planned} planned\n- Step target hit: ${s.stepDays} of 7 days\n${s.readinessAvg != null ? `- Average readiness: ${s.readinessAvg}/100\n` : ''}${s.weightChange != null ? `- Weight trend: ${s.weightChange > 0 ? '+' : ''}${s.weightChange.toFixed(2)} kg a week\n` : '- No weight trend yet. Add check-ins in Progress.\n'}\nYour weekly check-in turns this into concrete changes to next week's plan.\n[[action:open:insights]]`;
+      return `${hi}here is your last 7 days:\n\n- Sessions: ${s.sessions} of ${s.planned} planned\n- Step target hit: ${s.stepDays} of 7 days\n${s.readinessAvg != null ? `- Average readiness: ${s.readinessAvg}/100\n` : ''}${s.weightChange != null ? `- Weight trend: ${rate(s.weightChange)}\n` : '- No weight trend yet. Add check-ins in Progress.\n'}\nYour weekly check-in turns this into concrete changes to next week's plan.\n[[action:open:insights]]`;
     }
     if (has('lose', 'fat', 'weight', 'scale', 'lean', 'deficit')) {
       return `${hi}sustainable fat loss looks like this:\n\n- A moderate deficit. Your target of ${t.kcal.toLocaleString()} kcal already accounts for that, and I never go below what your body needs to function.\n- High protein (${t.protein} g) and lifting to keep your muscle.\n- Steps: ${t.steps.toLocaleString()} a day.\n- Judge progress across a full cycle, not day to day. Luteal water retention can hide fat loss for a week.`;
@@ -491,13 +494,13 @@
       '### What is working',
       `- ${sessions.toFixed(1)} sessions a week over the last 4 weeks`,
       `- Step target hit on ${stepPct}% of the last 14 days`,
-      perWeek !== null ? `- Weight trend: ${perWeek > 0 ? '+' : ''}${perWeek.toFixed(2)} kg per week` : '- Add weekly weight check-ins to see your trend',
+      perWeek !== null ? `- Weight trend: ${rate(perWeek)}` : '- Add weekly weight check-ins to see your trend',
       prs ? `- ${plural(prs, 'personal record')} in the last 4 weeks` : '',
       '',
       '### Focus next',
       sessions < 2.5 ? '- Get to 3 sessions a week' : '- Keep following your suggested weights on main lifts',
       stepPct < 60 ? `- Build up to ${t.steps.toLocaleString()} steps on most days` : '- Keep your steps consistent',
-      !weightOk && goal === 'lose' ? '- Trend is flat or too fast. Aim for 0.25-0.75 kg a week' : `- Hit ${t.protein} g protein daily`,
+      !weightOk && goal === 'lose' ? `- Trend is flat or too fast. Aim for ${unit() === 'lb' ? '0.5-1.5 lb' : '0.25-0.75 kg'} a week` : `- Hit ${t.protein} g protein daily`,
       '',
       '### Next 2 weeks',
       '- Take photos in the same light, pose and cycle phase each time',
@@ -783,7 +786,7 @@
           : `<label class="field" style="margin-top:22px"><span class="label">${p.cycleMode === 'hormonal' ? 'Start of your last bleed (optional)' : 'When did your last period start?'}</span><input class="input" type="date" data-bind="periodStart" value="${esc(p.periodStart || '')}" max="${todayKey()}"></label>
              <p class="tiny muted" style="margin-top:8px">${p.cycleMode === 'hormonal' ? 'Hormonal contraception keeps hormones fairly steady, so your plan follows your daily readiness rather than phases.' : 'The first day of bleeding. Your best guess is fine. YOURS learns your real cycle as you log periods.'}</p>`}`;
     } else if (step === 3) {
-      const imp = p.units === 'imperial';
+      const imp = p.units !== 'metric';
       const ft = p.heightCm ? Math.floor(p.heightCm / 30.48) : '';
       const inch = p.heightCm ? Math.round((p.heightCm / 2.54) % 12) : '';
       const lb = p.weightKg ? Math.round(p.weightKg * 2.20462) : '';
@@ -1275,7 +1278,6 @@
         <button class="btn primary" style="margin-top:16px" type="submit">Unlock</button></form>`;
     }
     const p = S.data.profile;
-    const imp = p.units === 'imperial';
     const ws = S.data.checkins.slice(-12);
     const review = S.data.lastReview;
     const verdictLabel = { on_track: 'On track', progressing: 'Making progress', adjust: 'Needs adjustment' };
@@ -1306,8 +1308,8 @@
       <div class="section-title"><h2>Weight check-ins</h2></div>
       <div class="card">
         ${ws.length > 1 ? sparkline(ws.map((w) => w.kg)) : ''}
-        <form class="row" data-form="checkin" style="margin-top:${ws.length > 1 ? 12 : 0}px"><input class="input grow" type="number" step="0.1" inputmode="decimal" name="w" placeholder="Today's weight (${imp ? 'lb' : 'kg'})" required><button class="btn primary sm" type="submit">Log</button></form>
-        ${ws.slice(-4).reverse().map((w) => `<div class="list-item"><div class="grow small">${fmtDate(parseKey(w.date), { weekday: 'short', month: 'short', day: 'numeric' })}</div><strong>${imp ? Math.round(w.kg * 2.20462 * 10) / 10 + ' lb' : w.kg + ' kg'}</strong></div>`).join('')}
+        <form class="row" data-form="checkin" style="margin-top:${ws.length > 1 ? 12 : 0}px"><input class="input grow" type="number" step="0.1" inputmode="decimal" name="w" placeholder="Today's weight (${unit()})" required><button class="btn primary sm" type="submit">Log</button></form>
+        ${ws.slice(-4).reverse().map((w) => `<div class="list-item"><div class="grow small">${fmtDate(parseKey(w.date), { weekday: 'short', month: 'short', day: 'numeric' })}</div><strong>${bw(w.kg)}</strong></div>`).join('')}
         <p class="tiny muted" style="margin-top:8px">Weigh in at the same time of day. Compare across the same cycle phase.</p>
       </div>
       <div class="row" style="margin-top:16px"><button class="btn ghost sm grow" data-action="pin-settings">${icon('lock', 16)} ${S.data.pinHash ? 'Change or remove PIN' : 'Set a PIN and encrypt photos'}</button>${S.data.pinHash ? '<button class="btn ghost sm" data-action="lock-vault">Lock</button>' : ''}</div>`;
@@ -1439,7 +1441,7 @@
       return sheet('Your week', `
         <div class="stats">
           ${statTile('Sessions', `${s.sessions}/${s.planned}`, '')}${statTile('Avg steps', s.stepAvg.toLocaleString(), '')}
-          ${statTile('Readiness', s.readinessAvg == null ? '-' : s.readinessAvg, s.readinessAvg == null ? '' : '/100')}${statTile('Weight', s.weightChange == null ? '-' : `${s.weightChange > 0 ? '+' : ''}${s.weightChange.toFixed(2)}`, s.weightChange == null ? '' : 'kg/wk')}
+          ${statTile('Readiness', s.readinessAvg == null ? '-' : s.readinessAvg, s.readinessAvg == null ? '' : '/100')}${statTile('Weight', s.weightChange == null ? '-' : rate(s.weightChange).split(' ')[0], s.weightChange == null ? '' : `${unit()}/wk`)}
         </div>
         <div class="card accent" style="margin-top:12px"><div class="eyebrow">Coach</div><div class="rich small" style="margin-top:6px">${rich(m.text)}</div>${m.loading ? '<p class="tiny muted" style="margin-top:6px">Your coach is writing a personal note...</p>' : ''}</div>
         ${m.result.adjustments.length ? `<div class="label" style="margin-top:16px">Changes for next week</div>${m.result.adjustments.map((a, i) => `<button class="option ${m.selected[i] ? 'selected' : ''}" style="margin-top:8px" data-action="wk-toggle" data-i="${i}"><strong>${m.selected[i] ? 'Apply: ' : 'Skip: '}${esc(a.label)}</strong><span>${esc(a.why)}</span></button>`).join('')}` : ''}
@@ -1508,6 +1510,7 @@
         <div class="card flat small"><div class="row between"><span class="muted">Goal</span><strong>${esc(goalOf(p).label)}</strong></div><div class="row between" style="margin-top:6px"><span class="muted">Level</span><strong>${esc((LEVELS.find((l) => l.id === p.level) || {}).label || '')}</strong></div><div class="row between" style="margin-top:6px"><span class="muted">Cycle type</span><strong>${esc((D.CYCLE_MODES.find((x) => x.id === p.cycleMode) || {}).label || '')}</strong></div>${c.steady ? '' : `<div class="row between" style="margin-top:6px"><span class="muted">Cycle length</span><strong>${learned ? `${learned.length} days (learned)` : `${p.cycleLength} days`}</strong></div><div class="row between" style="margin-top:6px"><span class="muted">Last period</span><strong>${esc(shortDate(p.periodStart))}</strong></div>`}
           <button class="btn ghost sm block" style="margin-top:14px" data-action="edit-plan">Edit my plan</button></div>
         ${c.steady ? '' : '<button class="btn soft block" style="margin-top:12px" data-action="open-period">Log a period start</button>'}
+        <div class="card flat"><div class="label">Units</div><div class="segment">${[['imperial', 'lb · ft'], ['metric', 'kg · cm']].map(([v, l]) => `<button class="${(p.units === 'metric' ? 'metric' : 'imperial') === v ? 'active' : ''}" data-action="set-units" data-value="${v}">${l}</button>`).join('')}</div><p class="tiny muted" style="margin-top:8px">Past workouts keep the unit they were logged in. Suggested weights convert automatically.</p></div>
         <div class="card flat"><div class="label">Appearance</div><div class="segment">${['system', 'light', 'dark'].map((x) => `<button class="${theme === x ? 'active' : ''}" data-action="theme" data-value="${x}">${x[0].toUpperCase() + x.slice(1)}</button>`).join('')}</div></div>
         ${S.installPrompt ? '<button class="btn primary block" style="margin-top:12px" data-action="install">Install YOURS on this device</button>' : ios ? '<div class="card flat small"><div class="label">Install on iPhone</div><p class="muted">Tap the Share button in Safari, then Add to Home Screen.</p></div>' : ''}
         <div class="card flat small"><div class="label">Coach</div><p class="muted">${S.ai ? 'Live AI coach is connected.' : 'Running the on-device coach. Set ANTHROPIC_API_KEY on the server to enable the live AI coach and photo reviews.'}</p></div>
@@ -1609,7 +1612,7 @@
     const d = blankData();
     d.onboarded = true;
     d.planSeen = true;
-    d.profile = { units: 'metric', cycleMode: 'natural', level: 'intermediate', goal: 'glutes', heightCm: 168, weightKg: 63.5, age: 29, activity: 'moderate', cycleLength: 28, periodLength: 5, favorites: ['Chicken', 'Salmon', 'Greek yogurt', 'Sweet potato', 'Berries'], avoid: ['Shellfish'], foodNotes: '' };
+    d.profile = { units: 'imperial', cycleMode: 'natural', level: 'intermediate', goal: 'glutes', heightCm: 168, weightKg: 63.5, age: 29, activity: 'moderate', cycleLength: 28, periodLength: 5, favorites: ['Chicken', 'Salmon', 'Greek yogurt', 'Sweet potato', 'Berries'], avoid: ['Shellfish'], foodNotes: '' };
     [-66, -37, -9].forEach((n) => L.addPeriod(d, dateKey(addDays(t, n))));
     const starts = d.periods.map(parseKey);
     const len = d.profile.learnedLength;
@@ -1640,12 +1643,12 @@
       const detail = wk.exercises.filter((ex) => L.parseReps(ex.reps) && DEMO_LOADS[ex.name]).map((ex) => {
         const target = L.parseReps(ex.reps);
         const iso = /raise|curl|fly|pushdown|kickback|abduction|face pull|extension|calf|arnold/i.test(ex.name);
-        const inc = iso ? 1 : 2.5;
-        const weight = Math.round((DEMO_LOADS[ex.name] * factor) / inc) * inc;
+        const inc = iso ? 2.5 : 5;
+        const weight = Math.round((DEMO_LOADS[ex.name] * 2.20462 * factor) / inc) * inc;
         const reps = phase === 'follicular' || phase === 'ovulation' ? target.hi : target.lo;
         return { name: ex.name, sets: Array.from({ length: L.adjustSets(ex, 'intermediate', {}) }, () => ({ weight, reps })) };
       });
-      d.workouts.push({ id: uid(), date: key, templateId: wk.id, name: wk.name, minutes: wk.minutes, sets: detail.reduce((n, e) => n + e.sets.length, 0), unit: 'kg', phase, detail });
+      d.workouts.push({ id: uid(), date: key, templateId: wk.id, name: wk.name, minutes: wk.minutes, sets: detail.reduce((n, e) => n + e.sets.length, 0), unit: 'lb', phase, detail });
     }
     d.steps[dateKey(t)] = 4210;
     d.water[dateKey(t)] = 1000;
@@ -1913,6 +1916,7 @@
     'close-thread': () => { S.openThread = null; render(); },
 
     theme: (el) => { applyTheme(el.dataset.value); render(); },
+    'set-units': (el) => { S.data.profile.units = el.dataset.value; save(); render(); toast(`Weights now in ${unit() === 'lb' ? 'pounds' : 'kilograms'}`); },
     install: async () => { const p = S.installPrompt; if (!p) return; p.prompt(); try { await p.userChoice; } catch { /* ignore */ } S.installPrompt = null; render(); },
     'export-data': () => exportData(),
     'edit-plan': () => { S.data.editing = true; S.data.onboarded = false; S.data.obStep = 0; S.modal = null; save(); render(); window.scrollTo(0, 0); },
@@ -2004,7 +2008,7 @@
     }
     if (type === 'checkin') {
       let kg = Number(form.w.value);
-      if (S.data.profile.units === 'imperial') kg = kg / 2.20462;
+      if (unit() === 'lb') kg = kg / 2.20462;
       kg = Math.round(kg * 10) / 10;
       if (!(kg >= 30 && kg <= 300)) return toast('Enter a realistic weight');
       S.data.checkins = S.data.checkins.filter((c) => c.date !== todayKey());

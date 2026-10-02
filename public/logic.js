@@ -225,9 +225,10 @@
     const sets = last.ex.sets.filter((s) => s.weight > 0 && s.reps > 0);
     let top = Math.max(...sets.map((s) => s.weight));
     const minReps = Math.min(...sets.filter((s) => s.weight === top).map((s) => s.reps));
-    if (last.unit !== unit) top = fromKg(toKg(top, last.unit), unit);
+    const converted = last.unit !== unit;
+    if (converted) top = fromKg(toKg(top, last.unit), unit);
     const inc = increment(name, top, unit);
-    top = roundLoad(top, inc);
+    if (converted) top = roundLoad(top, inc); // only snap to the plate grid when switching units
 
     let weight = top, reps, reason;
     if (minReps >= target.hi) { weight = top + inc; reps = target.lo; reason = 'You hit the top of the rep range last time, so add weight.'; }
@@ -444,7 +445,7 @@
       }
     } else if (['muscle', 'glutes', 'strength'].includes(p.goal)) {
       if (w != null && w < 0.05 && k < 300) adj.push({ key: 'kcalAdjust', delta: 100, label: 'Add 100 kcal a day', why: 'Your weight is not moving up, and muscle needs fuel.' });
-      else if (w != null && w > 0.5 && k > -300) adj.push({ key: 'kcalAdjust', delta: -100, label: 'Trim 100 kcal a day', why: 'You are gaining faster than about 0.5 kg a week.' });
+      else if (w != null && w > 0.5 && k > -300) adj.push({ key: 'kcalAdjust', delta: -100, label: 'Trim 100 kcal a day', why: `You are gaining faster than about ${p.units === 'metric' ? '0.5 kg' : '1 lb'} a week.` });
     } else if (answers.hunger === 'high' && k < 300) {
       adj.push({ key: 'kcalAdjust', delta: 100, label: 'Add 100 kcal a day', why: 'Hunger was high this week.' });
     }
