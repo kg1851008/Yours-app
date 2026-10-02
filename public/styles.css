@@ -458,3 +458,4 @@ a.btn { text-decoration: none; color: inherit; }
   .splash img { animation: none; opacity: 1; transform: none; }
   .splash { transition: opacity 0.25s linear; }
 }
+a.link { text-decoration: none; overflow-wrap: anywhere; }
