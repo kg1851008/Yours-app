@@ -3,23 +3,19 @@
   'use strict';
 
   const D = window.YOURS_DATA;
+  const L = window.YOURS_LOGIC;
   const root = document.getElementById('app');
+  const { dateKey, parseKey, today, addDays, daysBetween, clamp, round, GOALS, LEVELS, ACTIVITY, goalOf, activityOf, workoutById } = L;
 
   // ---------- utilities ----------
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
-  const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
-  const round = (n, step) => Math.round(n / step) * step;
-  const pad = (n) => String(n).padStart(2, '0');
-  const dateKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  const parseKey = (k) => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); };
-  const today = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
   const todayKey = () => dateKey(today());
-  const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
-  const daysBetween = (a, b) => Math.round((b - a) / 86400000);
   const fmtDate = (d, opts) => d.toLocaleDateString(undefined, opts || { weekday: 'long', month: 'long', day: 'numeric' });
+  const shortDate = (k) => fmtDate(parseKey(k), { month: 'short', day: 'numeric' });
   const firstName = (n) => (n || '').trim().split(/\s+/)[0] || '';
   const initials = (n) => (n || '?').trim().split(/\s+/).map((p) => p[0]).slice(0, 2).join('').toUpperCase() || '?';
+  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
   const timeAgo = (ts) => {
     const s = (Date.now() - ts) / 1000;
     if (s < 60) return 'now';
@@ -58,7 +54,12 @@
     shield: '<path d="M12 3 5 6v5c0 4.5 3 8.3 7 10 4-1.7 7-5.5 7-10V6z"/><path d="m9 12 2 2 4-4"/>',
     swap: '<path d="M7 7h11l-3-3M17 17H6l3 3"/>',
     trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
-    eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+    share: '<path d="M12 15V3M7 8l5-5 5 5"/><path d="M5 12v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7"/>',
+    trend: '<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
+    flame: '<path d="M12 21c-3.9 0-7-2.9-7-6.6 0-3.1 2-5.3 3.6-7 .3 1.9 1.4 3.2 2.6 3.6C11 7.6 12.4 5 15 3c.4 3 4 5.4 4 10.6C19 18 15.9 21 12 21z"/>',
+    list: '<path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/>',
+    calendar: '<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
+    download: '<path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 19h14"/>',
   };
   const icon = (name, size = 22, sw = 1.8) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
 
@@ -66,7 +67,7 @@
   const S = {
     session: store.get('yours.session', null), // { kind: 'user', email } | { kind: 'guest' }
     data: null,
-    screen: 'welcome', // welcome | login
+    screen: 'welcome',
     tab: 'home',
     advisorView: 'coach',
     communityView: 'feed',
@@ -76,11 +77,13 @@
     ai: null,
     typing: false,
     vaultUnlocked: false,
+    photoKey: null,
     photos: [],
     revealed: {},
     compare: [],
     analyzing: false,
     authError: '',
+    installPrompt: null,
   };
 
   const dataKey = () => (S.session && S.session.kind === 'user' ? `yours.data.${S.session.email}` : 'yours.data.guest');
@@ -92,20 +95,54 @@
   function blankData() {
     return {
       onboarded: false, planSeen: false, obStep: 0,
-      profile: { units: 'metric', cycleLength: 28, periodLength: 5, favorites: [], avoid: [], foodNotes: '' },
-      workouts: [], steps: {}, water: {}, checkins: [], chat: [], overrides: {}, mealSwaps: {}, activeWorkout: null, pinHash: null, pinSalt: null,
+      profile: { units: 'metric', cycleMode: 'natural', cycleLength: 28, periodLength: 5, favorites: [], avoid: [], foodNotes: '' },
+      periods: [], daily: {}, plan: { volume: 0, stepBonus: 0, kcalAdjust: 0 }, reviews: [], prs: [],
+      workouts: [], steps: {}, water: {}, eaten: {}, proteinExtra: {}, checkins: [], chat: [], overrides: {}, mealSwaps: {}, grocery: { checked: {} },
+      activeWorkout: null, pinHash: null, pinSalt: null,
     };
   }
 
   function loadData() {
     S.data = Object.assign(blankData(), store.get(dataKey(), {}));
+    const d = S.data;
+    // Migrate older saves.
+    d.profile.cycleMode = d.profile.cycleMode || 'natural';
+    if (!d.periods.length && d.profile.periodStart) d.periods = [d.profile.periodStart];
+    d.plan = Object.assign({ volume: 0, stepBonus: 0, kcalAdjust: 0 }, d.plan);
   }
   function save() { if (S.session) store.set(dataKey(), S.data); }
 
+  // Derived values used across views.
+  const cyc = (date) => L.cycleInfo(S.data.profile, date);
+  const tgt = (c) => L.targets(S.data.profile, c || cyc(), S.data.plan);
+  const todaysWorkout = () => L.workoutFor(S.data, today());
+  const adjustSets = (ex) => L.adjustSets(ex, S.data.profile.level, S.data.plan);
+  const loggedOn = (key) => S.data.workouts.filter((w) => w.date === key);
+  const readinessToday = () => L.readiness(S.data.daily[todayKey()]);
+  const unit = () => (S.data.profile.units === 'imperial' ? 'lb' : 'kg');
+  let patternCache = { n: -1, value: null };
+  function pats() {
+    const n = Object.keys(S.data.daily).length;
+    if (patternCache.n !== n || patternCache.owner !== dataKey()) patternCache = { n, owner: dataKey(), value: L.patterns(S.data.daily) };
+    return patternCache.value;
+  }
+  function weekDays() {
+    const t = today();
+    const mon = addDays(t, -L.weekdayIndex(t));
+    return Array.from({ length: 7 }, (_, i) => addDays(mon, i));
+  }
+  const phaseName = (p) => D.PHASES[p].name;
+  function phaseLine(c) {
+    if (c.steady) return 'You are in steady mode';
+    if (c.late) return `Your period is ${plural(c.daysLate, 'day')} later than predicted`;
+    return `You are on day ${c.day} of ${c.len}, in your ${phaseName(c.phase).toLowerCase()} phase`;
+  }
+
   // ---------- crypto ----------
   const hex = (buf) => Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+  const hasSubtle = () => !!(window.crypto && crypto.subtle);
   async function hashSecret(secret, salt) {
-    if (window.crypto && crypto.subtle) {
+    if (hasSubtle()) {
       const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), 'PBKDF2', false, ['deriveBits']);
       const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: new TextEncoder().encode(salt), iterations: 120000 }, key, 256);
       return hex(bits);
@@ -118,119 +155,22 @@
   }
   const newSalt = () => (window.crypto && crypto.getRandomValues ? hex(crypto.getRandomValues(new Uint8Array(16))) : uid());
 
-  // ---------- cycle + targets ----------
-  function cycleInfo(profile, date) {
-    const len = clamp(Number(profile.cycleLength) || 28, 21, 45);
-    const periodLen = clamp(Number(profile.periodLength) || 5, 2, 8);
-    const start = profile.periodStart ? parseKey(profile.periodStart) : today();
-    const diff = daysBetween(start, date || today());
-    const day = (((diff % len) + len) % len) + 1;
-    const ov = len - 14;
-    const ranges = {
-      menstrual: [1, periodLen],
-      follicular: [periodLen + 1, Math.max(periodLen, ov - 2)],
-      ovulation: [Math.max(periodLen + 1, ov - 1), ov + 1],
-      luteal: [ov + 2, len],
-    };
-    let phase = 'luteal';
-    for (const p of D.PHASE_ORDER) if (day >= ranges[p][0] && day <= ranges[p][1]) { phase = p; break; }
-    const idx = D.PHASE_ORDER.indexOf(phase);
-    const next = D.PHASE_ORDER[(idx + 1) % 4];
-    const daysToNext = next === 'menstrual' ? len - day + 1 : ranges[next][0] - day;
-    return { day, len, phase, dayInPhase: day - ranges[phase][0], ranges, next, daysToNext, daysToPeriod: len - day + 1 };
+  // Photo encryption: AES-GCM with a key derived from the vault PIN.
+  async function photoKeyFrom(pin, salt) {
+    if (!hasSubtle()) return null;
+    const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey({ name: 'PBKDF2', hash: 'SHA-256', salt: new TextEncoder().encode(salt + ':photos'), iterations: 200000 }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
   }
-
-  const GOALS = [
-    { id: 'lose', label: 'Lose body fat', desc: 'Lean out while keeping muscle', kcal: 0.82, protein: 2.2 },
-    { id: 'muscle', label: 'Build muscle', desc: 'Add lean size and shape', kcal: 1.08, protein: 2.0 },
-    { id: 'glutes', label: 'Grow my glutes', desc: 'Lower-body and glute focus', kcal: 1.05, protein: 2.0 },
-    { id: 'recomp', label: 'Tone and recomp', desc: 'Lose fat and build muscle together', kcal: 0.95, protein: 2.2 },
-    { id: 'strength', label: 'Get stronger', desc: 'Lift heavier on the big lifts', kcal: 1.05, protein: 1.8 },
-    { id: 'health', label: 'Feel healthier', desc: 'Energy, mood and consistency', kcal: 1.0, protein: 1.6 },
-  ];
-  const LEVELS = [
-    { id: 'beginner', label: 'Beginner', desc: 'New to lifting or returning after a long break' },
-    { id: 'intermediate', label: 'Intermediate', desc: 'Training consistently for 6+ months' },
-    { id: 'advanced', label: 'Advanced', desc: 'Years of structured strength training' },
-  ];
-  const ACTIVITY = [
-    { id: 'sedentary', label: 'Mostly sitting', desc: 'Desk job, under 5,000 steps a day', mult: 1.2, steps: 7000, water: 0 },
-    { id: 'light', label: 'Lightly active', desc: 'Some walking, 5,000-8,000 steps', mult: 1.375, steps: 8000, water: 250 },
-    { id: 'moderate', label: 'Active', desc: 'On your feet a lot, 8,000-11,000 steps', mult: 1.55, steps: 9000, water: 500 },
-    { id: 'very', label: 'Very active', desc: 'Physical job or 11,000+ steps', mult: 1.725, steps: 10000, water: 750 },
-  ];
-  const goalOf = (p) => GOALS.find((g) => g.id === p.goal) || GOALS[5];
-  const activityOf = (p) => ACTIVITY.find((a) => a.id === p.activity) || ACTIVITY[1];
-
-  function targets(profile, cyc) {
-    const w = Number(profile.weightKg) || 65;
-    const h = Number(profile.heightCm) || 165;
-    const age = Number(profile.age) || 28;
-    const goal = goalOf(profile);
-    const act = activityOf(profile);
-    const bmr = 10 * w + 6.25 * h - 5 * age - 161;
-    const phaseKcal = { menstrual: 50, follicular: 0, ovulation: 0, luteal: 150 }[cyc.phase];
-    const kcal = round(Math.max(bmr * 1.1, bmr * act.mult * goal.kcal) + phaseKcal, 10);
-    const protein = round(w * goal.protein + (cyc.phase === 'luteal' ? 5 : 0), 5);
-    const fat = round(w * 0.9, 5);
-    const carbs = Math.max(80, round((kcal - protein * 4 - fat * 9) / 4, 5));
-    const waterMl = w * 35 + act.water + (cyc.phase === 'luteal' || cyc.phase === 'menstrual' ? 250 : 0);
-    const stepPhase = { menstrual: -1500, follicular: 1000, ovulation: 1500, luteal: 0 }[cyc.phase];
-    const steps = round(act.steps + (profile.goal === 'lose' || profile.goal === 'recomp' ? 2000 : 0) + stepPhase, 500);
-    return { kcal, protein, fat, carbs, water: Math.round(waterMl / 100) / 10, waterMl: round(waterMl, 50), steps, bmr: Math.round(bmr) };
+  const toB64 = (buf) => { const b = new Uint8Array(buf); let s = ''; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(s); };
+  const fromB64 = (str) => Uint8Array.from(atob(str), (c) => c.charCodeAt(0));
+  async function encryptText(key, text) {
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(text));
+    return { iv: toB64(iv), ct: toB64(ct) };
   }
-
-  // ---------- workouts ----------
-  const workoutById = (id) => D.WORKOUTS.find((w) => w.id === id);
-  function todaysWorkout() {
-    const ov = S.data.overrides[todayKey()];
-    if (ov && workoutById(ov)) return workoutById(ov);
-    const cyc = cycleInfo(S.data.profile);
-    const rot = D.ROTATION[cyc.phase];
-    return workoutById(rot[cyc.dayInPhase % rot.length]);
-  }
-  function adjustSets(ex) {
-    const level = S.data.profile.level;
-    if (level === 'beginner') return Math.max(2, ex.sets - 1);
-    if (level === 'advanced' && ex.main) return ex.sets + 1;
-    return ex.sets;
-  }
-  const loggedOn = (key) => S.data.workouts.filter((w) => w.date === key);
-  function weekDays() {
-    const t = today();
-    const mon = addDays(t, -((t.getDay() + 6) % 7));
-    return Array.from({ length: 7 }, (_, i) => addDays(mon, i));
-  }
-
-  // ---------- meals ----------
-  function avoidTags() {
-    const set = new Set();
-    (S.data.profile.avoid || []).forEach((label) => {
-      const opt = D.AVOID_OPTIONS.find((o) => o.label === label);
-      if (opt) opt.tags.forEach((t) => set.add(t));
-    });
-    return set;
-  }
-  function mealOptions(phase, slot) {
-    const avoid = avoidTags();
-    const favs = (S.data.profile.favorites || []).map((f) => f.toLowerCase());
-    const extra = (S.data.profile.foodNotes || '').toLowerCase();
-    const all = D.MEALS[phase][slot];
-    const scored = all.map((meal, i) => {
-      const text = (meal.name + ' ' + meal.desc).toLowerCase();
-      const conflicts = meal.tags.filter((t) => avoid.has(t)).length;
-      let score = favs.filter((f) => text.includes(f.toLowerCase().split(' ')[0])).length * 2 - conflicts * 10;
-      if (extra && extra.split(/[,\n]/).some((w) => w.trim().length > 2 && text.includes(w.trim()))) score -= 3;
-      return { meal, i, conflicts, score };
-    });
-    const ok = scored.filter((s) => s.conflicts === 0);
-    const list = (ok.length ? ok : scored).sort((a, b) => b.score - a.score || a.i - b.i);
-    return { list: list.map((s) => s.meal), compromised: !ok.length };
-  }
-  function mealFor(phase, slot) {
-    const { list, compromised } = mealOptions(phase, slot);
-    const swaps = (S.data.mealSwaps[todayKey()] || {})[slot] || 0;
-    return { meal: list[swaps % list.length], count: list.length, compromised };
+  async function decryptText(key, enc) {
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromB64(enc.iv) }, key, fromB64(enc.ct));
+    return new TextDecoder().decode(pt);
   }
 
   // ---------- AI ----------
@@ -243,29 +183,48 @@
     render();
   }
 
+  function todaysLoads() {
+    const c = cyc();
+    const wk = todaysWorkout();
+    return wk.exercises.filter((ex) => ex.main).map((ex) => {
+      const s = L.suggestLoad(ex.name, ex.reps, S.data.workouts, { phase: c.phase, readiness: readinessToday(), unit: unit() });
+      return s && !s.first ? { exercise: ex.name, weight: s.weight, unit: s.unit, reps: s.reps, why: s.reason } : null;
+    }).filter(Boolean);
+  }
+
   function buildContext() {
     const p = S.data.profile;
-    const cyc = cycleInfo(p);
-    const t = targets(p, cyc);
+    const c = cyc();
+    const t = tgt(c);
     const wk = todaysWorkout();
     const last14 = Array.from({ length: 14 }, (_, i) => dateKey(addDays(today(), -i)));
+    const learned = L.learnCycle(S.data.periods);
+    const pt = pats();
+    const lastReview = S.data.reviews[S.data.reviews.length - 1];
     return {
       name: firstName(myName()) || null,
       today: todayKey(),
-      profile: { level: p.level, goal: goalOf(p).label, heightCm: p.heightCm, weightKg: p.weightKg, age: p.age, activity: activityOf(p).label, favoriteFoods: p.favorites, avoidFoods: p.avoid, foodNotes: p.foodNotes },
-      cycle: { day: cyc.day, length: cyc.len, phase: cyc.phase, nextPhase: cyc.next, daysToNextPhase: cyc.daysToNext, daysToNextPeriod: cyc.daysToPeriod },
+      profile: { level: p.level, goal: goalOf(p).label, heightCm: p.heightCm, weightKg: p.weightKg, age: p.age, activity: activityOf(p).label, cycleType: (D.CYCLE_MODES.find((m) => m.id === p.cycleMode) || {}).label, favoriteFoods: p.favorites, avoidFoods: p.avoid, foodNotes: p.foodNotes, units: p.units },
+      cycle: c.steady ? { mode: 'steady (no phase-based plan)' } : { day: c.day, length: c.len, phase: c.phase, nextPhase: c.next, daysToNextPhase: c.daysToNext, daysToNextPeriod: c.daysToPeriod, periodLate: c.late ? c.daysLate : 0, learnedFromCycles: learned ? learned.samples : 0, cycleRange: learned ? `${learned.min}-${learned.max}` : null },
+      readinessToday: readinessToday(),
+      todaysCheckin: S.data.daily[todayKey()] || null,
+      patterns: pt.insights,
       targets: { calories: t.kcal, proteinG: t.protein, carbsG: t.carbs, fatG: t.fat, waterL: t.water, steps: t.steps },
-      todaysWorkout: { id: wk.id, name: wk.name, completed: loggedOn(todayKey()).length > 0 },
+      planAdjustments: S.data.plan,
+      todaysWorkout: { id: wk.id, name: wk.name, completed: loggedOn(todayKey()).length > 0, suggestedLoads: todaysLoads() },
       workoutCatalog: D.WORKOUTS.map((w) => ({ id: w.id, name: w.name, phase: w.phase, intensity: w.intensity })),
-      recentWorkouts: S.data.workouts.slice(-10).map((w) => ({ date: w.date, name: w.name, minutes: w.minutes })),
+      recentWorkouts: S.data.workouts.slice(-10).map((w) => ({ date: w.date, name: w.name, minutes: w.minutes, phase: w.phase })),
+      recentPRs: S.data.prs.slice(-5),
+      proteinTodayG: L.proteinFor(S.data, todayKey()),
       stepsLast14Days: last14.map((k) => ({ date: k, steps: S.data.steps[k] || 0 })),
       waterTodayMl: S.data.water[todayKey()] || 0,
       weightCheckins: S.data.checkins.slice(-12),
+      lastWeeklyReview: lastReview ? { date: lastReview.date, adjustments: lastReview.adjustments.map((a) => a.label) } : null,
     };
   }
 
   const ACTION_RE = /\[\[action:(swap_workout|log_water|open):([a-z0-9_-]+)\]\]/gi;
-  const TABS = ['home', 'workouts', 'meals', 'advisor', 'community', 'progress'];
+  const TABS = ['home', 'workouts', 'meals', 'advisor', 'community', 'progress', 'insights', 'checkin'];
   function extractActions(text) {
     const actions = [];
     const clean = text.replace(ACTION_RE, (_, type, value) => {
@@ -281,77 +240,91 @@
   function actionLabel(a) {
     if (a.type === 'swap_workout') return `Switch today to ${workoutById(a.value).name}`;
     if (a.type === 'log_water') return `Log ${a.value} ml water`;
+    if (a.value === 'checkin') return 'Do my daily check-in';
     return `Open ${a.value[0].toUpperCase() + a.value.slice(1)}`;
   }
+  const lighterOption = (c) => (readinessToday() != null && readinessToday() < 30 ? 'm-restore' : { menstrual: 'm-restore', luteal: 'l-pilates' }[c.phase] || 'm-light');
 
   // On-device coach used when the live AI is not configured or unreachable.
   function localCoach(input) {
     const q = input.toLowerCase();
     const p = S.data.profile;
-    const cyc = cycleInfo(p);
-    const ph = D.PHASES[cyc.phase];
-    const t = targets(p, cyc);
+    const c = cyc();
+    const ph = D.PHASES[c.phase];
+    const t = tgt(c);
     const wk = todaysWorkout();
     const name = firstName(myName());
     const hi = name ? `${name}, ` : '';
     const has = (...words) => words.some((w) => q.includes(w));
-    const lighter = { menstrual: 'm-restore', follicular: 'rest', ovulation: 'rest', luteal: 'l-pilates' }[cyc.phase];
+    const lighter = lighterOption(c);
+    const ready = readinessToday();
     const last14 = Array.from({ length: 14 }, (_, i) => S.data.steps[dateKey(addDays(today(), -i))] || 0);
     const stepDays = last14.filter((s) => s >= t.steps).length;
     const recent = S.data.workouts.filter((w) => daysBetween(parseKey(w.date), today()) < 14).length;
+    const pt = pats();
 
-    if (has('cramp', 'pain', 'hurt', 'bloat')) {
-      return `${hi}that is really common${cyc.phase === 'menstrual' ? ' in the first days of your period' : ''}. A few things that help most women:\n\n- Gentle movement: a 20-minute walk or the Restore session increases blood flow and often eases cramps.\n- Heat on your lower belly and slow breathing (inhale 4, exhale 6).\n- Magnesium-rich food: dark chocolate, pumpkin seeds, leafy greens.\n- Stay on top of water today: ${t.water} L.\n\nIf pain is severe, stops you functioning, or comes with very heavy bleeding, please check in with a doctor.\n[[action:swap_workout:m-restore]]\n[[action:log_water:500]]`;
+    if (has('how heavy', 'how much weight', 'what weight', 'progressive overload', 'add weight', 'increase weight', 'load', 'kg', 'lbs')) {
+      const loads = todaysLoads();
+      if (!loads.length) return `${hi}log a session with weights and reps and I will suggest your exact numbers from then on. Double progression works like this: stay at a weight until you hit the top of the rep range on every set, then add the smallest jump available. ${c.phase === 'luteal' ? 'In your luteal phase I hold weights steady.' : c.phase === 'menstrual' ? 'In your menstrual phase I take about 10% off.' : 'Your current phase is a great time to push.'}`;
+      return `${hi}here are today's numbers for ${wk.name}:\n\n${loads.map((l) => `- ${l.exercise}: ${l.weight} ${l.unit} x ${l.reps}. ${l.why}`).join('\n')}\n\nThey are pre-filled when you start the workout.\n[[action:open:workouts]]`;
     }
-    if (has('tired', 'energy', 'exhaust', 'fatigue', 'sleepy', 'drained')) {
-      return `${hi}you are in your ${ph.name.toLowerCase()} phase (day ${cyc.day}), where energy is typically ${ph.energy.toLowerCase()}. ${cyc.phase === 'menstrual' || cyc.phase === 'luteal' ? 'Low energy here is physiology, not a lack of discipline.' : 'If you are this tired in a high-energy phase, look at sleep, food and stress first.'}\n\nMy recommendation: keep the habit, lower the dose. Do a shorter or lighter session, hit at least ${round(t.steps * 0.8, 500).toLocaleString()} steps, and get ${t.protein} g of protein in.\n[[action:swap_workout:${lighter}]]`;
+    if (has('cramp', 'pain', 'hurt', 'bloat')) {
+      return `${hi}that is really common${c.phase === 'menstrual' ? ' in the first days of your period' : ''}. What helps most women:\n\n- Gentle movement: a 20-minute walk or the Restore session increases blood flow and often eases cramps.\n- Heat on your lower belly and slow breathing (inhale 4, exhale 6).\n- Magnesium-rich food: dark chocolate, pumpkin seeds, leafy greens.\n- Stay on top of water today: ${t.water} L.\n\nIf pain is severe, stops you functioning, or comes with very heavy bleeding, please check in with a doctor.\n[[action:swap_workout:m-restore]]\n[[action:log_water:500]]`;
+    }
+    if (has('tired', 'energy', 'exhaust', 'fatigue', 'sleepy', 'drained', 'readiness')) {
+      const dip = pt.insights.find((s) => s.includes('dips'));
+      return `${hi}${ready != null ? `your readiness today is ${ready}/100 (${L.readinessLabel(ready).toLowerCase()}). ` : ''}${c.steady ? '' : `In your ${ph.name.toLowerCase()} phase, energy is typically ${ph.energy.toLowerCase()}. `}${c.phase === 'menstrual' || c.phase === 'luteal' ? 'Low energy here is physiology, not a lack of discipline.' : 'If you are this tired in a high-energy phase, look at sleep, food and stress first.'}${dip ? `\n\nFrom your check-ins: ${dip}` : ''}\n\nMy recommendation: keep the habit, lower the dose. Do a shorter or lighter session, get at least ${round(t.steps * 0.8, 500).toLocaleString()} steps, and eat ${t.protein} g of protein.\n[[action:swap_workout:${lighter}]]${ready == null ? '\n[[action:open:checkin]]' : ''}`;
     }
     if (has('crav', 'sugar', 'chocolate', 'hungry', 'snack', 'binge')) {
-      const snack = mealFor(cyc.phase, 'snack').meal;
-      return `${hi}${cyc.phase === 'luteal' ? 'cravings in the luteal phase are expected. Your metabolism runs slightly higher, so you genuinely need about 100-200 more calories. I have already built that into your target.' : 'cravings usually mean a meal was light on protein or fiber, or sleep was short.'}\n\nTry this:\n- Lead every meal with protein (aim for about ${Math.round(t.protein / 4)} g per meal).\n- Add complex carbs at dinner, which also helps sleep.\n- Plan a satisfying snack instead of fighting it: ${snack.name}.\n\nToday's target is ${t.kcal.toLocaleString()} kcal.\n[[action:open:meals]]`;
+      const snack = L.mealFor(S.data, today(), 'snack').meal;
+      return `${hi}${c.phase === 'luteal' ? 'cravings in the luteal phase are expected. Your metabolism runs slightly higher, so you genuinely need about 100-200 more calories. That is already built into your target.' : 'cravings usually mean a meal was light on protein or fiber, or sleep was short.'}\n\nTry this:\n- Lead every meal with protein (about ${Math.round(t.protein / 4)} g per meal).\n- Add complex carbs at dinner, which also helps sleep.\n- Plan a satisfying snack instead of fighting it: ${snack.name}.\n\nToday's target is ${t.kcal.toLocaleString()} kcal.\n[[action:open:meals]]`;
     }
     if (has('protein')) {
+      const had = L.proteinFor(S.data, todayKey());
       const favs = (p.favorites || []).slice(0, 4).join(', ');
-      return `${hi}your protein target is ${t.protein} g a day (about ${goalOf(p).protein} g per kg for your goal${cyc.phase === 'luteal' ? ', plus a little extra this phase' : ''}).\n\nSplit it across 4 feedings of about ${Math.round(t.protein / 4)} g:\n- Breakfast: eggs, Greek yogurt or a protein smoothie\n- Lunch and dinner: a palm-and-a-half of lean protein\n- Snack: cottage cheese, edamame or a shake\n${favs ? `\nBuild around foods you already like: ${favs}.` : ''}\n[[action:open:meals]]`;
+      return `${hi}your protein target is ${t.protein} g a day. ${had ? `You have logged ${had} g so far today.` : ''}\n\nSplit it across 4 feedings of about ${Math.round(t.protein / 4)} g:\n- Breakfast: eggs, Greek yogurt or a protein smoothie\n- Lunch and dinner: a palm-and-a-half of lean protein\n- Snack: cottage cheese, edamame or a shake\n${favs ? `\nBuild around foods you already like: ${favs}.` : ''}\n[[action:open:meals]]`;
     }
     if (has('water', 'hydrat', 'drink')) {
       const had = S.data.water[todayKey()] || 0;
-      return `${hi}aim for ${t.water} L today. You have logged ${(had / 1000).toFixed(1)} L so far. ${cyc.phase === 'luteal' || cyc.phase === 'menstrual' ? 'I added a little extra because this phase raises your needs.' : ''}\n\nEasy wins: a large glass on waking, one with every meal, and 500 ml around training. Add electrolytes on heavy sweat days.\n[[action:log_water:500]]`;
+      return `${hi}aim for ${t.water} L today. You have logged ${(had / 1000).toFixed(1)} L so far.\n\nEasy wins: a large glass on waking, one with every meal, and 500 ml around training. Add electrolytes on heavy sweat days.\n[[action:log_water:500]]`;
     }
     if (has('step', 'walk', 'cardio', 'neat')) {
-      return `${hi}today's step target is ${t.steps.toLocaleString()}. You hit it on ${stepDays} of the last 14 days.\n\nSteps are the most underrated fat-loss and recovery tool: low stress on the body and easy to recover from. Ideas:\n- A 10-minute walk after each meal (about 3,000 steps)\n- Walking calls or meetings\n- Park further away and take the stairs\n\nIn your ${ph.name.toLowerCase()} phase I ${cyc.phase === 'menstrual' ? 'lowered the target slightly, so keep it gentle.' : cyc.phase === 'luteal' ? 'kept the target steady. Steady walking helps with bloating and mood.' : 'raised the target because your energy supports it.'}`;
+      return `${hi}today's step target is ${t.steps.toLocaleString()}. You hit it on ${stepDays} of the last 14 days.\n\nSteps are the most underrated fat-loss and recovery tool: low stress on the body and easy to recover from.\n- A 10-minute walk after each meal (about 3,000 steps)\n- Walking calls or meetings\n- Park further away and take the stairs${S.data.plan.stepBonus ? `\n\nYour weekly check-in set your target ${S.data.plan.stepBonus > 0 ? 'up' : 'down'} by ${Math.abs(S.data.plan.stepBonus).toLocaleString()} steps.` : ''}`;
     }
     if (has('glute', 'booty', 'bum', 'butt', 'hip thrust')) {
-      return `${hi}for glute growth, focus on three things:\n\n- Progressive overload on hip thrusts, RDLs and split squats. Add load or reps every week in your follicular and ovulation phases.\n- 10-20 hard sets for glutes per week, spread over 2-3 sessions.\n- Eat enough: ${t.protein} g of protein and do not under-eat calories.\n\n${cyc.phase === 'ovulation' || cyc.phase === 'follicular' ? 'You are in a high-output phase, so this is the time to push your glute day.' : 'You are in a lower-output phase, so keep the weights steady and focus on mind-muscle connection.'}${cyc.phase !== 'menstrual' ? '\n[[action:swap_workout:o-glute]]' : ''}`;
+      return `${hi}for glute growth, focus on three things:\n\n- Progressive overload on hip thrusts, RDLs and split squats. I suggest your exact weights each session.\n- 10-20 hard sets for glutes per week, spread over 2-3 sessions.\n- Eat enough: ${t.protein} g of protein and do not under-eat calories.\n\n${c.phase === 'ovulation' || c.phase === 'follicular' ? 'You are in a high-output phase, so this is the time to push your glute day.' : 'Keep the weights steady and focus on the mind-muscle connection.'}${c.phase !== 'menstrual' ? '\n[[action:swap_workout:o-glute]]' : ''}`;
     }
     if (has('sleep', 'insomnia', 'rest day', 'recover')) {
-      return `${hi}recovery is where the results happen. Aim for 7-9 hours.\n\n- Keep a consistent wake time, even on weekends\n- Get daylight within an hour of waking\n- Have complex carbs and magnesium at dinner${cyc.phase === 'luteal' ? ' (especially now, when progesterone raises body temperature)' : ''}\n- Keep a cool, dark room and no screens for the last 30 minutes\n\nOn a poor-sleep day, lower the weights by about 10% instead of skipping.`;
+      return `${hi}recovery is where the results happen. Aim for 7-9 hours.\n\n- Keep a consistent wake time, even on weekends\n- Get daylight within an hour of waking\n- Have complex carbs and magnesium at dinner${c.phase === 'luteal' ? ' (especially now, when progesterone raises body temperature)' : ''}\n- Keep a cool, dark room and no screens for the last 30 minutes\n\nOn a poor-sleep day, lower the weights by about 10% instead of skipping.`;
     }
     if (has('skip', 'miss', 'motivat', 'lazy', 'cant be bothered', "can't be bothered", 'give up', 'quit')) {
-      return `${hi}motivation comes and goes, and that is normal. Systems are what keep you going. Here is the deal: do the first 10 minutes of ${wk.name}. If you still want to stop after that, stop, and it still counts.\n\nYou have trained ${recent} time${recent === 1 ? '' : 's'} in the last two weeks. ${recent >= 6 ? 'That is real consistency, so be proud of it.' : 'Let us aim for 3 sessions this week, plus your steps.'}\n[[action:open:workouts]]`;
+      const st = L.streak(S.data);
+      return `${hi}motivation comes and goes, and that is normal. Systems are what keep you going. Here is the deal: do the first 10 minutes of ${wk.name}. If you still want to stop after that, stop, and it still counts.\n\n${st.count ? `You are on a ${st.count}-day streak. Walking or a check-in keeps it alive today.` : `You have trained ${plural(recent, 'time')} in the last two weeks.`}\n[[action:open:workouts]]`;
     }
-    if (has('plateau', 'stuck', 'not working', 'no progress', 'on track', 'progress')) {
-      const ws = S.data.checkins.slice(-6);
-      const change = ws.length > 1 ? (ws[ws.length - 1].kg - ws[0].kg).toFixed(1) : null;
-      return `${hi}here is what your data says:\n\n- Workouts in the last 14 days: ${recent}\n- Days hitting your step target: ${stepDays} of 14\n${change !== null ? `- Weight change over your last ${ws.length} check-ins: ${change > 0 ? '+' : ''}${change} kg\n` : '- No weight check-ins yet. Add one in Progress.\n'}\nBefore changing anything, lock in the basics for two weeks: 3-4 sessions a week, ${t.steps.toLocaleString()} steps and ${t.protein} g of protein. If you are still stuck, ${p.goal === 'lose' ? 'we reduce intake by about 100-150 kcal' : 'we add a set to your main lifts'}. Remember that weight in your luteal phase often reads higher because of water retention.\n[[action:open:progress]]`;
+    if (has('plateau', 'stuck', 'not working', 'no progress', 'on track', 'progress', 'week')) {
+      const s = L.weeklyStats(S.data);
+      return `${hi}here is your last 7 days:\n\n- Sessions: ${s.sessions} of ${s.planned} planned\n- Step target hit: ${s.stepDays} of 7 days\n${s.readinessAvg != null ? `- Average readiness: ${s.readinessAvg}/100\n` : ''}${s.weightChange != null ? `- Weight trend: ${s.weightChange > 0 ? '+' : ''}${s.weightChange.toFixed(2)} kg a week\n` : '- No weight trend yet. Add check-ins in Progress.\n'}\nYour weekly check-in turns this into concrete changes to next week's plan.\n[[action:open:insights]]`;
     }
     if (has('lose', 'fat', 'weight', 'scale', 'lean', 'deficit')) {
       return `${hi}sustainable fat loss looks like this:\n\n- A moderate deficit. Your target of ${t.kcal.toLocaleString()} kcal already accounts for that, and I never go below what your body needs to function.\n- High protein (${t.protein} g) and lifting to keep your muscle.\n- Steps: ${t.steps.toLocaleString()} a day.\n- Judge progress across a full cycle, not day to day. Luteal water retention can hide fat loss for a week.`;
     }
     if (has('muscle', 'build', 'gain', 'tone', 'bigger', 'shape', 'stronger', 'strength')) {
-      return `${hi}building muscle comes down to progressive overload plus enough food.\n\n- Track your main lifts and beat last time by a rep or a little weight, especially in the follicular and ovulation phases.\n- Train each muscle about twice a week.\n- Eat ${t.kcal.toLocaleString()} kcal with ${t.protein} g of protein.\n- In the luteal and menstrual phases, hold the weights and focus on quality reps. That is still progress.\n\nToday's session is ${wk.name}.\n[[action:open:workouts]]`;
+      const sbp = L.strengthByPhase(S.data.workouts);
+      return `${hi}building muscle comes down to progressive overload plus enough food.\n\n- I suggest your weight for every main lift based on your last session.\n- Train each muscle about twice a week.\n- Eat ${t.kcal.toLocaleString()} kcal with ${t.protein} g of protein.\n${sbp ? `\nFrom your logs: you lift about ${Math.round(sbp.diff)}% more in your ${phaseName(sbp.best).toLowerCase()} phase than your ${phaseName(sbp.low).toLowerCase()} phase. Plan your heaviest work there.` : ''}\n[[action:open:workouts]]`;
     }
-    if (has('meal', 'eat', 'food', 'breakfast', 'lunch', 'dinner', 'recipe', 'diet')) {
-      const b = mealFor(cyc.phase, 'breakfast').meal, l = mealFor(cyc.phase, 'lunch').meal, d = mealFor(cyc.phase, 'dinner').meal;
-      return `${hi}today's ${ph.name.toLowerCase()}-phase plan:\n\n- Breakfast: ${b.name}\n- Lunch: ${l.name}\n- Dinner: ${d.name}\n\nFocus this phase: ${ph.nutrition}\n[[action:open:meals]]`;
+    if (has('meal', 'eat', 'food', 'breakfast', 'lunch', 'dinner', 'recipe', 'diet', 'grocer', 'shop')) {
+      const pick = (s) => L.mealFor(S.data, today(), s).meal.name;
+      return `${hi}today's ${ph.name.toLowerCase()} plan:\n\n- Breakfast: ${pick('breakfast')}\n- Lunch: ${pick('lunch')}\n- Dinner: ${pick('dinner')}\n\nFocus: ${ph.nutrition} Your grocery list for the week is in the Meals tab.\n[[action:open:meals]]`;
     }
     if (has('workout', 'train', 'session', 'gym', 'exercise', 'lift', 'today')) {
-      return `${hi}today is ${wk.name} (${wk.minutes} min, ${wk.intensity.toLowerCase()} intensity). ${wk.summary}\n\nWhy it fits: ${ph.training}\n\nIf you are not feeling it, I can swap to something lighter.\n[[action:open:workouts]]\n[[action:swap_workout:${lighter}]]`;
+      return `${hi}today is ${wk.name} (${wk.minutes} min, ${wk.intensity.toLowerCase()} intensity). ${wk.summary}\n\nWhy it fits: ${ph.training}${ready != null && ready < 45 ? `\n\nYour readiness is ${ready}/100 today, so I would go lighter.` : ''}\n[[action:open:workouts]]\n[[action:swap_workout:${lighter}]]`;
     }
-    if (has('phase', 'cycle', 'period', 'ovulat', 'luteal', 'follicular', 'menstrual', 'hormone')) {
-      return `${hi}you are on day ${cyc.day} of ${cyc.len}, in your ${ph.name.toLowerCase()} phase. ${ph.hormones}\n\n- Training: ${ph.training}\n- Nutrition: ${ph.nutrition}\n\nNext up: ${D.PHASES[cyc.next].name} in ${cyc.daysToNext} day${cyc.daysToNext === 1 ? '' : 's'}.`;
+    if (has('phase', 'cycle', 'period', 'ovulat', 'luteal', 'follicular', 'menstrual', 'hormone', 'late')) {
+      const learned = L.learnCycle(S.data.periods);
+      if (c.steady) return `${hi}your plan is in steady mode, so it follows a weekly rhythm and your daily readiness rather than cycle phases. ${ph.hormones}`;
+      return `${hi}${phaseLine(c)}. ${ph.hormones}\n\n- Training: ${ph.training}\n- Nutrition: ${ph.nutrition}\n\n${learned ? `I predict your cycle from your last ${plural(learned.samples, 'cycle')} (average ${learned.length} days, range ${learned.min}-${learned.max}).` : 'Log your next period start and I will start learning your real cycle length.'}`;
     }
-    return `${hi}here is your snapshot for today:\n\n- Phase: ${ph.name}, day ${cyc.day}. ${ph.short}.\n- Workout: ${wk.name}\n- Targets: ${t.protein} g protein, ${t.water} L water, ${t.steps.toLocaleString()} steps\n\nAsk me about training, cravings, protein, steps, plateaus or how to adjust for how you feel today.`;
+    return `${hi}here is your snapshot for today:\n\n- ${phaseLine(c)}. ${ph.short}.\n- Workout: ${wk.name}\n- Targets: ${t.protein} g protein, ${t.water} L water, ${t.steps.toLocaleString()} steps${ready != null ? `\n- Readiness: ${ready}/100` : ''}\n\nAsk me about training weights, cravings, protein, steps, plateaus or how to adjust for how you feel today.`;
   }
 
   async function sendChat(text) {
@@ -385,13 +358,18 @@
   }
   function scrollChat() { requestAnimationFrame(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })); }
 
+  function goTab(tab) {
+    if (tab === 'progress' || tab === 'insights') { S.tab = 'advisor'; S.advisorView = tab; }
+    else if (tab === 'checkin') { openCheckin(); return; }
+    else S.tab = tab;
+    S.modal = null;
+    window.scrollTo(0, 0);
+  }
+
   function runAction(a) {
     if (a.type === 'swap_workout') { S.data.overrides[todayKey()] = a.value; save(); toast(`Today is now ${workoutById(a.value).name}`); }
-    if (a.type === 'log_water') { addWater(a.value); }
-    if (a.type === 'open') {
-      if (a.value === 'progress') { S.tab = 'advisor'; S.advisorView = 'progress'; } else S.tab = a.value;
-      window.scrollTo(0, 0);
-    }
+    if (a.type === 'log_water') addWater(a.value);
+    if (a.type === 'open') goTab(a.value);
     render();
   }
 
@@ -420,7 +398,7 @@
     return html;
   }
 
-  // ---------- photos (IndexedDB, device only) ----------
+  // ---------- photos (IndexedDB, device only, encrypted when a PIN is set) ----------
   let dbPromise = null;
   function db() {
     if (!dbPromise) {
@@ -446,11 +424,27 @@
     });
   }
   async function loadPhotos() {
-    if (isGuest()) { S.photos = []; return; }
+    S.photos = [];
+    if (isGuest() || (S.data.pinHash && !S.vaultUnlocked)) return;
     try {
       const list = await photoTx('readonly', (s) => s.index('owner').getAll(S.session.email));
-      S.photos = (list || []).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.created - a.created));
+      const out = [];
+      for (const rec of list || []) {
+        let data = rec.data || null;
+        if (rec.enc) { try { data = S.photoKey ? await decryptText(S.photoKey, rec.enc) : null; } catch { data = null; } }
+        if (data) out.push({ ...rec, data, enc: undefined });
+      }
+      S.photos = out.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.created - a.created));
     } catch { S.photos = []; }
+  }
+  async function storePhoto(photo) {
+    const rec = { id: photo.id, owner: photo.owner, date: photo.date, created: photo.created, pose: photo.pose, phase: photo.phase };
+    if (S.photoKey) rec.enc = await encryptText(S.photoKey, photo.data);
+    else rec.data = photo.data;
+    await photoTx('readwrite', (s) => s.put(rec));
+  }
+  async function rewriteAllPhotos() {
+    for (const p of S.photos) await storePhoto(p);
   }
   function compressImage(file) {
     return new Promise((resolve, reject) => {
@@ -473,7 +467,7 @@
 
   function localProgressReview() {
     const p = S.data.profile;
-    const t = targets(p, cycleInfo(p));
+    const t = tgt();
     const ws = S.data.checkins.slice(-8);
     const change = ws.length > 1 ? ws[ws.length - 1].kg - ws[0].kg : null;
     const weeks = ws.length > 1 ? Math.max(1, daysBetween(parseKey(ws[0].date), parseKey(ws[ws.length - 1].date)) / 7) : null;
@@ -488,6 +482,7 @@
       else if (goal === 'muscle' || goal === 'glutes') weightOk = perWeek >= -0.1 && perWeek <= 0.4;
       else weightOk = Math.abs(perWeek) <= 0.4;
     }
+    const prs = S.data.prs.filter((x) => daysBetween(parseKey(x.date), today()) < 28).length;
     const habits = (sessions >= 2.5) + (stepPct >= 60);
     const verdict = habits === 2 && weightOk ? 'on_track' : habits >= 1 ? 'progressing' : 'adjust';
     const lines = [
@@ -497,16 +492,17 @@
       `- ${sessions.toFixed(1)} sessions a week over the last 4 weeks`,
       `- Step target hit on ${stepPct}% of the last 14 days`,
       perWeek !== null ? `- Weight trend: ${perWeek > 0 ? '+' : ''}${perWeek.toFixed(2)} kg per week` : '- Add weekly weight check-ins to see your trend',
+      prs ? `- ${plural(prs, 'personal record')} in the last 4 weeks` : '',
       '',
       '### Focus next',
-      sessions < 2.5 ? '- Get to 3 sessions a week' : '- Keep adding small amounts of load to main lifts',
+      sessions < 2.5 ? '- Get to 3 sessions a week' : '- Keep following your suggested weights on main lifts',
       stepPct < 60 ? `- Build up to ${t.steps.toLocaleString()} steps on most days` : '- Keep your steps consistent',
       !weightOk && goal === 'lose' ? '- Trend is flat or too fast. Aim for 0.25-0.75 kg a week' : `- Hit ${t.protein} g protein daily`,
       '',
       '### Next 2 weeks',
       '- Take photos in the same light, pose and cycle phase each time',
       '- Compare photos across the same phase, because luteal bloating is normal',
-    ];
+    ].filter((x) => x !== '');
     return { verdict, text: lines.join('\n'), local: true };
   }
 
@@ -534,6 +530,99 @@
     save();
     render();
   }
+
+  // ---------- weekly check-in ----------
+  function localWeeklyText(stats, result) {
+    const name = firstName(myName());
+    const parts = [];
+    const ratio = stats.planned ? stats.sessions / stats.planned : 1;
+    parts.push(`${name ? `${name}, ` : ''}${ratio >= 1 ? 'you showed up for every planned session this week. That is how results are built.' : ratio >= 0.6 ? `you completed ${stats.sessions} of ${stats.planned} planned sessions. Solid. Consistency beats perfection.` : `you got ${plural(stats.sessions, 'session')} in this week. Let us make next week easier to win.`}`);
+    parts.push(`You averaged ${stats.stepAvg.toLocaleString()} steps and hit your target on ${stats.stepDays} of 7 days.${stats.readinessAvg != null ? ` Average readiness was ${stats.readinessAvg}/100.` : ''}${stats.prs ? ` You set ${plural(stats.prs, 'new personal record')}.` : ''}`);
+    if (result.adjustments.length) parts.push(`For next week I recommend ${result.adjustments.length === 1 ? 'one change' : `${result.adjustments.length} changes`}. Untick anything you do not want.`);
+    else parts.push('No changes needed. Your plan is working, so we keep it.');
+    return parts.join('\n\n');
+  }
+
+  async function runWeekly(answers) {
+    const stats = L.weeklyStats(S.data);
+    const result = L.weeklyAdjust(stats, answers, S.data);
+    S.modal = { type: 'weeklyResult', stats, answers, result, selected: result.adjustments.map(() => true), text: localWeeklyText(stats, result), loading: !!S.ai };
+    render();
+    if (!S.ai) return;
+    try {
+      const r = await fetch('/api/coach', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'chat',
+          context: buildContext(),
+          messages: [{ role: 'user', content: `Write my weekly check-in summary in 80-130 words: celebrate one specific win, name the one thing to focus on, and briefly explain the plan changes below. Do not include any [[action]] lines. Do not list the numbers back as a table.\n\nThis week: ${JSON.stringify(stats)}\nMy answers: ${JSON.stringify(answers)}\nProposed changes: ${JSON.stringify(result.adjustments.map((a) => a.label + ' - ' + a.why))}\nNotes: ${JSON.stringify(result.notes)}` }],
+        }),
+      });
+      if (r.ok && S.modal && S.modal.type === 'weeklyResult') { S.modal.text = extractActions((await r.json()).text).text; }
+    } catch { /* keep local text */ }
+    if (S.modal && S.modal.type === 'weeklyResult') { S.modal.loading = false; render(); }
+  }
+
+  // ---------- share cards ----------
+  async function makeCard(card) {
+    const W = 1080, H = 1350;
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const g = c.getContext('2d');
+    try { await Promise.all([document.fonts.load('900 120px Archivo'), document.fonts.load('700 60px Inter')]); } catch { /* fallback fonts */ }
+    const head = '"Archivo", "Arial Black", Arial, sans-serif';
+    const body = '"Inter", Arial, sans-serif';
+    g.fillStyle = '#F9F7F4'; g.fillRect(0, 0, W, H);
+    g.fillStyle = '#D4845C'; g.fillRect(0, H - 24, W, 24);
+    g.fillStyle = '#2F3720';
+    g.font = `900 110px ${head}`;
+    g.fillText('yours.', 80, 190);
+    g.font = `600 28px ${body}`;
+    g.fillStyle = '#747B66';
+    g.fillText('F O R   Y O U R   B O D Y .', 86, 245);
+    g.fillStyle = '#D4845C';
+    g.font = `700 40px ${body}`;
+    g.fillText(card.eyebrow.toUpperCase(), 80, 520);
+    g.fillStyle = '#2F3720';
+    let size = 190;
+    g.font = `900 ${size}px ${head}`;
+    while (g.measureText(card.big).width > W - 160 && size > 70) { size -= 10; g.font = `900 ${size}px ${head}`; }
+    g.fillText(card.big, 72, 520 + size + 10);
+    g.font = `500 52px ${body}`;
+    const words = card.sub.split(' ');
+    let line = '', y = 520 + size + 110;
+    words.forEach((w) => {
+      if (g.measureText(line + w).width > W - 160) { g.fillText(line.trim(), 80, y); line = ''; y += 68; }
+      line += w + ' ';
+    });
+    g.fillText(line.trim(), 80, y);
+    if (card.foot) {
+      g.font = `600 34px ${body}`;
+      g.fillStyle = '#747B66';
+      g.fillText(card.foot, 80, H - 90);
+    }
+    return c.toDataURL('image/png');
+  }
+  async function openShare(card) {
+    S.modal = { type: 'share', card, url: null };
+    render();
+    S.modal.url = await makeCard(card);
+    render();
+  }
+  async function shareCard() {
+    const url = S.modal && S.modal.url;
+    if (!url) return;
+    const blob = await (await fetch(url)).blob();
+    const file = new File([blob], 'yours-progress.png', { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: 'My YOURS progress' }); return; } catch { /* cancelled */ }
+    }
+    const a = document.createElement('a');
+    a.href = url; a.download = 'yours-progress.png';
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+  const fmtLoad = (w, u) => `${Number(w.toFixed(1))} ${u}`;
 
   // ---------- community (shared on this device) ----------
   function community() {
@@ -576,7 +665,7 @@
     if (!el) { el = document.createElement('div'); el.className = 'toast'; el.setAttribute('role', 'status'); document.body.appendChild(el); }
     el.textContent = msg;
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => el.remove(), 2200);
+    toastTimer = setTimeout(() => el.remove(), 2400);
   }
 
   // ---------- views: welcome + auth ----------
@@ -585,7 +674,7 @@
       <div class="hero">
         <div class="wordmark xl">yours.</div>
         <div class="tagline">For your body.</div>
-        <p class="lead">Coaching that moves with your cycle. Training, food and steps that change with you, every phase.</p>
+        <p class="lead">Coaching that learns your cycle. Training, food and steps that change with you, every phase.</p>
       </div>
       <div class="stack">
         <button class="btn primary block" data-action="start">Get started</button>
@@ -624,24 +713,34 @@
 
   // ---------- onboarding ----------
   const OB_STEPS = 7;
+  function stepValid(step, p) {
+    if (step === 0) return !!p.level;
+    if (step === 1) return !!p.goal;
+    if (step === 2) return p.cycleMode === 'none' || (!!p.periodStart && p.periodStart <= todayKey()) || (p.cycleMode === 'hormonal');
+    if (step === 3) return p.heightCm >= 120 && p.heightCm <= 220 && p.weightKg >= 35 && p.weightKg <= 250 && p.age >= 14 && p.age <= 90;
+    if (step === 4) return !!p.activity;
+    return true;
+  }
+
   function viewOnboarding() {
     const p = S.data.profile;
     const step = S.data.obStep || 0;
     const editing = S.data.editing;
     const opt = (field, o) => `<button type="button" class="option ${p[field] === o.id ? 'selected' : ''}" data-action="ob-pick" data-field="${field}" data-value="${o.id}"><strong>${esc(o.label)}</strong><span>${esc(o.desc)}</span></button>`;
+    const steadyMode = L.STEADY_MODES.includes(p.cycleMode);
     let body = '';
-    let valid = true;
 
     if (step === 0) {
       body = `<h1>What is your fitness level?</h1><p class="muted" style="margin:8px 0 24px">We use this to set your volume and progression.</p><div class="options">${LEVELS.map((o) => opt('level', o)).join('')}</div>`;
-      valid = !!p.level;
     } else if (step === 1) {
       body = `<h1>What is your main goal?</h1><p class="muted" style="margin:8px 0 24px">Your calories, protein and training are built around it.</p><div class="options">${GOALS.map((o) => opt('goal', o)).join('')}</div>`;
-      valid = !!p.goal;
     } else if (step === 2) {
-      body = `<h1>When did your last period start?</h1><p class="muted" style="margin:8px 0 24px">The first day of bleeding. Your best guess is fine, and you can update it any time.</p>
-        <label class="field"><span class="label">Start date</span><input class="input" type="date" data-bind="periodStart" value="${esc(p.periodStart || '')}" max="${todayKey()}"></label>`;
-      valid = !!p.periodStart && p.periodStart <= todayKey();
+      body = `<h1>Your cycle</h1><p class="muted" style="margin:8px 0 20px">Which describes you best? Every body is supported.</p>
+        <div class="chips">${D.CYCLE_MODES.map((m) => `<button type="button" class="chip ${p.cycleMode === m.id ? 'selected' : ''}" data-action="ob-pick" data-field="cycleMode" data-value="${m.id}">${esc(m.label)}</button>`).join('')}</div>
+        <p class="small muted" style="margin-top:10px">${esc((D.CYCLE_MODES.find((m) => m.id === p.cycleMode) || {}).desc || '')}</p>
+        ${p.cycleMode === 'none' ? '<div class="card soft" style="margin-top:20px"><p class="small">Your plan will follow a steady weekly rhythm and your daily check-in instead of cycle phases.</p></div>'
+          : `<label class="field" style="margin-top:22px"><span class="label">${p.cycleMode === 'hormonal' ? 'Start of your last bleed (optional)' : 'When did your last period start?'}</span><input class="input" type="date" data-bind="periodStart" value="${esc(p.periodStart || '')}" max="${todayKey()}"></label>
+             <p class="tiny muted" style="margin-top:8px">${p.cycleMode === 'hormonal' ? 'Hormonal contraception keeps hormones fairly steady, so your plan follows your daily readiness rather than phases.' : 'The first day of bleeding. Your best guess is fine. YOURS learns your real cycle as you log periods.'}</p>`}`;
     } else if (step === 3) {
       const imp = p.units === 'imperial';
       const ft = p.heightCm ? Math.floor(p.heightCm / 30.48) : '';
@@ -655,12 +754,13 @@
           : `<label class="field"><span class="label">Height (cm)</span><input class="input" type="number" inputmode="numeric" data-bind="heightCm" value="${p.heightCm || ''}"></label>
              <label class="field"><span class="label">Weight (kg)</span><input class="input" type="number" inputmode="decimal" step="0.1" data-bind="weightKg" value="${p.weightKg || ''}"></label>`}
         <label class="field" style="margin-top:14px"><span class="label">Age</span><input class="input" type="number" inputmode="numeric" data-bind="age" value="${p.age || ''}"></label>`;
-      valid = p.heightCm >= 120 && p.heightCm <= 220 && p.weightKg >= 35 && p.weightKg <= 250 && p.age >= 14 && p.age <= 90;
     } else if (step === 4) {
       body = `<h1>How active are you day to day?</h1><p class="muted" style="margin:8px 0 24px">Outside of your workouts.</p><div class="options">${ACTIVITY.map((o) => opt('activity', o)).join('')}</div>`;
-      valid = !!p.activity;
     } else if (step === 5) {
-      body = `<h1>Your cycle</h1><p class="muted" style="margin:8px 0 28px">Most cycles are 21-35 days. Not sure? Leave it at 28.</p>
+      body = steadyMode
+        ? `<h1>Your rhythm</h1><p class="muted" style="margin:8px 0 24px">Without a natural cycle to follow, YOURS plans a steady week of strength, conditioning and recovery, and adjusts each day to your check-in.</p>
+           <div class="card soft"><div class="eyebrow">Your week</div><p style="margin-top:8px">Lower strength, upper strength, rest, glutes, upper sculpt, conditioning, rest.</p></div>`
+        : `<h1>Cycle and period length</h1><p class="muted" style="margin:8px 0 28px">Most cycles are 21-35 days. Not sure? Leave it at 28. YOURS replaces this with your real average once you log a couple of periods.</p>
         <div class="card center"><div class="eyebrow">Cycle length</div><div class="big-number" style="margin:10px 0 6px" id="cl-out">${p.cycleLength}</div><div class="muted small">days</div>
         <input class="range" type="range" min="21" max="45" value="${p.cycleLength}" data-bind="cycleLength" data-out="cl-out" style="margin-top:16px"></div>
         <div class="card center"><div class="eyebrow">Period length</div><div class="big-number" style="margin:10px 0 6px" id="pl-out">${p.periodLength}</div><div class="muted small">days</div>
@@ -679,29 +779,30 @@
         <span class="small muted">${step + 1}/${OB_STEPS}</span>
       </div>
       ${body}
-      <div class="ob-foot"><button class="btn primary block" data-action="ob-next" ${valid ? '' : 'disabled'}>${step === OB_STEPS - 1 ? (editing ? 'Save changes' : 'Build my plan') : 'Continue'}</button></div>
+      <div class="ob-foot"><button class="btn primary block" data-action="ob-next" ${stepValid(step, p) ? '' : 'disabled'}>${step === OB_STEPS - 1 ? (editing ? 'Save changes' : 'Build my plan') : 'Continue'}</button></div>
     </div>`;
   }
 
   // ---------- plan reveal ----------
   function viewReveal() {
-    const p = S.data.profile;
-    const cyc = cycleInfo(p);
-    const ph = D.PHASES[cyc.phase];
-    const t = targets(p, cyc);
+    const c = cyc();
+    const ph = D.PHASES[c.phase];
+    const t = tgt(c);
     const wk = todaysWorkout();
     return `<div class="screen no-nav">
       <div class="wordmark sm">yours.</div>
       <div class="eyebrow" style="margin-top:28px">Your plan is ready</div>
-      <h1 style="margin-top:6px">Built for your ${ph.name.toLowerCase()} phase, starting today.</h1>
+      <h1 style="margin-top:6px">${c.steady ? 'Built around your week, starting today.' : `Built for your ${ph.name.toLowerCase()} phase, starting today.`}</h1>
       <div class="card phase-card" style="margin-top:20px">
-        <div class="row" style="gap:16px">${cycleRing(cyc, 96)}<div class="grow"><div class="eyebrow">Day ${cyc.day} of ${cyc.len}</div><div class="phase-name" style="font-size:24px">${ph.name}</div><div class="muted small">${ph.short}</div></div></div>
+        <div class="row" style="gap:16px">${phaseRing(c, 96)}<div class="grow"><div class="eyebrow">${c.steady ? 'Steady mode' : `Day ${c.day} of ${c.len}`}</div><div class="phase-name" style="font-size:24px">${ph.name}</div><div class="muted small">${ph.short}</div></div></div>
         <p class="small" style="margin-top:14px">${esc(ph.training)}</p>
       </div>
       <div class="card workout-hero"><div class="eyebrow muted">Today's workout</div><h2 style="margin-top:4px">${esc(wk.name)}</h2><div class="small muted">${wk.minutes} min · ${esc(wk.focus)}</div></div>
       <div class="stats" style="margin-top:12px">
         ${statTile('Protein', t.protein, 'g')}${statTile('Calories', t.kcal.toLocaleString(), 'kcal')}${statTile('Water', t.water, 'L')}${statTile('Steps', t.steps.toLocaleString(), '')}
       </div>
+      <div class="card soft" style="margin-top:12px"><div class="eyebrow">How YOURS coaches you</div>
+        <ul class="phase-list"><li>Learns your real cycle and energy patterns from daily 20-second check-ins</li><li>Suggests the exact weight for every lift, adjusted for your phase</li><li>Reviews your week every Sunday and adjusts next week's plan</li></ul></div>
       <div class="card" style="margin-top:24px">
         <h2>Save your plan</h2>
         <p class="muted small" style="margin:4px 0 16px">Create a free account to keep your plan and unlock progress photos and the community.</p>
@@ -711,34 +812,46 @@
       <p class="center small" style="margin-top:14px"><button class="link" data-action="go-login">I already have an account</button></p>
     </div>`;
   }
-  const statTile = (label, value, unit) => `<div class="stat"><div class="eyebrow">${label}</div><div class="value">${value}<small>${unit}</small></div></div>`;
+  const statTile = (label, value, unitLabel) => `<div class="stat"><div class="eyebrow">${label}</div><div class="value">${value}<small>${unitLabel}</small></div></div>`;
 
-  // ---------- cycle ring ----------
-  function cycleRing(cyc, size) {
-    const r = 42, c = 2 * Math.PI * r, gap = 1.2;
+  // ---------- rings ----------
+  function phaseRing(c, size) {
+    if (c.steady) return readinessRing(readinessToday(), size);
+    const r = 42, circ = 2 * Math.PI * r, gap = 1.2;
     let offset = 0;
     const arcs = D.PHASE_ORDER.map((p) => {
-      const [a, b] = cyc.ranges[p];
+      const [a, b] = c.ranges[p];
       const days = Math.max(0, b - a + 1);
-      const len = (days / cyc.len) * c;
-      const seg = `<circle cx="50" cy="50" r="${r}" fill="none" stroke="var(--${p})" stroke-width="${p === cyc.phase ? 9 : 5}" stroke-dasharray="${Math.max(0, len - gap)} ${c}" stroke-dashoffset="${-offset}" opacity="${p === cyc.phase ? 1 : 0.35}"/>`;
+      const len = (days / c.len) * circ;
+      const seg = `<circle cx="50" cy="50" r="${r}" fill="none" stroke="var(--${p})" stroke-width="${p === c.phase ? 9 : 5}" stroke-dasharray="${Math.max(0, len - gap)} ${circ}" stroke-dashoffset="${-offset}" opacity="${p === c.phase ? 1 : 0.35}"/>`;
       offset += len;
       return days ? seg : '';
     }).join('');
-    const ang = ((cyc.day - 0.5) / cyc.len) * 2 * Math.PI - Math.PI / 2;
+    const ang = ((Math.min(c.day, c.len) - 0.5) / c.len) * 2 * Math.PI - Math.PI / 2;
     const mx = 50 + r * Math.cos(ang), my = 50 + r * Math.sin(ang);
-    return `<svg class="ring" width="${size}" height="${size}" viewBox="0 0 100 100" role="img" aria-label="Cycle day ${cyc.day} of ${cyc.len}">
+    return `<svg class="ring" width="${size}" height="${size}" viewBox="0 0 100 100" role="img" aria-label="Cycle day ${c.day} of ${c.len}">
       <g transform="rotate(-90 50 50)">${arcs}</g>
       <circle cx="${mx}" cy="${my}" r="5.5" fill="var(--surface)" stroke="var(--text)" stroke-width="2"/>
-      <text x="50" y="49" text-anchor="middle" font-size="22" font-weight="700" fill="var(--text)">${cyc.day}</text>
-      <text x="50" y="63" text-anchor="middle" font-size="8.5" fill="var(--muted)" letter-spacing="1">DAY</text>
+      <text x="50" y="49" text-anchor="middle" font-size="22" font-weight="700" fill="var(--text)">${c.day}</text>
+      <text x="50" y="63" text-anchor="middle" font-size="8.5" fill="var(--muted)" letter-spacing="1">${c.late ? 'LATE' : 'DAY'}</text>
+    </svg>`;
+  }
+  function readinessRing(score, size) {
+    const r = 42, circ = 2 * Math.PI * r;
+    const pct = score == null ? 0 : score / 100;
+    const color = score == null ? 'var(--line)' : score >= 75 ? 'var(--follicular)' : score >= 50 ? 'var(--accent)' : 'var(--menstrual)';
+    return `<svg class="ring" width="${size}" height="${size}" viewBox="0 0 100 100" role="img" aria-label="Readiness ${score == null ? 'not checked in' : score}">
+      <circle cx="50" cy="50" r="${r}" fill="none" stroke="var(--surface-2)" stroke-width="8"/>
+      <circle cx="50" cy="50" r="${r}" fill="none" stroke="${color}" stroke-width="8" stroke-linecap="round" stroke-dasharray="${pct * circ} ${circ}" transform="rotate(-90 50 50)"/>
+      <text x="50" y="50" text-anchor="middle" font-size="24" font-weight="700" fill="var(--text)">${score == null ? '-' : score}</text>
+      <text x="50" y="64" text-anchor="middle" font-size="8" fill="var(--muted)" letter-spacing="1">READY</text>
     </svg>`;
   }
 
   // ---------- home ----------
   function header(title, sub) {
     const name = myName();
-    return `<div class="top"><div><div class="eyebrow">${esc(sub)}</div><h1 style="margin-top:4px">${title}</h1></div>
+    return `<div class="top"><div class="grow"><div class="eyebrow">${esc(sub)}</div><h1 style="margin-top:4px">${title}</h1></div>
       <button class="avatar" data-action="open-settings" aria-label="Profile and settings">${isGuest() ? icon('settings', 18) : esc(initials(name))}</button></div>`;
   }
 
@@ -753,34 +866,76 @@
     return `<div class="banner">${icon('shield', 20)}<div class="grow">You are using YOURS as a guest. Create an account so you do not lose your plan.</div><button class="btn accent xs" data-action="open-signup">Save</button></div>`;
   }
 
+  function checkinCard() {
+    const ci = S.data.daily[todayKey()];
+    if (!ci) {
+      return `<button class="card accent" style="width:100%;text-align:left;margin-top:12px" data-action="open-checkin">
+        <div class="row"><div class="avatar alt sm">${icon('check', 16, 2.4)}</div><div class="grow"><strong>Daily check-in</strong><div class="small muted">20 seconds. Energy, sleep, mood and symptoms tune today's plan.</div></div><span style="transform:rotate(180deg);display:inline-flex">${icon('back', 18)}</span></div></button>`;
+    }
+    const r = L.readiness(ci);
+    return `<div class="card" style="margin-top:12px"><div class="row" style="gap:14px">${readinessRing(r, 64)}<div class="grow"><div class="eyebrow">Readiness</div><strong>${L.readinessLabel(r)}</strong><div class="small muted">${r >= 75 ? 'Green light. Push your main lifts.' : r >= 50 ? 'Train as planned. Listen to your body.' : 'Go lighter today. Movement still counts.'}</div></div><button class="link" data-action="open-checkin">Edit</button></div>
+      ${(ci.symptoms || []).length ? `<div class="chips" style="margin-top:10px">${ci.symptoms.map((s) => `<span class="tag">${esc(s)}</span>`).join('')}</div>` : ''}</div>`;
+  }
+
+  // Proactive suggestions: low readiness or a known low-energy day.
+  function smartSuggestion(c, wk) {
+    if (S.data.overrides[todayKey()] || loggedOn(todayKey()).length || wk.id === 'rest') return '';
+    const hard = ['High', 'Very high'].includes(wk.intensity);
+    const ready = readinessToday();
+    const lighter = workoutById(lighterOption(c));
+    if (ready != null && ready < 45 && wk.intensity !== 'Low' && wk.intensity !== 'Very low') {
+      return `<div class="banner" style="margin-top:12px">${icon('trend', 20)}<div class="grow">Readiness is ${ready} today. I suggest <strong>${esc(lighter.name)}</strong> instead.</div><button class="btn accent xs" data-action="set-today" data-id="${lighter.id}">Swap</button></div>`;
+    }
+    if (!c.steady && hard && pats().dipDays.includes(c.day)) {
+      return `<div class="banner" style="margin-top:12px">${icon('trend', 20)}<div class="grow">Your energy usually dips on day ${c.day}. Want <strong>${esc(lighter.name)}</strong> instead?</div><button class="btn accent xs" data-action="set-today" data-id="${lighter.id}">Swap</button></div>`;
+    }
+    return '';
+  }
+
+  function comingUp(c) {
+    const items = [];
+    if (L.weeklyDue(S.data)) items.push(`<button class="list-item" style="width:100%;text-align:left" data-action="open-weekly">${icon('calendar', 20)}<div class="grow"><strong>Your weekly check-in is ready</strong><div class="small muted">Review the week and update next week's plan</div></div></button>`);
+    if (!c.steady) {
+      if (c.late) items.push(`<button class="list-item" style="width:100%;text-align:left" data-action="log-period-today">${icon('calendar', 20)}<div class="grow"><strong>Period ${plural(c.daysLate, 'day')} later than predicted</strong><div class="small muted">Tap when it starts to keep predictions accurate</div></div></button>`);
+      else if (c.daysToPeriod <= 3) items.push(`<div class="list-item">${icon('calendar', 20)}<div class="grow"><strong>Period expected in ${plural(c.daysToPeriod, 'day')}</strong><div class="small muted">Expect the scale to read higher. That is water, not fat.</div></div></div>`);
+      else if (c.daysToNext <= 2) items.push(`<div class="list-item">${icon('calendar', 20)}<div class="grow"><strong>${phaseName(c.next)} starts ${c.daysToNext === 1 ? 'tomorrow' : `in ${c.daysToNext} days`}</strong><div class="small muted">${esc(D.PHASES[c.next].short)}. ${c.next === 'ovulation' ? 'PR day is planned.' : c.next === 'luteal' ? 'Calories go up about 150 a day.' : ''}</div></div></div>`);
+    }
+    if (!items.length) return '';
+    return `<div class="section-title"><h2>Coming up</h2></div><div class="card">${items.join('')}</div>`;
+  }
+
   function viewHome() {
-    const p = S.data.profile;
-    const cyc = cycleInfo(p);
-    const ph = D.PHASES[cyc.phase];
-    const t = targets(p, cyc);
+    const c = cyc();
+    const ph = D.PHASES[c.phase];
+    const t = tgt(c);
     const wk = todaysWorkout();
     const done = loggedOn(todayKey()).length > 0;
     const steps = S.data.steps[todayKey()] || 0;
     const water = S.data.water[todayKey()] || 0;
+    const protein = L.proteinFor(S.data, todayKey());
     const hour = new Date().getHours();
     const greet = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
     const name = firstName(myName());
+    const st = L.streak(S.data);
     return `<div class="screen">
       ${header(`${greet}${name ? `, ${esc(name)}` : ''}`, fmtDate(today()))}
+      ${st.count >= 2 ? `<button class="tag accent" style="margin:-8px 0 16px;height:30px;gap:6px" data-action="share-streak">${icon('flame', 15)} ${st.count}-day streak${st.todayDone ? '' : ' · keep it alive today'}</button>` : ''}
       ${resumeBanner()}${guestBanner()}
       <div class="card phase-card">
         <div class="row" style="gap:16px">
-          ${cycleRing(cyc, 116)}
+          ${phaseRing(c, 116)}
           <div class="grow">
-            <span class="tag accent">${ph.energy}</span>
+            <span class="tag accent">${c.late ? 'Period late' : ph.energy}</span>
             <div class="phase-name" style="margin-top:8px">${ph.name}</div>
-            <div class="muted small">${ph.short}</div>
-            <div class="small" style="margin-top:8px">${D.PHASES[cyc.next].name} in ${cyc.daysToNext} day${cyc.daysToNext === 1 ? '' : 's'}</div>
+            <div class="muted small">${ph.short}${c.estimate && !c.steady ? ' · estimate' : ''}</div>
+            ${c.steady ? '<div class="small" style="margin-top:8px">Readiness guides today</div>' : c.late ? '<button class="link small" style="margin-top:8px" data-action="log-period-today">My period started</button>' : `<div class="small" style="margin-top:8px">${phaseName(c.next)} in ${plural(c.daysToNext, 'day')}</div>`}
           </div>
         </div>
         <p class="small" style="margin-top:16px">${esc(ph.hormones)}</p>
         <ul class="phase-list">${ph.tips.map((tip) => `<li>${esc(tip)}</li>`).join('')}</ul>
       </div>
+      ${checkinCard()}
+      ${smartSuggestion(c, wk)}
 
       <div class="section-title"><h2>Today's workout</h2><button class="link" data-action="tab" data-tab="workouts">See plan</button></div>
       <div class="card workout-hero">
@@ -790,54 +945,69 @@
         <div class="row" style="margin-top:16px">${done ? `<span class="btn accent sm" style="pointer-events:none">${icon('check', 18)} Completed</span>` : `<button class="btn accent sm" data-action="start-workout" data-id="${wk.id}">Start workout</button>`}<button class="btn sm" style="color:inherit;border:1px solid rgba(255,255,255,0.25)" data-action="view-workout" data-id="${wk.id}">Details</button></div>
       </div>
 
-      <div class="section-title"><h2>Today's targets</h2><span class="small muted">${ph.name} adjusted</span></div>
+      <div class="section-title"><h2>Today's targets</h2><span class="small muted">${c.steady ? 'Steady plan' : `${ph.name} adjusted`}</span></div>
       <div class="stats">
-        <div class="stat"><div class="eyebrow">Protein</div><div class="value">${t.protein}<small>g</small></div><div class="tiny muted" style="margin-top:4px">${Math.round(t.protein / 4)} g x 4 meals</div></div>
+        <div class="stat"><div class="row between"><div class="eyebrow">Protein</div><button class="icon-btn" style="width:30px;height:30px" data-action="log-protein" aria-label="Log protein">${icon('plus', 16)}</button></div>
+          <div class="value">${protein}<small>/ ${t.protein} g</small></div><div class="meter"><div style="width:${clamp((protein / t.protein) * 100, 0, 100)}%"></div></div></div>
         <div class="stat"><div class="eyebrow">Calories</div><div class="value">${t.kcal.toLocaleString()}<small>kcal</small></div><div class="tiny muted" style="margin-top:4px">C ${t.carbs} · F ${t.fat}</div></div>
         <div class="stat"><div class="row between"><div class="eyebrow">Water</div><button class="icon-btn" style="width:30px;height:30px" data-action="water" data-ml="250" aria-label="Add 250 ml">${icon('plus', 16)}</button></div>
           <div class="value">${(water / 1000).toFixed(1)}<small>/ ${t.water} L</small></div><div class="meter"><div style="width:${clamp((water / t.waterMl) * 100, 0, 100)}%"></div></div></div>
         <div class="stat"><div class="row between"><div class="eyebrow">Steps</div><button class="icon-btn" style="width:30px;height:30px" data-action="log-steps" aria-label="Log steps">${icon('plus', 16)}</button></div>
           <div class="value">${steps.toLocaleString()}<small>/ ${round(t.steps / 1000, 0.5)}k</small></div><div class="meter green"><div style="width:${clamp((steps / t.steps) * 100, 0, 100)}%"></div></div></div>
       </div>
+      ${comingUp(c)}
 
       <div class="card accent" style="margin-top:16px">
         <div class="row"><div class="avatar alt sm">${icon('advisor', 16)}</div><div class="grow"><div class="eyebrow">Coach note</div></div></div>
-        <p style="margin-top:10px">${esc(coachNote(cyc, t))}</p>
+        <p style="margin-top:10px">${esc(coachNote(c, t))}</p>
         <button class="link" style="margin-top:10px" data-action="tab" data-tab="advisor">Ask your coach</button>
       </div>
     </div>`;
   }
 
-  function coachNote(cyc, t) {
-    const steps = S.data.steps[dateKey(addDays(today(), -1))] || 0;
-    if (cyc.daysToPeriod <= 2) return `Your period is likely in ${cyc.daysToPeriod} day${cyc.daysToPeriod === 1 ? '' : 's'}. Keep training, keep steps steady, and expect the scale to read a little higher. That is water, not fat.`;
-    if (cyc.phase === 'follicular') return `Estrogen is rising, so this is your strength window. Try to beat last week's numbers on your main lifts by one rep or a small amount of weight.`;
-    if (cyc.phase === 'ovulation') return `Peak-strength days. If a lift feels great, go for a rep PR, but warm up thoroughly and keep your knees tracking over your toes.`;
-    if (cyc.phase === 'menstrual') return `Lower intensity is still progress. Walk, move and eat iron-rich food. You will come back stronger in a few days.`;
-    if (steps && steps < t.steps) return `You were ${(t.steps - steps).toLocaleString()} steps short yesterday. A 15-minute walk after lunch closes most of that gap.`;
+  function coachNote(c, t) {
+    const pt = pats();
+    const loads = todaysLoads();
+    if (c.late) return `Your period is ${plural(c.daysLate, 'day')} later than I predicted. Cycles vary with stress, sleep and training. If it is more than a week late or this keeps happening, check in with a doctor.`;
+    if (!c.steady && c.daysToPeriod <= 2) return `Your period is likely in ${plural(c.daysToPeriod, 'day')}. Keep training, keep steps steady, and expect the scale to read a little higher. That is water, not fat.`;
+    if (loads.length && !loggedOn(todayKey()).length) { const l = loads[0]; return `Today's top lift: ${l.exercise} at ${fmtLoad(l.weight, l.unit)} for ${l.reps} reps. ${l.why}`; }
+    if (pt.insights.length) return `From your check-ins: ${pt.insights[0]}`;
+    if (c.phase === 'follicular') return 'Estrogen is rising, so this is your strength window. Try to beat last week\'s numbers on your main lifts by one rep or a small amount of weight.';
+    if (c.phase === 'ovulation') return 'Peak-strength days. If a lift feels great, go for a rep PR, but warm up thoroughly and keep your knees tracking over your toes.';
+    if (c.phase === 'menstrual') return 'Lower intensity is still progress. Walk, move and eat iron-rich food. You will come back stronger in a few days.';
+    if (c.steady) return 'Check in daily so I can match today\'s session to how you actually feel. Consistency is what wins here.';
     return `Your luteal phase needs about ${t.kcal.toLocaleString()} kcal today, including roughly 150 extra. Eat them on purpose with complex carbs and magnesium-rich foods.`;
   }
 
   // ---------- workouts ----------
-  function exerciseList(wk) {
-    return `<ul class="ex-list">${wk.exercises.map((ex, i) => `<li><span class="ex-num">${i + 1}</span><div class="grow"><div class="row between"><strong>${esc(ex.name)}</strong><span class="small muted">${adjustSets(ex)} x ${esc(ex.reps)}</span></div><div class="small muted">${esc(ex.cue)}${ex.rest !== '-' ? ` · Rest ${esc(ex.rest)}` : ''}</div></div></li>`).join('')}</ul>`;
+  function loadHint(ex) {
+    const s = L.suggestLoad(ex.name, ex.reps, S.data.workouts, { phase: cyc().phase, readiness: readinessToday(), unit: unit() });
+    if (!s) return '';
+    if (s.first) return '<div class="tiny" style="margin-top:4px;color:var(--accent)">First time: pick a weight with 2-3 reps left in the tank</div>';
+    return `<div class="tiny" style="margin-top:4px"><strong style="color:var(--accent)">Today: ${fmtLoad(s.weight, s.unit)} x ${s.reps}</strong> <span class="muted">· last ${fmtLoad(s.last.weight, s.unit)} x ${s.last.reps}</span></div>`;
+  }
+
+  function exerciseList(wk, withLoads) {
+    return `<ul class="ex-list">${wk.exercises.map((ex, i) => `<li><span class="ex-num">${i + 1}</span><div class="grow"><div class="row between"><strong>${esc(ex.name)}</strong><span class="small muted">${adjustSets(ex)} x ${esc(ex.reps)}</span></div><div class="small muted">${esc(ex.cue)}${ex.rest !== '-' ? ` · Rest ${esc(ex.rest)}` : ''}</div>${withLoads ? loadHint(ex) : ''}</div></li>`).join('')}</ul>`;
   }
 
   function viewWorkouts() {
-    const cyc = cycleInfo(S.data.profile);
-    const ph = D.PHASES[cyc.phase];
+    const c = cyc();
+    const ph = D.PHASES[c.phase];
     const wk = todaysWorkout();
     const done = loggedOn(todayKey()).length > 0;
     const days = weekDays();
     const weekKeys = days.map(dateKey);
     const thisWeek = S.data.workouts.filter((w) => weekKeys.includes(w.date)).sort((a, b) => (a.date < b.date ? 1 : -1));
-    const lib = S.libPhase || cyc.phase;
+    const lib = S.libPhase || (c.steady ? 'follicular' : c.phase);
     const levelNote = { beginner: 'Sets are reduced for your level. Leave 2-3 reps in reserve.', intermediate: 'Leave 1-2 reps in reserve on main lifts.', advanced: 'Main lifts include an extra set for your level.' }[S.data.profile.level] || '';
+    const vol = S.data.plan.volume;
     return `<div class="screen">
-      ${header('Workouts', `${ph.name} phase · day ${cyc.day}`)}
+      ${header('Workouts', c.steady ? 'Steady plan' : `${ph.name} phase · day ${c.day}`)}
       ${resumeBanner()}
       <div class="week">${days.map((d) => { const k = dateKey(d); return `<div class="day ${k === todayKey() ? 'today' : ''} ${loggedOn(k).length ? 'done' : ''}"><div class="d">${d.toLocaleDateString(undefined, { weekday: 'narrow' })}</div><div class="n">${d.getDate()}</div><div class="mk"></div></div>`; }).join('')}</div>
-      <p class="small muted" style="margin-top:10px">${thisWeek.length} session${thisWeek.length === 1 ? '' : 's'} logged this week</p>
+      <p class="small muted" style="margin-top:10px">${plural(thisWeek.length, 'session')} logged this week</p>
+      ${smartSuggestion(c, wk)}
 
       <div class="section-title"><h2>Recommended today</h2><span class="tag">${esc(wk.intensity)}</span></div>
       <div class="card">
@@ -846,8 +1016,8 @@
         <p class="small muted" style="margin-top:6px">${esc(wk.summary)}</p>
         <div class="why">${esc(ph.training)}</div>
         <div class="divider"></div>
-        ${exerciseList(wk)}
-        <p class="tiny muted" style="margin-top:8px">${levelNote}</p>
+        ${exerciseList(wk, true)}
+        <p class="tiny muted" style="margin-top:8px">${levelNote}${vol ? ` Your weekly check-in ${vol > 0 ? 'added' : 'removed'} a set on main lifts.` : ''} Suggested weights adjust for your phase and readiness.</p>
         <div class="row" style="margin-top:14px">
           ${done ? `<span class="btn soft block" style="pointer-events:none">${icon('check', 18)} Completed today</span>` : `<button class="btn primary grow" data-action="start-workout" data-id="${wk.id}">Start workout</button>`}
           <button class="btn ghost" data-action="swap-today" aria-label="Choose another workout">${icon('swap', 18)}</button>
@@ -855,19 +1025,25 @@
       </div>
 
       <div class="section-title"><h2>This week</h2><button class="link" data-action="log-other">Log activity</button></div>
-      <div class="card">${thisWeek.length ? thisWeek.map((w) => `<div class="list-item"><div class="ex-num">${icon('check', 14, 2.4)}</div><div class="grow"><strong>${esc(w.name)}</strong><div class="small muted">${fmtDate(parseKey(w.date), { weekday: 'short', month: 'short', day: 'numeric' })} · ${w.minutes} min${w.sets ? ` · ${w.sets} sets` : ''}</div></div></div>`).join('') : '<div class="empty">No sessions logged yet this week. Today is a great day to start.</div>'}</div>
+      <div class="card">${thisWeek.length ? thisWeek.map((w) => `<div class="list-item"><div class="ex-num">${icon('check', 14, 2.4)}</div><div class="grow"><strong>${esc(w.name)}</strong><div class="small muted">${fmtDate(parseKey(w.date), { weekday: 'short', month: 'short', day: 'numeric' })} · ${w.minutes} min${w.sets ? ` · ${w.sets} sets` : ''}</div></div>${(S.data.prs || []).some((p) => p.workoutId === w.id) ? '<span class="tag accent">PR</span>' : ''}</div>`).join('') : '<div class="empty">No sessions logged yet this week. Today is a great day to start.</div>'}</div>
 
       <div class="section-title"><h2>Workout library</h2></div>
-      <div class="chips">${D.PHASE_ORDER.map((p) => `<button class="chip ${lib === p ? 'selected' : ''}" data-action="lib-phase" data-phase="${p}"><span class="dot" style="background:var(--${p})"></span>${D.PHASES[p].name}</button>`).join('')}</div>
+      <div class="chips">${D.PHASE_ORDER.map((p) => `<button class="chip ${lib === p ? 'selected' : ''}" data-action="lib-phase" data-phase="${p}"><span class="dot" style="background:var(--${p})"></span>${phaseName(p)}</button>`).join('')}</div>
       <div class="h-scroll" style="margin-top:14px">${D.WORKOUTS.filter((w) => w.phase === lib).map((w) => `<button class="card flat" style="text-align:left" data-action="view-workout" data-id="${w.id}"><div class="eyebrow">${esc(w.focus)}</div><h3 style="margin-top:4px">${esc(w.name)}</h3><p class="small muted" style="margin-top:4px">${w.minutes} min · ${esc(w.intensity)}</p><p class="small" style="margin-top:8px">${esc(w.summary)}</p></button>`).join('')}</div>
     </div>`;
   }
 
   function startWorkout(id) {
     const wk = workoutById(id);
+    const c = cyc();
+    const u = unit();
     S.data.activeWorkout = {
-      templateId: id, name: wk.name, startedAt: Date.now(),
-      exercises: wk.exercises.map((ex) => ({ name: ex.name, reps: ex.reps, sets: Array.from({ length: adjustSets(ex) }, () => ({ weight: '', reps: '', done: false })) })),
+      templateId: id, name: wk.name, startedAt: Date.now(), unit: u, phase: c.phase,
+      exercises: wk.exercises.map((ex) => {
+        const s = L.suggestLoad(ex.name, ex.reps, S.data.workouts, { phase: c.phase, readiness: readinessToday(), unit: u });
+        const weighted = !!L.parseReps(ex.reps);
+        return { name: ex.name, reps: ex.reps, weighted, suggestion: s && !s.first ? s : null, sets: Array.from({ length: adjustSets(ex) }, () => ({ weight: s && !s.first ? String(s.weight) : '', reps: '', target: s ? s.reps : '', done: false })) };
+      }),
     };
     save();
     S.modal = { type: 'active' };
@@ -884,57 +1060,83 @@
       <div class="progress-bar"><div style="width:${(doneSets / total) * 100}%"></div></div>
       <p class="small muted center" style="margin-top:8px">${doneSets} of ${total} sets</p>
       ${a.exercises.map((ex, ei) => `<div class="card" style="margin-top:12px"><div class="row between"><strong>${esc(ex.name)}</strong><span class="small muted">Target ${esc(ex.reps)}</span></div>
-        <div class="set-row tiny muted" style="margin-top:10px"><span>Set</span><span class="center">kg</span><span class="center">Reps</span><span></span></div>
-        ${ex.sets.map((s, si) => `<div class="set-row"><span class="ex-num">${si + 1}</span><input class="input" type="number" inputmode="decimal" placeholder="-" value="${esc(s.weight)}" data-set="${ei}.${si}.weight"><input class="input" type="number" inputmode="numeric" placeholder="-" value="${esc(s.reps)}" data-set="${ei}.${si}.reps"><button class="check ${s.done ? 'on' : ''}" data-action="toggle-set" data-ei="${ei}" data-si="${si}" aria-label="Mark set done">${icon('check', 18, 2.4)}</button></div>`).join('')}
+        ${ex.suggestion ? `<div class="why" style="margin-top:8px"><strong>${fmtLoad(ex.suggestion.weight, ex.suggestion.unit)} x ${ex.suggestion.reps}</strong> · ${esc(ex.suggestion.reason)}</div>` : ''}
+        <div class="set-row tiny muted" style="margin-top:10px"><span>Set</span><span class="center">${ex.weighted ? a.unit : '-'}</span><span class="center">Reps</span><span></span></div>
+        ${ex.sets.map((s, si) => `<div class="set-row"><span class="ex-num">${si + 1}</span><input class="input" type="number" inputmode="decimal" placeholder="-" value="${esc(s.weight)}" data-set="${ei}.${si}.weight" aria-label="Weight set ${si + 1}"><input class="input" type="number" inputmode="numeric" placeholder="${esc(s.target || '-')}" value="${esc(s.reps)}" data-set="${ei}.${si}.reps" aria-label="Reps set ${si + 1}"><button class="check ${s.done ? 'on' : ''}" data-action="toggle-set" data-ei="${ei}" data-si="${si}" aria-label="Mark set done">${icon('check', 18, 2.4)}</button></div>`).join('')}
       </div>`).join('')}
       <button class="btn primary block" style="margin-top:20px" data-action="finish-workout" ${doneSets ? '' : 'disabled'}>Finish workout</button>
     </div></div>`;
   }
 
+  function finishWorkout() {
+    const a = S.data.activeWorkout;
+    const sets = a.exercises.reduce((n, e) => n + e.sets.filter((s) => s.done).length, 0);
+    const minutes = clamp(Math.round((Date.now() - a.startedAt) / 60000), 5, 240);
+    const record = {
+      id: uid(), date: todayKey(), templateId: a.templateId, name: a.name, minutes, sets, unit: a.unit, phase: a.phase,
+      detail: a.exercises.map((e) => ({ name: e.name, sets: e.sets.filter((s) => s.done).map((s) => ({ weight: Number(s.weight) || 0, reps: Number(s.reps) || 0 })) })).filter((e) => e.sets.length),
+    };
+    const prs = L.detectPRs(record, S.data.workouts).map((p) => ({ ...p, date: record.date, workoutId: record.id }));
+    const volume = record.detail.reduce((n, e) => n + e.sets.reduce((m, s) => m + s.weight * s.reps, 0), 0);
+    S.data.workouts.push(record);
+    S.data.prs.push(...prs);
+    S.data.activeWorkout = null;
+    save();
+    S.modal = { type: 'summary', record, prs, volume };
+    render();
+  }
+
   // ---------- meals ----------
   function viewMeals() {
-    const p = S.data.profile;
-    const cyc = cycleInfo(p);
-    const ph = D.PHASES[cyc.phase];
-    const t = targets(p, cyc);
+    const c = cyc();
+    const ph = D.PHASES[c.phase];
+    const t = tgt(c);
+    const k = todayKey();
     const slots = [['breakfast', 'Breakfast'], ['lunch', 'Lunch'], ['dinner', 'Dinner'], ['snack', 'Snack']];
-    const picks = slots.map(([k]) => mealFor(cyc.phase, k));
+    const picks = slots.map(([s]) => L.mealFor(S.data, today(), s));
     const totalP = picks.reduce((n, x) => n + x.meal.protein, 0);
     const totalK = picks.reduce((n, x) => n + x.meal.kcal, 0);
     const portion = clamp(Math.round((t.kcal / totalK) * 10) / 10, 0.7, 1.6);
+    const eaten = S.data.eaten[k] || {};
+    const had = L.proteinFor(S.data, k);
     return `<div class="screen">
-      ${header('Meals', `${ph.name} phase · ${fmtDate(today(), { month: 'short', day: 'numeric' })}`)}
+      ${header('Meals', `${ph.name} ${c.steady ? 'plan' : 'phase'} · ${fmtDate(today(), { month: 'short', day: 'numeric' })}`)}
       <div class="card soft"><div class="eyebrow">Nutrition focus</div><p style="margin-top:6px">${esc(ph.nutrition)}</p>
         <div class="chips" style="margin-top:12px">${ph.foods.map((f) => `<span class="tag">${esc(f)}</span>`).join('')}</div></div>
-      <div class="stats" style="margin-top:12px">${statTile('Protein target', t.protein, 'g')}${statTile('Calories', t.kcal.toLocaleString(), 'kcal')}</div>
-      <p class="small muted" style="margin-top:10px">This plan gives about ${Math.round(totalP * portion)} g protein at a portion size of x${portion}. ${totalP * portion < t.protein ? `Add a shake or extra protein serving to close the ${Math.round(t.protein - totalP * portion)} g gap.` : 'You hit your protein target.'}</p>
-      ${slots.map(([k, label], i) => { const { meal, count, compromised } = picks[i]; return `
-        <div class="section-title"><h2>${label}</h2>${count > 1 ? `<button class="link row" style="gap:4px" data-action="swap-meal" data-slot="${k}">${icon('swap', 16)} Swap</button>` : ''}</div>
+      <div class="stats" style="margin-top:12px">
+        <div class="stat"><div class="eyebrow">Protein today</div><div class="value">${had}<small>/ ${t.protein} g</small></div><div class="meter"><div style="width:${clamp((had / t.protein) * 100, 0, 100)}%"></div></div></div>
+        ${statTile('Calories', t.kcal.toLocaleString(), 'kcal')}
+      </div>
+      <button class="btn ghost block" style="margin-top:12px" data-action="open-grocery">${icon('list', 18)} Grocery list for the week</button>
+      <p class="small muted" style="margin-top:10px">This plan gives about ${Math.round(totalP * portion)} g protein at a portion size of x${portion}. ${totalP * portion < t.protein ? `Add a shake or an extra protein serving to close the ${Math.round(t.protein - totalP * portion)} g gap.` : 'That covers your protein target.'}</p>
+      ${slots.map(([s, label], i) => { const { meal, count, compromised } = picks[i]; const isEaten = eaten[s] && eaten[s].name === meal.name; return `
+        <div class="section-title"><h2>${label}</h2>${count > 1 && !isEaten ? `<button class="link row" style="gap:4px" data-action="swap-meal" data-slot="${s}">${icon('swap', 16)} Swap</button>` : ''}</div>
         <div class="card meal"><h3>${esc(meal.name)}</h3><p class="small muted">${esc(meal.desc)}</p>
           <div class="macro"><span><strong>${Math.round(meal.protein * portion)} g</strong> protein</span><span><strong>${Math.round(meal.kcal * portion)}</strong> kcal</span></div>
           <div class="why">${esc(meal.why)}</div>
           ${compromised ? '<p class="tiny error">No option fully matches your food filters here. Swap ingredients as needed.</p>' : ''}
+          <button class="btn ${isEaten ? 'soft' : 'ghost'} sm" style="margin-top:8px;align-self:flex-start" data-action="eat-meal" data-slot="${s}" data-name="${esc(meal.name)}" data-protein="${Math.round(meal.protein * portion)}">${isEaten ? `${icon('check', 16, 2.4)} Eaten` : 'Mark as eaten'}</button>
         </div>`; }).join('')}
-      <p class="tiny muted center" style="margin-top:20px">Filtering out: ${esc((p.avoid || []).join(', ') || 'nothing')}. Edit in your profile.</p>
+      <p class="tiny muted center" style="margin-top:20px">Filtering out: ${esc((S.data.profile.avoid || []).join(', ') || 'nothing')}. Edit in your profile.</p>
     </div>`;
   }
 
   // ---------- advisor ----------
-  const PROMPTS = ['What should I train today?', 'I have cramps', 'Help with cravings', 'How much protein?', 'Am I on track?', 'I feel tired', 'Grow my glutes'];
+  const PROMPTS = ['What weight should I lift today?', 'I have cramps', 'Help with cravings', 'How was my week?', 'I feel tired', 'Grow my glutes', 'How much protein?'];
 
   function viewAdvisor() {
-    const cyc = cycleInfo(S.data.profile);
-    return `<div class="screen" ${S.advisorView === 'coach' ? 'style="padding-bottom:calc(var(--nav-h) + 110px)"' : ''}>
+    const c = cyc();
+    const v = S.advisorView;
+    return `<div class="screen" ${v === 'coach' ? 'style="padding-bottom:calc(var(--nav-h) + 110px)"' : ''}>
       ${header('Advisor', S.ai ? 'AI coach · live' : 'Coach · on-device')}
-      <div class="segment" style="margin-bottom:20px"><button class="${S.advisorView === 'coach' ? 'active' : ''}" data-action="advisor-view" data-value="coach">Coach</button><button class="${S.advisorView === 'progress' ? 'active' : ''}" data-action="advisor-view" data-value="progress">Progress</button></div>
-      ${S.advisorView === 'coach' ? viewChat(cyc) : viewProgress()}
+      <div class="segment" style="margin-bottom:20px">${[['coach', 'Coach'], ['insights', 'Insights'], ['progress', 'Progress']].map(([id, label]) => `<button class="${v === id ? 'active' : ''}" data-action="advisor-view" data-value="${id}">${label}</button>`).join('')}</div>
+      ${v === 'coach' ? viewChat(c) : v === 'insights' ? viewInsights(c) : viewProgress()}
     </div>`;
   }
 
-  function viewChat(cyc) {
-    const ph = D.PHASES[cyc.phase];
+  function viewChat(c) {
     const name = firstName(myName());
-    const intro = `${name ? `Hi ${name}. ` : 'Hi. '}I am your YOURS coach. You are on day ${cyc.day}, in your ${ph.name.toLowerCase()} phase. Ask me anything about training, food, steps or recovery and I will adapt it to where you are in your cycle.${S.ai ? '' : '\n\nI am running on this device right now. Connect the live AI coach for open-ended conversation and photo reviews.'}`;
+    const intro = `${name ? `Hi ${name}. ` : 'Hi. '}I am your YOURS coach. ${phaseLine(c)}. Ask me anything about training, weights, food, steps or recovery and I will adapt it to you.${S.ai ? '' : '\n\nI am running on this device right now. Connect the live AI coach for open-ended conversation and photo reviews.'}`;
     const msgs = S.data.chat;
     return `<div class="chat">
       <div class="bubble coach rich">${rich(intro)}</div>
@@ -950,10 +1152,70 @@
     </div></form>`;
   }
 
+  // ---------- insights ----------
+  function bar(label, value, max, color, right) {
+    return `<div style="margin-top:10px"><div class="row between small"><span>${label}</span><strong>${right}</strong></div><div class="meter" style="height:8px"><div style="width:${clamp((value / max) * 100, 2, 100)}%;background:${color}"></div></div></div>`;
+  }
+
+  function viewInsights(c) {
+    const d = S.data;
+    const learned = L.learnCycle(d.periods);
+    const pt = pats();
+    const sbp = L.strengthByPhase(d.workouts);
+    const st = L.streak(d);
+    const due = L.weeklyDue(d);
+    const last = d.reviews[d.reviews.length - 1];
+    const plan = d.plan;
+    const planBits = [];
+    if (plan.volume) planBits.push(`Main lifts ${plan.volume > 0 ? '+1 set' : '-1 set'}`);
+    if (plan.stepBonus) planBits.push(`Steps ${plan.stepBonus > 0 ? '+' : ''}${plan.stepBonus.toLocaleString()}`);
+    if (plan.kcalAdjust) planBits.push(`Calories ${plan.kcalAdjust > 0 ? '+' : ''}${plan.kcalAdjust}`);
+    const days14 = Array.from({ length: 14 }, (_, i) => addDays(today(), i - 13));
+    const checkCount = Object.keys(d.daily).length;
+    const nextPeriod = !c.steady && d.profile.periodStart ? addDays(parseKey(d.profile.periodStart), c.len) : null;
+
+    return `
+      <div class="card ${due ? 'accent' : ''}">
+        <div class="row between"><div class="eyebrow">Weekly check-in</div>${last ? `<span class="tiny muted">Last: ${shortDate(last.date)}</span>` : ''}</div>
+        <h2 style="margin-top:6px">${due ? 'Your week is ready to review' : last ? 'Plan updated' : 'Every Sunday'}</h2>
+        <p class="small muted" style="margin-top:4px">${due ? 'Three quick questions, then I adjust next week\'s training, steps and calories.' : last ? esc(last.text.split('\n')[0]).slice(0, 180) : 'I review your sessions, steps, readiness and weight trend and adjust next week\'s plan.'}</p>
+        ${planBits.length ? `<div class="chips" style="margin-top:10px">${planBits.map((b) => `<span class="tag">${esc(b)}</span>`).join('')}</div>` : ''}
+        <button class="btn ${due ? 'primary' : 'ghost'} sm" style="margin-top:14px" data-action="open-weekly">${due ? 'Start check-in' : 'Run it now'}</button>
+      </div>
+
+      <div class="section-title"><h2>Readiness</h2><button class="link" data-action="open-checkin">${d.daily[todayKey()] ? 'Edit today' : 'Check in'}</button></div>
+      <div class="card">
+        <div style="display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:80px">${days14.map((day) => { const r = L.readiness(d.daily[dateKey(day)]); return `<div title="${shortDate(dateKey(day))}: ${r == null ? 'no check-in' : r}" style="height:${r == null ? 4 : Math.max(6, r * 0.8)}px;border-radius:4px;background:${r == null ? 'var(--surface-2)' : r >= 75 ? 'var(--follicular)' : r >= 50 ? 'var(--accent)' : 'var(--menstrual)'}"></div>`; }).join('')}</div>
+        <div class="row between tiny muted" style="margin-top:6px"><span>${shortDate(dateKey(days14[0]))}</span><span>Today</span></div>
+      </div>
+
+      ${c.steady ? '' : `<div class="section-title"><h2>Your cycle</h2><button class="link" data-action="open-period">Log period</button></div>
+      <div class="card">
+        ${learned ? `<div class="row" style="gap:16px"><div class="big-number" style="font-size:44px">${learned.length}</div><div class="grow"><strong>day average cycle</strong><div class="small muted">Learned from ${plural(learned.samples, 'cycle')} · range ${learned.min}-${learned.max} days · ${learned.regular ? 'regular' : 'variable'}</div></div></div>`
+          : `<p class="small">Log your next period start and YOURS will start learning your real cycle length. Until then, predictions use ${d.profile.cycleLength} days.</p>`}
+        ${nextPeriod ? `<div class="divider"></div><div class="row between small"><span class="muted">Next period predicted</span><strong>${c.late ? `${plural(c.daysLate, 'day')} late` : fmtDate(nextPeriod, { weekday: 'short', month: 'short', day: 'numeric' })}</strong></div>` : ''}
+        ${d.periods.length ? `<div class="row between small" style="margin-top:6px"><span class="muted">Logged periods</span><span>${d.periods.slice(-4).reverse().map(shortDate).join(', ')}</span></div>` : ''}
+      </div>`}
+
+      <div class="section-title"><h2>Your patterns</h2></div>
+      <div class="card">${pt.insights.length ? `<ul class="phase-list" style="margin-top:0">${pt.insights.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>`
+        : `<p class="small">Check in daily and YOURS will spot your patterns: when your energy dips, when cramps or cravings show up, and how it changes across your cycle.</p><div class="meter" style="margin-top:12px"><div style="width:${clamp((checkCount / 14) * 100, 4, 100)}%"></div></div><p class="tiny muted" style="margin-top:6px">${checkCount} of 14 check-ins to unlock your first patterns</p>`}</div>
+
+      <div class="section-title"><h2>Strength by phase</h2>${sbp ? `<button class="link" data-action="share-strength">Share</button>` : ''}</div>
+      <div class="card">${sbp ? `<p><strong>You lift about ${Math.round(sbp.diff)}% more in your ${phaseName(sbp.best).toLowerCase()} phase than your ${phaseName(sbp.low).toLowerCase()} phase.</strong></p>
+          ${D.PHASE_ORDER.filter((p) => sbp.byPhase[p]).map((p) => bar(phaseName(p), 100 + sbp.byPhase[p].pct, 100 + Math.max(...Object.values(sbp.byPhase).map((x) => x.pct)), `var(--${p})`, `${sbp.byPhase[p].pct >= 0 ? '+' : ''}${sbp.byPhase[p].pct.toFixed(1)}%`)).join('')}
+          <p class="tiny muted" style="margin-top:10px">Estimated strength relative to your average on the same lifts. Includes the lighter loads your plan schedules in some phases.</p>`
+        : '<p class="small">Log weights on your main lifts across a full cycle and YOURS will show where your strength peaks, so you can plan your heaviest work there.</p>'}</div>
+
+      <div class="section-title"><h2>Streak</h2>${st.count >= 2 ? '<button class="link" data-action="share-streak">Share</button>' : ''}</div>
+      <div class="card row" style="gap:14px"><div class="avatar alt">${icon('flame', 20)}</div><div class="grow"><strong>${plural(st.count, 'day')}</strong><div class="small muted">Training, a check-in, or 60% of your steps all count. One missed day a week is forgiven, because rest is part of the plan.</div></div></div>
+      ${d.prs.length ? `<div class="section-title"><h2>Personal records</h2></div><div class="card">${d.prs.slice(-5).reverse().map((p) => `<div class="list-item"><div class="grow"><strong>${esc(p.name)}</strong><div class="small muted">${shortDate(p.date)}</div></div><strong>${fmtLoad(p.weight, p.unit)} x ${p.reps}</strong><button class="icon-btn" style="width:32px;height:32px" data-action="share-pr" data-date="${p.date}" data-name="${esc(p.name)}" aria-label="Share">${icon('share', 15)}</button></div>`).join('')}</div>` : ''}`;
+  }
+
   // ---------- progress ----------
   function viewProgress() {
     if (isGuest()) {
-      return `<div class="card lock">${icon('lock', 32)}<h2 style="margin-top:14px">Progress photos need an account</h2><p class="muted small" style="margin:8px 0 18px">Photos are private, stored only on this device and protected by your optional PIN. Create a free account to start your photo vault.</p><button class="btn primary" data-action="open-signup" data-reason="progress">Create account</button></div>`;
+      return `<div class="card lock">${icon('lock', 32)}<h2 style="margin-top:14px">Progress photos need an account</h2><p class="muted small" style="margin:8px 0 18px">Photos are private, stored only on this device and encrypted with your PIN. Create a free account to start your photo vault.</p><button class="btn primary" data-action="open-signup" data-reason="progress">Create account</button></div>`;
     }
     if (S.data.pinHash && !S.vaultUnlocked) {
       return `<form class="card lock" data-form="unlock">${icon('lock', 32)}<h2 style="margin-top:14px">Photo vault locked</h2><p class="muted small" style="margin:8px 0 18px">Enter your 4-digit PIN.</p>
@@ -966,25 +1228,27 @@
     const ws = S.data.checkins.slice(-12);
     const review = S.data.lastReview;
     const verdictLabel = { on_track: 'On track', progressing: 'Making progress', adjust: 'Needs adjustment' };
+    const encrypted = !!S.photoKey;
     return `
-      <div class="banner" style="background:var(--green-soft)">${icon('shield', 20)}<div class="grow">Photos stay on this device. They are only sent to your coach when you tap Analyze, and they are not stored anywhere else.</div></div>
+      <div class="banner" style="background:var(--green-soft)">${icon('shield', 20)}<div class="grow">${encrypted ? 'Photos are encrypted with your PIN and' : 'Photos'} stay on this device. They are only sent to your coach when you tap Analyze, and are not stored anywhere else.${encrypted ? '' : ' Set a PIN to encrypt them.'}</div></div>
       <div class="row" style="gap:10px">
         <label class="btn primary grow" style="cursor:pointer">${icon('camera', 18)} Add photo<input type="file" accept="image/*" data-upload hidden></label>
         <select class="select" style="width:auto;height:50px" data-bind-ui="pose" aria-label="Pose">${['front', 'side', 'back'].map((x) => `<option value="${x}" ${S.pose === x ? 'selected' : ''}>${x[0].toUpperCase() + x.slice(1)}</option>`).join('')}</select>
       </div>
+      <p class="tiny muted" style="margin-top:8px">For fair comparisons: same light, same outfit, same time of day, and ideally the same cycle phase${cyc().steady ? '' : ` (you are in ${phaseName(cyc().phase).toLowerCase()} now)`}.</p>
 
-      <div class="section-title"><h2>Photo vault</h2><span class="small muted">${S.photos.length} photo${S.photos.length === 1 ? '' : 's'}</span></div>
+      <div class="section-title"><h2>Photo vault</h2><span class="small muted">${plural(S.photos.length, 'photo')}</span></div>
       ${S.photos.length ? `<p class="small muted" style="margin:-4px 0 10px">Tap to reveal. Select up to 4 to analyze or compare.</p>
         <div class="photo-grid">${S.photos.map((ph) => { const sel = S.compare.indexOf(ph.id); return `<div class="photo ${S.revealed[ph.id] ? '' : 'blur'} ${sel > -1 ? 'selected' : ''}">
           <button style="display:block;width:100%;height:100%" data-action="photo-tap" data-id="${ph.id}" aria-label="${S.revealed[ph.id] ? 'Select photo' : 'Reveal photo'}"><img src="${ph.data}" alt="${esc(ph.pose)} progress photo from ${esc(ph.date)}"></button>
           ${sel > -1 ? `<span class="sel">${sel + 1}</span>` : ''}
-          <div class="meta">${esc(ph.pose)} · ${fmtDate(parseKey(ph.date), { month: 'short', day: 'numeric' })}</div></div>`; }).join('')}</div>
-        <div class="row" style="margin-top:12px"><button class="btn accent grow" data-action="analyze" ${S.analyzing ? 'disabled' : ''}>${S.analyzing ? 'Analyzing...' : S.compare.length ? `Analyze ${S.compare.length} photo${S.compare.length === 1 ? '' : 's'}` : 'Analyze my data'}</button>${S.compare.length ? `<button class="btn ghost" data-action="delete-photos" aria-label="Delete selected">${icon('trash', 18)}</button>` : ''}</div>`
-        : `<div class="card empty">Take your first photo in good light, front, side and back, wearing the same outfit each time. Retake every 2-4 weeks in the same cycle phase.</div>
+          <div class="meta">${esc(ph.pose)} · ${shortDate(ph.date)}${ph.phase && ph.phase !== 'steady' ? ` · ${esc(phaseName(ph.phase))}` : ''}</div></div>`; }).join('')}</div>
+        <div class="row" style="margin-top:12px"><button class="btn accent grow" data-action="analyze" ${S.analyzing ? 'disabled' : ''}>${S.analyzing ? 'Analyzing...' : S.compare.length ? `Analyze ${plural(S.compare.length, 'photo')}` : 'Analyze my data'}</button>${S.compare.length ? `<button class="btn ghost" data-action="delete-photos" aria-label="Delete selected">${icon('trash', 18)}</button>` : ''}</div>`
+        : `<div class="card empty">Take your first photos front, side and back. Retake every 2-4 weeks in the same cycle phase.</div>
            <button class="btn accent block" style="margin-top:12px" data-action="analyze" ${S.analyzing ? 'disabled' : ''}>${S.analyzing ? 'Analyzing...' : 'Analyze my data'}</button>`}
       ${S.compare.length === 2 ? compareView() : ''}
 
-      ${review ? `<div class="card" style="margin-top:16px"><div class="row between"><span class="verdict ${review.verdict}">${verdictLabel[review.verdict] || 'Review'}</span><span class="tiny muted">${fmtDate(parseKey(review.date), { month: 'short', day: 'numeric' })}</span></div>
+      ${review ? `<div class="card" style="margin-top:16px"><div class="row between"><span class="verdict ${review.verdict}">${verdictLabel[review.verdict] || 'Review'}</span><span class="tiny muted">${shortDate(review.date)}</span></div>
         <div class="rich small" style="margin-top:12px">${rich(review.text)}</div>
         ${review.local ? `<p class="tiny muted" style="margin-top:10px">Based on your logged data. ${S.ai ? '' : 'Visual photo review needs the live AI coach.'}</p>` : ''}</div>` : ''}
 
@@ -995,7 +1259,7 @@
         ${ws.slice(-4).reverse().map((w) => `<div class="list-item"><div class="grow small">${fmtDate(parseKey(w.date), { weekday: 'short', month: 'short', day: 'numeric' })}</div><strong>${imp ? Math.round(w.kg * 2.20462 * 10) / 10 + ' lb' : w.kg + ' kg'}</strong></div>`).join('')}
         <p class="tiny muted" style="margin-top:8px">Weigh in at the same time of day. Compare across the same cycle phase.</p>
       </div>
-      <div class="row" style="margin-top:16px"><button class="btn ghost sm grow" data-action="pin-settings">${icon('lock', 16)} ${S.data.pinHash ? 'Change or remove PIN' : 'Set a vault PIN'}</button>${S.data.pinHash ? '<button class="btn ghost sm" data-action="lock-vault">Lock</button>' : ''}</div>`;
+      <div class="row" style="margin-top:16px"><button class="btn ghost sm grow" data-action="pin-settings">${icon('lock', 16)} ${S.data.pinHash ? 'Change or remove PIN' : 'Set a PIN and encrypt photos'}</button>${S.data.pinHash ? '<button class="btn ghost sm" data-action="lock-vault">Lock</button>' : ''}</div>`;
   }
 
   function compareView() {
@@ -1004,7 +1268,7 @@
     const [older, newer] = a.date <= b.date ? [a, b] : [b, a];
     return `<div class="card" style="margin-top:12px"><div class="eyebrow">Side by side</div><div class="row" style="margin-top:10px;align-items:flex-start">
       ${[older, newer].map((p) => `<div class="grow"><div class="photo" style="border:none"><img src="${p.data}" alt="${esc(p.pose)} photo from ${esc(p.date)}"></div><div class="tiny muted center" style="margin-top:6px">${fmtDate(parseKey(p.date), { month: 'short', day: 'numeric', year: 'numeric' })}</div></div>`).join('')}
-    </div><p class="small muted center" style="margin-top:8px">${daysBetween(parseKey(older.date), parseKey(newer.date))} days apart</p></div>`;
+    </div><p class="small muted center" style="margin-top:8px">${plural(daysBetween(parseKey(older.date), parseKey(newer.date)), 'day')} apart</p></div>`;
   }
 
   function sparkline(values) {
@@ -1027,7 +1291,6 @@
   function viewFeed() {
     const c = community();
     const me = meId();
-    const cyc = cycleInfo(S.data.profile);
     const posts = c.posts.slice().sort((a, b) => b.ts - a.ts);
     return `<form class="card" data-form="post">
         <textarea class="textarea" name="text" placeholder="${isGuest() ? 'Create an account to share your wins' : 'Share a win, a question or a check-in'}" maxlength="600" style="border:none;padding:0;min-height:64px;background:transparent"></textarea>
@@ -1035,13 +1298,13 @@
         <button class="btn accent sm" type="submit">Post</button></div>
       </form>
       ${posts.map((p) => { const liked = me && p.likedBy.includes(me); const open = S.openComments[p.id]; return `<div class="card post">
-        <div class="head"><div class="avatar sm ${p.author.startsWith('u:') ? '' : 'alt'}">${esc(initials(memberName(p.author)))}</div><div class="grow"><strong>${esc(memberName(p.author))}</strong><div class="tiny muted">${timeAgo(p.ts)}${p.phase ? ` · ${esc(D.PHASES[p.phase] ? D.PHASES[p.phase].name : '')} phase` : ''}</div></div><span class="tag ${p.tag === 'Win' ? 'accent' : ''}">${esc(p.tag)}</span></div>
+        <div class="head"><div class="avatar sm ${p.author.startsWith('u:') ? '' : 'alt'}">${esc(initials(memberName(p.author)))}</div><div class="grow"><strong>${esc(memberName(p.author))}</strong><div class="tiny muted">${timeAgo(p.ts)}${p.phase && D.PHASES[p.phase] && p.phase !== 'steady' ? ` · ${esc(phaseName(p.phase))} phase` : ''}</div></div><span class="tag ${p.tag === 'Win' ? 'accent' : ''}">${esc(p.tag)}</span></div>
         <div class="body">${esc(p.text)}</div>
         <div class="foot"><button class="${liked ? 'on' : ''}" data-action="like" data-id="${p.id}" aria-label="Like">${icon('heart', 18)} ${p.baseLikes + p.likedBy.length}</button><button data-action="toggle-comments" data-id="${p.id}">${icon('comment', 18)} ${p.comments.length}</button>${p.author !== me ? `<button data-action="message" data-id="${esc(p.author)}">Message</button>` : ''}</div>
         ${open ? `${p.comments.map((cm) => `<div class="comment"><div class="avatar sm ${cm.author.startsWith('u:') ? '' : 'alt'}">${esc(initials(memberName(cm.author)))}</div><div class="c"><strong class="small">${esc(memberName(cm.author))}</strong><div class="small">${esc(cm.text)}</div></div></div>`).join('')}
           <form class="row" style="margin-top:10px" data-form="comment" data-id="${p.id}"><input class="input grow" style="height:42px" name="text" placeholder="Add a comment" maxlength="300" required><button class="btn primary sm" type="submit">Reply</button></form>` : ''}
       </div>`; }).join('')}
-      <p class="tiny muted center" style="margin-top:16px">Community posts are shared between accounts on this device in this preview. Cycle day ${cyc.day}.</p>`;
+      <p class="tiny muted center" style="margin-top:16px">Community posts are shared between accounts on this device in this preview.</p>`;
   }
 
   function viewThreads() {
@@ -1068,6 +1331,17 @@
   }
 
   // ---------- modals ----------
+  function openCheckin() {
+    const ex = S.data.daily[todayKey()];
+    S.modal = { type: 'checkin', form: ex ? { energy: ex.energy, sleep: ex.sleep, mood: ex.mood, soreness: ex.soreness, symptoms: (ex.symptoms || []).slice(), flow: ex.flow || 'none' } : { energy: 3, sleep: 3, mood: 3, soreness: 2, symptoms: [], flow: 'none' } };
+    render();
+  }
+
+  function scale(field, label, lo, hi, value) {
+    return `<div style="margin-top:16px"><div class="row between"><span class="label" style="margin:0">${label}</span><span class="tiny muted">${lo} to ${hi}</span></div>
+      <div class="segment" style="margin-top:8px">${[1, 2, 3, 4, 5].map((n) => `<button type="button" class="${value === n ? 'active' : ''}" data-action="ci-set" data-field="${field}" data-value="${n}" aria-label="${label} ${n}">${n}</button>`).join('')}</div></div>`;
+  }
+
   function viewModal() {
     const m = S.modal;
     if (!m) return '';
@@ -1075,19 +1349,90 @@
     const sheet = (title, body) => `<div class="overlay" data-action="overlay"><div class="sheet" role="dialog" aria-label="${esc(title)}"><div class="grab"></div><div class="sheet-head"><h2>${title}</h2><button class="icon-btn" data-action="close-modal" aria-label="Close">${icon('x', 18)}</button></div>${body}</div></div>`;
 
     if (m.type === 'signup') {
-      const why = { progress: 'Progress photos are private to your account.', community: 'You need an account to post and message.', default: 'Keep your plan, history and coach chats safe.' }[m.reason] || 'Keep your plan, history and coach chats safe.';
+      const why = { progress: 'Progress photos are private to your account.', community: 'You need an account to post and message.' }[m.reason] || 'Keep your plan, history and coach chats safe.';
       return sheet('Save your plan', `<p class="muted small" style="margin-bottom:16px">${why} Everything you have done as a guest moves to your new account.</p>${signupForm('sheet')}<p class="center small" style="margin-top:14px"><button class="link" data-action="go-login">I already have an account</button></p>`);
+    }
+    if (m.type === 'checkin') {
+      const f = m.form;
+      const c = cyc();
+      const r = L.readiness(f);
+      return sheet('Daily check-in', `<div class="row" style="gap:14px">${readinessRing(r, 64)}<div class="grow small muted">Your readiness score sets today's training and suggested weights.</div></div>
+        ${scale('energy', 'Energy', 'drained', 'full of energy', f.energy)}
+        ${scale('sleep', 'Sleep', 'awful', 'great', f.sleep)}
+        ${scale('mood', 'Mood', 'low', 'great', f.mood)}
+        ${scale('soreness', 'Soreness', 'none', 'very sore', f.soreness)}
+        <div class="label" style="margin-top:18px">Symptoms</div>
+        <div class="chips">${D.SYMPTOMS.map((s) => `<button type="button" class="chip ${f.symptoms.includes(s) ? 'selected' : ''}" data-action="ci-symptom" data-value="${esc(s)}">${esc(s)}</button>`).join('')}</div>
+        ${c.mode === 'none' ? '' : `<div class="label" style="margin-top:18px">Bleeding</div><div class="chips">${['none', 'spotting', 'light', 'medium', 'heavy'].map((x) => `<button type="button" class="chip ${f.flow === x ? 'selected' : ''}" data-action="ci-set" data-field="flow" data-value="${x}">${x[0].toUpperCase() + x.slice(1)}</button>`).join('')}</div>`}
+        <button class="btn primary block" style="margin-top:22px" data-action="ci-save">Save check-in</button>`);
+    }
+    if (m.type === 'periodConfirm') {
+      return sheet('Did your period start today?', `<p class="small muted">You logged bleeding${cyc().late ? ' and your period was due' : ' outside your predicted period'}. If this is day 1 of your period, I will update your cycle and learn from it.</p>
+        <div class="row" style="margin-top:18px"><button class="btn primary grow" data-action="log-period-today">Yes, it started today</button><button class="btn ghost" data-action="close-modal">Not yet</button></div>`);
+    }
+    if (m.type === 'period') {
+      return sheet('Log your period', `<form data-form="period"><label class="field"><span class="label">First day of bleeding</span><input class="input" type="date" name="date" value="${todayKey()}" max="${todayKey()}" required></label>
+        <p class="tiny muted" style="margin-top:8px">Logging a date within a week of an existing entry corrects that period.</p><button class="btn primary block" style="margin-top:16px" type="submit">Save</button></form>`);
+    }
+    if (m.type === 'weekly') {
+      const a = m.answers;
+      const group = (field, label, opts) => `<div class="label" style="margin-top:18px">${label}</div><div class="options">${opts.map(([v, l]) => `<button type="button" class="option ${a[field] === v ? 'selected' : ''}" style="padding:12px 16px" data-action="wk-set" data-field="${field}" data-value="${v}"><strong>${l}</strong></button>`).join('')}</div>`;
+      return sheet('Weekly check-in', `<p class="small muted">Three quick questions, then I review your numbers and update next week's plan.</p>
+        ${group('feel', 'How did training feel this week?', [['easy', 'Too easy'], ['right', 'Just right'], ['hard', 'Too hard']])}
+        ${group('hunger', 'How was your hunger?', [['low', 'Low'], ['ok', 'Normal'], ['high', 'Very hungry']])}
+        ${group('next', 'What does next week look like?', [['normal', 'A normal week'], ['busy', 'Busy'], ['travel', 'Travelling'], ['push', 'I want to push']])}
+        <button class="btn primary block" style="margin-top:22px" data-action="wk-run" ${a.feel && a.hunger && a.next ? '' : 'disabled'}>Review my week</button>`);
+    }
+    if (m.type === 'weeklyResult') {
+      const s = m.stats;
+      return sheet('Your week', `
+        <div class="stats">
+          ${statTile('Sessions', `${s.sessions}/${s.planned}`, '')}${statTile('Avg steps', s.stepAvg.toLocaleString(), '')}
+          ${statTile('Readiness', s.readinessAvg == null ? '-' : s.readinessAvg, s.readinessAvg == null ? '' : '/100')}${statTile('Weight', s.weightChange == null ? '-' : `${s.weightChange > 0 ? '+' : ''}${s.weightChange.toFixed(2)}`, s.weightChange == null ? '' : 'kg/wk')}
+        </div>
+        <div class="card accent" style="margin-top:12px"><div class="eyebrow">Coach</div><div class="rich small" style="margin-top:6px">${rich(m.text)}</div>${m.loading ? '<p class="tiny muted" style="margin-top:6px">Your coach is writing a personal note...</p>' : ''}</div>
+        ${m.result.adjustments.length ? `<div class="label" style="margin-top:16px">Changes for next week</div>${m.result.adjustments.map((a, i) => `<button class="option ${m.selected[i] ? 'selected' : ''}" style="margin-top:8px" data-action="wk-toggle" data-i="${i}"><strong>${m.selected[i] ? 'Apply: ' : 'Skip: '}${esc(a.label)}</strong><span>${esc(a.why)}</span></button>`).join('')}` : ''}
+        ${m.result.notes.length ? `<ul class="phase-list">${m.result.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}
+        <button class="btn primary block" style="margin-top:18px" data-action="wk-apply">${m.result.adjustments.length ? 'Update next week\'s plan' : 'Done'}</button>`);
+    }
+    if (m.type === 'summary') {
+      const r = m.record;
+      return sheet('Workout complete', `<div class="stats">${statTile('Sets', r.sets, '')}${statTile('Minutes', r.minutes, '')}</div>
+        ${m.volume ? `<p class="small muted" style="margin-top:10px">Total volume: ${Math.round(m.volume).toLocaleString()} ${r.unit}</p>` : ''}
+        ${m.prs.length ? `<div class="card accent" style="margin-top:12px"><div class="eyebrow">New personal records</div>${m.prs.map((p) => `<div class="row between" style="margin-top:8px"><strong>${esc(p.name)}</strong><span>${fmtLoad(p.weight, p.unit)} x ${p.reps}</span></div>`).join('')}</div>` : '<p class="small" style="margin-top:12px">Logged. Your suggested weights for next time are already updated.</p>'}
+        <div class="row" style="margin-top:18px"><button class="btn ghost grow" data-action="share-workout">${icon('share', 18)} Share</button><button class="btn primary grow" data-action="close-modal">Done</button></div>`);
+    }
+    if (m.type === 'share') {
+      return sheet('Share your progress', `${m.url ? `<img src="${m.url}" alt="Progress card" style="border-radius:16px;border:1px solid var(--line)">` : '<div class="empty">Creating your card...</div>'}
+        <button class="btn primary block" style="margin-top:14px" data-action="share-card" ${m.url ? '' : 'disabled'}>${icon('share', 18)} Share or save</button>`);
+    }
+    if (m.type === 'protein') {
+      const k = todayKey();
+      const eaten = Object.entries(S.data.eaten[k] || {});
+      return sheet('Log protein', `<p class="small muted">Today: ${L.proteinFor(S.data, k)} of ${tgt().protein} g. Mark meals as eaten in Meals, or add extra here.</p>
+        <div class="row" style="margin-top:14px">${[10, 20, 30].map((g) => `<button class="btn soft grow" data-action="add-protein" data-g="${g}">+${g} g</button>`).join('')}</div>
+        ${eaten.length ? `<div class="divider"></div>${eaten.map(([slot, x]) => `<div class="row between small" style="margin-top:6px"><span>${esc(x.name)}</span><strong>${x.protein} g</strong></div>`).join('')}` : ''}
+        ${(S.data.proteinExtra[k] || 0) ? `<div class="row between small" style="margin-top:6px"><span>Extra</span><strong>${S.data.proteinExtra[k]} g</strong></div><button class="link small" style="margin-top:8px" data-action="add-protein" data-g="${-S.data.proteinExtra[k]}">Clear extra</button>` : ''}`);
+    }
+    if (m.type === 'grocery') {
+      const start = today();
+      const list = L.groceryList(S.data, start, 7);
+      const checked = S.data.grocery.checked || {};
+      const cats = Object.keys(list);
+      return sheet('Grocery list', `<p class="small muted">Everything for your next 7 days of meals, matched to your phases and food preferences.</p>
+        ${cats.map((cat) => `<div class="label" style="margin-top:16px">${esc(cat)}</div>${list[cat].map((it) => `<button class="list-item" style="width:100%;text-align:left;padding:10px 0" data-action="grocery-check" data-item="${esc(it.name)}"><span class="check ${checked[it.name] ? 'on' : ''}" style="width:28px;height:28px;border-radius:8px">${checked[it.name] ? icon('check', 14, 2.6) : ''}</span><span class="grow" style="${checked[it.name] ? 'text-decoration:line-through;opacity:.5' : ''}">${esc(it.name)}</span><span class="tiny muted">${it.count > 1 ? `x${it.count}` : ''}</span></button>`).join('')}`).join('')}
+        <div class="row" style="margin-top:18px"><button class="btn ghost grow" data-action="grocery-clear">Clear ticks</button><button class="btn primary grow" data-action="grocery-share">${icon('share', 18)} Share list</button></div>`);
     }
     if (m.type === 'workout') {
       const wk = workoutById(m.id);
       const isToday = todaysWorkout().id === wk.id;
-      return sheet(esc(wk.name), `<div class="eyebrow">${esc(wk.focus)} · ${wk.minutes} min · ${esc(wk.intensity)}</div><p class="small" style="margin-top:8px">${esc(wk.summary)}</p><div class="divider"></div>${exerciseList(wk)}
+      return sheet(esc(wk.name), `<div class="eyebrow">${esc(wk.focus)} · ${wk.minutes} min · ${esc(wk.intensity)}</div><p class="small" style="margin-top:8px">${esc(wk.summary)}</p><div class="divider"></div>${exerciseList(wk, true)}
         <div class="row" style="margin-top:16px"><button class="btn primary grow" data-action="start-workout" data-id="${wk.id}">Start now</button>${isToday ? '' : `<button class="btn ghost" data-action="set-today" data-id="${wk.id}">Make today's</button>`}</div>`);
     }
     if (m.type === 'swap') {
-      const cyc = cycleInfo(S.data.profile);
-      const list = D.WORKOUTS.filter((w) => w.phase === cyc.phase || w.phase === 'any');
-      return sheet('Choose today\'s workout', `<p class="small muted" style="margin-bottom:14px">Options that suit your ${D.PHASES[cyc.phase].name.toLowerCase()} phase.</p><div class="options">${list.map((w) => `<button class="option ${todaysWorkout().id === w.id ? 'selected' : ''}" data-action="set-today" data-id="${w.id}"><strong>${esc(w.name)}</strong><span>${w.minutes} min · ${esc(w.intensity)} · ${esc(w.focus)}</span></button>`).join('')}</div>
+      const c = cyc();
+      const list = D.WORKOUTS.filter((w) => c.steady || w.phase === c.phase || w.phase === 'any');
+      return sheet('Choose today\'s workout', `<p class="small muted" style="margin-bottom:14px">${c.steady ? 'Any session works in steady mode.' : `Options that suit your ${phaseName(c.phase).toLowerCase()} phase.`}</p><div class="options">${list.map((w) => `<button class="option ${todaysWorkout().id === w.id ? 'selected' : ''}" data-action="set-today" data-id="${w.id}"><strong>${esc(w.name)}</strong><span>${w.minutes} min · ${esc(w.intensity)} · ${esc(w.focus)}</span></button>`).join('')}</div>
         <button class="btn ghost block" style="margin-top:12px" data-action="reset-today">Use the recommended plan</button>`);
     }
     if (m.type === 'steps') {
@@ -1098,19 +1443,24 @@
       return sheet('Log activity', `<form data-form="other"><label class="field"><span class="label">Activity</span><input class="input" name="name" placeholder="e.g. Pilates class, run, hike" required maxlength="60"></label><label class="field"><span class="label">Minutes</span><input class="input" name="minutes" type="number" inputmode="numeric" min="5" max="600" value="45" required></label><button class="btn primary block" style="margin-top:16px" type="submit">Log it</button></form>`);
     }
     if (m.type === 'pin') {
-      return sheet('Vault PIN', `<form data-form="pin"><p class="small muted" style="margin-bottom:14px">A 4-digit PIN locks your progress photos on this device.</p><label class="field"><span class="label">New PIN</span><input class="input pin-input" style="max-width:none" name="pin" type="password" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" required autocomplete="off"></label><button class="btn primary block" style="margin-top:16px" type="submit">Save PIN</button></form>${S.data.pinHash ? '<button class="btn ghost block" style="margin-top:10px" data-action="remove-pin">Remove PIN</button>' : ''}`);
+      return sheet('Vault PIN', `<form data-form="pin"><p class="small muted" style="margin-bottom:14px">A 4-digit PIN locks your vault${hasSubtle() ? ' and encrypts your photos on this device. If you forget it, encrypted photos cannot be recovered.' : '. Encryption needs a secure (https) connection, which this page does not have.'}</p><label class="field"><span class="label">New PIN</span><input class="input pin-input" style="max-width:none" name="pin" type="password" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" required autocomplete="off"></label><button class="btn primary block" style="margin-top:16px" type="submit">Save PIN</button></form>${S.data.pinHash ? '<button class="btn ghost block" style="margin-top:10px" data-action="remove-pin">Remove PIN and decrypt photos</button>' : ''}`);
     }
     if (m.type === 'settings') {
       const p = S.data.profile;
       const theme = store.get('yours.theme', 'system');
       const u = currentUser();
+      const c = cyc();
+      const learned = L.learnCycle(S.data.periods);
+      const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.navigator.standalone;
       return sheet('Profile', `
         <div class="card flat row"><div class="avatar">${isGuest() ? icon('settings', 18) : esc(initials(u && u.name))}</div><div class="grow"><strong>${isGuest() ? 'Guest' : esc(u && u.name)}</strong><div class="small muted">${isGuest() ? 'Not saved to an account' : esc(u && u.email)}</div></div>${isGuest() ? '<button class="btn accent xs" data-action="open-signup">Save</button>' : ''}</div>
-        <div class="card flat small"><div class="row between"><span class="muted">Goal</span><strong>${esc(goalOf(p).label)}</strong></div><div class="row between" style="margin-top:6px"><span class="muted">Level</span><strong>${esc((LEVELS.find((l) => l.id === p.level) || {}).label || '')}</strong></div><div class="row between" style="margin-top:6px"><span class="muted">Cycle</span><strong>${p.cycleLength} days</strong></div><div class="row between" style="margin-top:6px"><span class="muted">Last period</span><strong>${esc(p.periodStart)}</strong></div>
+        <div class="card flat small"><div class="row between"><span class="muted">Goal</span><strong>${esc(goalOf(p).label)}</strong></div><div class="row between" style="margin-top:6px"><span class="muted">Level</span><strong>${esc((LEVELS.find((l) => l.id === p.level) || {}).label || '')}</strong></div><div class="row between" style="margin-top:6px"><span class="muted">Cycle type</span><strong>${esc((D.CYCLE_MODES.find((x) => x.id === p.cycleMode) || {}).label || '')}</strong></div>${c.steady ? '' : `<div class="row between" style="margin-top:6px"><span class="muted">Cycle length</span><strong>${learned ? `${learned.length} days (learned)` : `${p.cycleLength} days`}</strong></div><div class="row between" style="margin-top:6px"><span class="muted">Last period</span><strong>${esc(shortDate(p.periodStart))}</strong></div>`}
           <button class="btn ghost sm block" style="margin-top:14px" data-action="edit-plan">Edit my plan</button></div>
-        <form class="card flat" data-form="period"><div class="label">My period started</div><div class="row"><input class="input grow" type="date" name="date" value="${todayKey()}" max="${todayKey()}" required><button class="btn primary sm" type="submit">Update</button></div></form>
+        ${c.steady ? '' : '<button class="btn soft block" style="margin-top:12px" data-action="open-period">Log a period start</button>'}
         <div class="card flat"><div class="label">Appearance</div><div class="segment">${['system', 'light', 'dark'].map((x) => `<button class="${theme === x ? 'active' : ''}" data-action="theme" data-value="${x}">${x[0].toUpperCase() + x.slice(1)}</button>`).join('')}</div></div>
+        ${S.installPrompt ? '<button class="btn primary block" style="margin-top:12px" data-action="install">Install YOURS on this device</button>' : ios ? '<div class="card flat small"><div class="label">Install on iPhone</div><p class="muted">Tap the Share button in Safari, then Add to Home Screen.</p></div>' : ''}
         <div class="card flat small"><div class="label">Coach</div><p class="muted">${S.ai ? 'Live AI coach is connected.' : 'Running the on-device coach. Set ANTHROPIC_API_KEY on the server to enable the live AI coach and photo reviews.'}</p></div>
+        <div class="card flat small"><div class="label">Your data</div><p class="muted">Everything is stored on this device. Nothing is used to train AI models.</p><button class="btn ghost sm block" style="margin-top:10px" data-action="export-data">${icon('download', 16)} Export my data</button></div>
         <button class="btn ghost block" style="margin-top:12px" data-action="logout">${isGuest() ? 'Start over' : 'Sign out'}</button>
         <button class="btn block" style="margin-top:8px;color:var(--danger)" data-action="delete-data">Delete my data</button>`);
     }
@@ -1133,7 +1483,11 @@
       html = (views[S.tab] || viewHome)() + nav();
     }
     const focusedName = document.activeElement && document.activeElement.name;
+    const sheetEl = root.querySelector('.sheet');
+    const sheetScroll = sheetEl ? sheetEl.scrollTop : 0;
     root.innerHTML = html + viewModal();
+    const newSheet = root.querySelector('.sheet');
+    if (newSheet && sheetScroll) newSheet.scrollTop = sheetScroll;
     if (focusedName === 'msg') { const ta = root.querySelector('textarea[name="msg"]'); if (ta && !S.typing) ta.focus(); }
   }
 
@@ -1143,6 +1497,7 @@
     store.set('yours.session', session);
     loadData();
     S.vaultUnlocked = false;
+    S.photoKey = null;
     S.revealed = {};
     S.compare = [];
     S.tab = 'home';
@@ -1182,6 +1537,15 @@
     render();
   }
 
+  // Demo account with two months of realistic history.
+  const DEMO_LOADS = {
+    'Back squat': 45, 'Romanian deadlift': 50, 'Bulgarian split squat': 12, 'Barbell hip thrust': 70, 'Lying leg curl': 25, 'Standing calf raise': 40,
+    'Lat pulldown': 35, 'Dumbbell bench press': 14, 'Chest-supported row': 12, 'Seated dumbbell shoulder press': 9, 'Cable lateral raise': 5, 'Face pull': 15,
+    'Kettlebell swing': 16, 'Reverse lunge': 10, 'Sumo deadlift': 60, 'Walking lunge': 10, 'Cable kickback': 10, 'Hip abduction': 40, '45-degree back extension': 10,
+    'Trap bar deadlift': 75, 'Push press': 30, 'Goblet squat': 20, 'Hip thrust': 65, 'Single-leg Romanian deadlift': 12, 'Leg press': 100, 'Seated leg curl': 30,
+    'One-arm dumbbell row': 14, 'Incline dumbbell press': 12, 'Arnold press': 8, 'Cable fly': 8, 'Dumbbell curl': 8, 'Triceps rope pushdown': 15,
+    'Dumbbell Romanian deadlift': 16, 'Seated cable row': 30,
+  };
   async function demo() {
     const email = 'demo@yours.app';
     const all = users();
@@ -1194,15 +1558,47 @@
     const d = blankData();
     d.onboarded = true;
     d.planSeen = true;
-    d.profile = { units: 'metric', level: 'intermediate', goal: 'glutes', periodStart: dateKey(addDays(t, -9)), heightCm: 168, weightKg: 63.5, age: 29, activity: 'moderate', cycleLength: 28, periodLength: 5, favorites: ['Chicken', 'Salmon', 'Greek yogurt', 'Sweet potato', 'Berries'], avoid: ['Shellfish'], foodNotes: '' };
-    const names = { 'm-light': 'Light Full Body', 'm-restore': 'Restore and Mobility', 'f-lower': 'Lower Body Strength', 'f-upper': 'Upper Body Push and Pull', 'l-steady': 'Steady Strength', 'l-upper': 'Upper Body Sculpt' };
-    [[1, 'f-upper'], [2, 'f-lower'], [4, 'f-upper'], [6, 'm-light'], [8, 'm-restore'], [10, 'm-light'], [11, 'l-steady'], [13, 'l-upper'], [15, 'l-steady'], [17, 'l-upper'], [18, 'f-lower'], [20, 'f-upper'], [23, 'f-lower'], [25, 'f-upper']].forEach(([ago, id]) => {
-      d.workouts.push({ id: uid(), date: dateKey(addDays(t, -ago)), templateId: id, name: names[id], minutes: workoutById(id).minutes, sets: 18 });
-    });
-    d.workouts.reverse();
-    for (let i = 1; i <= 14; i++) d.steps[dateKey(addDays(t, -i))] = 8800 + ((i * 2731) % 4200);
-    d.steps[todayKey()] = 4210;
-    d.water[todayKey()] = 1000;
+    d.profile = { units: 'metric', cycleMode: 'natural', level: 'intermediate', goal: 'glutes', heightCm: 168, weightKg: 63.5, age: 29, activity: 'moderate', cycleLength: 28, periodLength: 5, favorites: ['Chicken', 'Salmon', 'Greek yogurt', 'Sweet potato', 'Berries'], avoid: ['Shellfish'], foodNotes: '' };
+    [-66, -37, -9].forEach((n) => L.addPeriod(d, dateKey(addDays(t, n))));
+    const starts = d.periods.map(parseKey);
+    const len = d.profile.learnedLength;
+    const phaseOf = (day) => (day <= 5 ? 'menstrual' : day <= len - 16 ? 'follicular' : day <= len - 13 ? 'ovulation' : 'luteal');
+    const rnd = (i) => ((Math.sin(i * 12.9898) * 43758.5453) % 1 + 1) % 1;
+    for (let i = 60; i >= 1; i--) {
+      const date = addDays(t, -i);
+      const start = starts.filter((s) => s <= date).pop();
+      if (!start) continue;
+      const day = daysBetween(start, date) + 1;
+      const phase = phaseOf(day);
+      const key = dateKey(date);
+      if (rnd(i) < 0.85) {
+        const dip = day >= 24 && day <= 26;
+        const symptoms = [];
+        if (day <= 2) symptoms.push('Cramps');
+        if (day >= 22 && rnd(i + 7) < 0.7) symptoms.push('Cravings');
+        if (day >= 25 && rnd(i + 3) < 0.5) symptoms.push('Bloating');
+        d.daily[key] = { energy: dip ? 2 : phase === 'menstrual' ? 3 : phase === 'luteal' ? 3 + (rnd(i) < 0.5 ? 1 : 0) : 4 + (rnd(i + 1) < 0.4 ? 1 : 0), sleep: dip ? 3 : 4, mood: dip ? 2 : 4, soreness: 2, symptoms, flow: day <= 4 ? (day <= 2 ? 'medium' : 'light') : 'none', cycleDay: day, phase };
+      }
+      d.steps[key] = 8600 + Math.round(rnd(i + 11) * 4800);
+      // Training on planned days, skipping about one in six.
+      const rot = D.ROTATION[phase];
+      const ranges = { menstrual: 1, follicular: 6, ovulation: len - 15, luteal: len - 12 };
+      const wk = workoutById(rot[(day - ranges[phase]) % rot.length]);
+      if (wk.id === 'rest' || rnd(i + 5) < 0.17) continue;
+      const factor = { menstrual: 0.9, follicular: 1, ovulation: 1.04, luteal: 0.95 }[phase] * (1 + (60 - i) * 0.0025);
+      const detail = wk.exercises.filter((ex) => L.parseReps(ex.reps) && DEMO_LOADS[ex.name]).map((ex) => {
+        const target = L.parseReps(ex.reps);
+        const iso = /raise|curl|fly|pushdown|kickback|abduction|face pull|extension|calf|arnold/i.test(ex.name);
+        const inc = iso ? 1 : 2.5;
+        const weight = Math.round((DEMO_LOADS[ex.name] * factor) / inc) * inc;
+        const reps = phase === 'follicular' || phase === 'ovulation' ? target.hi : target.lo;
+        return { name: ex.name, sets: Array.from({ length: L.adjustSets(ex, 'intermediate', {}) }, () => ({ weight, reps })) };
+      });
+      d.workouts.push({ id: uid(), date: key, templateId: wk.id, name: wk.name, minutes: wk.minutes, sets: detail.reduce((n, e) => n + e.sets.length, 0), unit: 'kg', phase, detail });
+    }
+    d.steps[dateKey(t)] = 4210;
+    d.water[dateKey(t)] = 1000;
+    d.eaten[dateKey(t)] = { breakfast: { name: L.mealFor(d, t, 'breakfast').meal.name, protein: 34 } };
     [65.2, 64.9, 65.1, 64.6, 64.2, 64.4, 63.8, 63.5].forEach((kg, i) => d.checkins.push({ date: dateKey(addDays(t, -(7 - i) * 7)), kg }));
     store.set(`yours.data.${email}`, d);
     await startSession({ kind: 'user', email });
@@ -1220,6 +1616,7 @@
     S.modal = null;
     S.screen = 'welcome';
     S.photos = [];
+    S.photoKey = null;
     store.del('yours.session');
     render();
   }
@@ -1232,7 +1629,10 @@
       delete all[email];
       store.set('yours.users', all);
       store.del(`yours.data.${email}`);
-      try { await photoTx('readwrite', (s) => { S.photos.forEach((p) => s.delete(p.id)); }); } catch { /* ignore */ }
+      try {
+        const recs = await photoTx('readonly', (s) => s.index('owner').getAllKeys(email));
+        await photoTx('readwrite', (s) => (recs || []).forEach((id) => s.delete(id)));
+      } catch { /* ignore */ }
       const c = community();
       c.posts = c.posts.filter((p) => p.author !== `u:${email}`);
       Object.keys(c.threads).forEach((k) => { if (k.split('|').includes(`u:${email}`)) delete c.threads[k]; });
@@ -1246,17 +1646,36 @@
     toast('Your data has been deleted');
   }
 
+  function exportData() {
+    const u = currentUser();
+    const payload = { exportedAt: new Date().toISOString(), account: u ? { name: u.name, email: u.email } : null, data: { ...S.data, pinHash: undefined, pinSalt: undefined }, note: 'Progress photos are not included. They stay in your private vault.' };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `yours-export-${todayKey()}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
   function applyTheme(t) {
     store.set('yours.theme', t);
     if (t === 'system') delete document.documentElement.dataset.theme;
     else document.documentElement.dataset.theme = t;
   }
 
+  function logPeriod(key) {
+    const learned = L.addPeriod(S.data, key);
+    S.modal = null;
+    save();
+    render();
+    toast(learned ? `Cycle updated. Your average is ${learned.length} days.` : 'Period logged. Log the next one and I will learn your cycle.');
+  }
+
   // ---------- events ----------
   const actions = {
     start: () => { S.authError = ''; startSession({ kind: 'guest' }).then(render); },
     'go-login': () => {
-      // Guest progress stays saved on the device; signing in to an existing account switches to that account's data.
+      // Guest progress stays saved on the device; signing in switches to that account's data.
       S.authError = ''; S.modal = null; S.screen = 'login';
       if (S.session && isGuest()) { S.session = null; store.del('yours.session'); }
       render(); window.scrollTo(0, 0);
@@ -1281,18 +1700,56 @@
     },
     'ob-next': () => {
       if (S.data.obStep < OB_STEPS - 1) { S.data.obStep++; save(); render(); window.scrollTo(0, 0); return; }
+      const p = S.data.profile;
+      if (p.periodStart && !L.STEADY_MODES.includes(p.cycleMode) && !S.data.periods.includes(p.periodStart)) L.addPeriod(S.data, p.periodStart);
       S.data.onboarded = true;
       S.data.obStep = 0;
       if (S.data.editing) { S.data.editing = false; S.data.planSeen = true; toast('Plan updated'); }
       save(); render(); window.scrollTo(0, 0);
     },
 
-    tab: (el) => { S.tab = el.dataset.tab; S.modal = null; render(); window.scrollTo(0, 0); if (S.tab === 'advisor' && S.advisorView === 'coach') scrollChat(); },
+    tab: (el) => { goTab(el.dataset.tab); render(); if (S.tab === 'advisor' && S.advisorView === 'coach') scrollChat(); },
     'open-settings': () => { S.modal = { type: 'settings' }; render(); },
     'close-modal': () => { S.modal = null; render(); },
     overlay: (el, ev) => { if (ev.target === el) { S.modal = null; render(); } },
     water: (el) => { addWater(Number(el.dataset.ml)); render(); },
     'log-steps': () => { S.modal = { type: 'steps' }; render(); },
+    'log-protein': () => { S.modal = { type: 'protein' }; render(); },
+    'add-protein': (el) => { const k = todayKey(); S.data.proteinExtra[k] = Math.max(0, (S.data.proteinExtra[k] || 0) + Number(el.dataset.g)); save(); render(); },
+
+    'open-checkin': () => openCheckin(),
+    'ci-set': (el) => { const f = S.modal.form; f[el.dataset.field] = el.dataset.field === 'flow' ? el.dataset.value : Number(el.dataset.value); render(); },
+    'ci-symptom': (el) => { const s = S.modal.form.symptoms; const i = s.indexOf(el.dataset.value); if (i > -1) s.splice(i, 1); else s.push(el.dataset.value); render(); },
+    'ci-save': () => {
+      const f = S.modal.form;
+      const c = cyc();
+      S.data.daily[todayKey()] = { ...f, cycleDay: c.day, phase: c.phase, ts: Date.now() };
+      save();
+      const bleeding = ['light', 'medium', 'heavy'].includes(f.flow);
+      const lastPeriod = S.data.periods[S.data.periods.length - 1];
+      const recentlyLogged = lastPeriod && daysBetween(parseKey(lastPeriod), today()) < 10;
+      if (bleeding && !c.steady && !recentlyLogged) { S.modal = { type: 'periodConfirm' }; render(); return; }
+      S.modal = null;
+      render();
+      const r = L.readiness(f);
+      toast(`Readiness ${r}. ${r < 45 ? 'I have a lighter option for you.' : 'Plan updated for today.'}`);
+    },
+    'log-period-today': () => logPeriod(todayKey()),
+    'open-period': () => { S.modal = { type: 'period' }; render(); },
+
+    'open-weekly': () => { S.modal = { type: 'weekly', answers: {} }; render(); },
+    'wk-set': (el) => { S.modal.answers[el.dataset.field] = el.dataset.value; render(); },
+    'wk-run': () => runWeekly(S.modal.answers),
+    'wk-toggle': (el) => { S.modal.selected[el.dataset.i] = !S.modal.selected[el.dataset.i]; render(); },
+    'wk-apply': () => {
+      const m = S.modal;
+      const chosen = m.result.adjustments.filter((_, i) => m.selected[i]);
+      L.applyAdjustments(S.data.plan, chosen);
+      S.data.reviews.push({ date: todayKey(), stats: m.stats, answers: m.answers, adjustments: chosen, notes: m.result.notes, text: m.text });
+      S.modal = null;
+      save(); render();
+      toast(chosen.length ? 'Next week\'s plan is updated' : 'Check-in saved');
+    },
 
     'view-workout': (el) => { S.modal = { type: 'workout', id: el.dataset.id }; render(); },
     'start-workout': (el) => {
@@ -1301,17 +1758,13 @@
       startWorkout(el.dataset.id);
     },
     'resume-workout': () => { S.modal = { type: 'active' }; render(); },
-    'toggle-set': (el) => { const s = S.data.activeWorkout.exercises[el.dataset.ei].sets[el.dataset.si]; s.done = !s.done; save(); render(); },
-    'finish-workout': () => {
-      const a = S.data.activeWorkout;
-      const sets = a.exercises.reduce((n, e) => n + e.sets.filter((s) => s.done).length, 0);
-      const minutes = Math.max(5, Math.round((Date.now() - a.startedAt) / 60000)) || workoutById(a.templateId).minutes;
-      S.data.workouts.push({ id: uid(), date: todayKey(), templateId: a.templateId, name: a.name, minutes: Math.min(minutes, 240), sets, detail: a.exercises.map((e) => ({ name: e.name, sets: e.sets.filter((s) => s.done).map((s) => ({ weight: Number(s.weight) || 0, reps: Number(s.reps) || 0 })) })) });
-      S.data.activeWorkout = null;
-      S.modal = null;
+    'toggle-set': (el) => {
+      const s = S.data.activeWorkout.exercises[el.dataset.ei].sets[el.dataset.si];
+      s.done = !s.done;
+      if (s.done && !s.reps && s.target) s.reps = String(s.target);
       save(); render();
-      toast(`Workout logged. ${sets} set${sets === 1 ? '' : 's'} done.`);
     },
+    'finish-workout': () => finishWorkout(),
     'discard-workout': () => { if (!confirm('Discard this workout?')) return; S.data.activeWorkout = null; S.modal = null; save(); render(); },
     'swap-today': () => { S.modal = { type: 'swap' }; render(); },
     'set-today': (el) => { S.data.overrides[todayKey()] = el.dataset.id; S.modal = null; save(); render(); toast(`Today is now ${workoutById(el.dataset.id).name}`); },
@@ -1325,8 +1778,24 @@
       S.data.mealSwaps[k][el.dataset.slot] = (S.data.mealSwaps[k][el.dataset.slot] || 0) + 1;
       save(); render();
     },
+    'eat-meal': (el) => {
+      const k = todayKey();
+      const day = (S.data.eaten[k] = S.data.eaten[k] || {});
+      if (day[el.dataset.slot] && day[el.dataset.slot].name === el.dataset.name) delete day[el.dataset.slot];
+      else { day[el.dataset.slot] = { name: el.dataset.name, protein: Number(el.dataset.protein) }; toast(`+${el.dataset.protein} g protein`); }
+      save(); render();
+    },
+    'open-grocery': () => { S.modal = { type: 'grocery' }; render(); },
+    'grocery-check': (el) => { const c = S.data.grocery.checked; c[el.dataset.item] = !c[el.dataset.item]; save(); render(); },
+    'grocery-clear': () => { S.data.grocery.checked = {}; save(); render(); },
+    'grocery-share': async () => {
+      const list = L.groceryList(S.data, today(), 7);
+      const text = 'YOURS grocery list\n' + Object.entries(list).map(([cat, items]) => `\n${cat}\n` + items.map((i) => `- ${i.name}${i.count > 1 ? ` x${i.count}` : ''}`).join('\n')).join('\n');
+      if (navigator.share) { try { await navigator.share({ title: 'Grocery list', text }); return; } catch { /* cancelled */ } }
+      try { await navigator.clipboard.writeText(text); toast('List copied'); } catch { toast('Could not copy the list'); }
+    },
 
-    'advisor-view': (el) => { S.advisorView = el.dataset.value; S.authError = ''; render(); if (S.advisorView === 'coach') scrollChat(); },
+    'advisor-view': (el) => { S.advisorView = el.dataset.value; S.authError = ''; render(); window.scrollTo(0, 0); if (S.advisorView === 'coach') scrollChat(); },
     prompt: (el) => sendChat(el.dataset.q),
     'chat-action': (el) => {
       const a = S.data.chat[el.dataset.mi].actions[el.dataset.ai];
@@ -1334,6 +1803,16 @@
       save();
       runAction(a);
     },
+
+    'share-streak': () => { const st = L.streak(S.data); openShare({ eyebrow: 'Streak', big: `${st.count} days`, sub: 'Showing up for my body, every phase.', foot: 'Training, walking and check-ins all count.' }); },
+    'share-strength': () => { const s = L.strengthByPhase(S.data.workouts); if (s) openShare({ eyebrow: 'Strength by phase', big: `+${Math.round(s.diff)}%`, sub: `I lift about ${Math.round(s.diff)}% more in my ${phaseName(s.best).toLowerCase()} phase than my ${phaseName(s.low).toLowerCase()} phase.`, foot: 'Cycle-synced training with YOURS' }); },
+    'share-pr': (el) => { const p = S.data.prs.slice().reverse().find((x) => x.date === el.dataset.date && x.name === el.dataset.name); if (p) openShare({ eyebrow: 'New personal record', big: fmtLoad(p.weight, p.unit), sub: `${p.name} for ${p.reps} reps.`, foot: shortDate(p.date) }); },
+    'share-workout': () => {
+      const m = S.modal;
+      const pr = m.prs[0];
+      openShare(pr ? { eyebrow: 'New personal record', big: fmtLoad(pr.weight, pr.unit), sub: `${pr.name} for ${pr.reps} reps.`, foot: m.record.name } : { eyebrow: 'Session complete', big: `${m.record.sets} sets`, sub: m.record.name, foot: `${m.record.phase && m.record.phase !== 'steady' ? `${phaseName(m.record.phase)} phase · ` : ''}${shortDate(m.record.date)}` });
+    },
+    'share-card': () => shareCard(),
 
     'photo-tap': (el) => {
       const id = el.dataset.id;
@@ -1346,7 +1825,7 @@
     },
     analyze: () => analyzeProgress(),
     'delete-photos': async () => {
-      if (!confirm(`Delete ${S.compare.length} photo${S.compare.length === 1 ? '' : 's'}? This cannot be undone.`)) return;
+      if (!confirm(`Delete ${plural(S.compare.length, 'photo')}? This cannot be undone.`)) return;
       const ids = S.compare.slice();
       await photoTx('readwrite', (s) => ids.forEach((id) => s.delete(id)));
       S.compare = [];
@@ -1355,8 +1834,12 @@
       toast('Deleted');
     },
     'pin-settings': () => { S.modal = { type: 'pin' }; render(); },
-    'remove-pin': () => { S.data.pinHash = null; S.data.pinSalt = null; S.modal = null; save(); render(); toast('PIN removed'); },
-    'lock-vault': () => { S.vaultUnlocked = false; S.revealed = {}; S.compare = []; render(); },
+    'remove-pin': async () => {
+      S.photoKey = null;
+      await rewriteAllPhotos();
+      S.data.pinHash = null; S.data.pinSalt = null; S.modal = null; save(); render(); toast('PIN removed. Photos are no longer encrypted.');
+    },
+    'lock-vault': () => { S.vaultUnlocked = false; S.photoKey = null; S.photos = []; S.revealed = {}; S.compare = []; render(); },
 
     'community-view': (el) => { S.communityView = el.dataset.value; S.openThread = null; render(); },
     'post-tag': (el) => { S.postTag = el.dataset.value; const ta = root.querySelector('[data-form="post"] textarea'); const keep = ta ? ta.value : ''; render(); const nt = root.querySelector('[data-form="post"] textarea'); if (nt) nt.value = keep; },
@@ -1379,6 +1862,8 @@
     'close-thread': () => { S.openThread = null; render(); },
 
     theme: (el) => { applyTheme(el.dataset.value); render(); },
+    install: async () => { const p = S.installPrompt; if (!p) return; p.prompt(); try { await p.userChoice; } catch { /* ignore */ } S.installPrompt = null; render(); },
+    'export-data': () => exportData(),
     'edit-plan': () => { S.data.editing = true; S.data.onboarded = false; S.data.obStep = 0; S.modal = null; save(); render(); window.scrollTo(0, 0); },
     logout: () => logout(),
     'delete-data': () => deleteData(),
@@ -1411,13 +1896,7 @@
       if (el.dataset.out) document.getElementById(el.dataset.out).textContent = v;
       save();
       const btn = root.querySelector('[data-action="ob-next"]');
-      if (btn) {
-        const step = S.data.obStep;
-        const ok = step === 2 ? !!p.periodStart && p.periodStart <= todayKey()
-          : step === 3 ? p.heightCm >= 120 && p.heightCm <= 220 && p.weightKg >= 35 && p.weightKg <= 250 && p.age >= 14 && p.age <= 90
-          : true;
-        btn.disabled = !ok;
-      }
+      if (btn) btn.disabled = !stepValid(S.data.obStep, p);
     }
     if (el.dataset.set && S.data.activeWorkout) {
       const [ei, si, field] = el.dataset.set.split('.');
@@ -1435,12 +1914,13 @@
       if (!file.type.startsWith('image/')) return toast('Choose an image file');
       try {
         const data = await compressImage(file);
-        const photo = { id: uid(), owner: S.session.email, date: todayKey(), created: Date.now(), pose: S.pose || 'front', phase: cycleInfo(S.data.profile).phase, data };
-        await photoTx('readwrite', (s) => s.put(photo));
+        const c = cyc();
+        const photo = { id: uid(), owner: S.session.email, date: todayKey(), created: Date.now(), pose: S.pose || 'front', phase: c.phase, data };
+        await storePhoto(photo);
         await loadPhotos();
         S.revealed[photo.id] = true;
         render();
-        toast('Photo saved to your private vault');
+        toast(S.photoKey ? 'Photo encrypted and saved to your vault' : 'Photo saved to your private vault');
       } catch { toast('Could not save that photo'); }
     }
   });
@@ -1463,13 +1943,13 @@
     if (type === 'chat') { const v = form.msg.value; form.msg.value = ''; return sendChat(v); }
     if (type === 'steps') { S.data.steps[todayKey()] = clamp(Number(form.steps.value) || 0, 0, 100000); S.modal = null; save(); render(); return toast('Steps updated'); }
     if (type === 'other') {
-      S.data.workouts.push({ id: uid(), date: todayKey(), templateId: 'other', name: form.name.value.trim().slice(0, 60), minutes: clamp(Number(form.minutes.value) || 30, 5, 600) });
+      S.data.workouts.push({ id: uid(), date: todayKey(), templateId: 'other', name: form.name.value.trim().slice(0, 60), minutes: clamp(Number(form.minutes.value) || 30, 5, 600), phase: cyc().phase });
       S.modal = null; save(); render(); return toast('Activity logged');
     }
     if (type === 'period') {
       const d = form.date.value;
       if (!d || d > todayKey()) return toast('Choose a date that is not in the future');
-      S.data.profile.periodStart = d; S.modal = null; save(); render(); return toast('Cycle updated');
+      return logPeriod(d);
     }
     if (type === 'checkin') {
       let kg = Number(form.w.value);
@@ -1485,15 +1965,21 @@
     if (type === 'pin') {
       const pin = form.pin.value;
       if (!/^\d{4}$/.test(pin)) return toast('Use 4 digits');
-      S.data.pinSalt = newSalt();
-      S.data.pinHash = await hashSecret(pin, S.data.pinSalt);
+      const salt = newSalt();
+      const key = await photoKeyFrom(pin, salt);
+      S.data.pinSalt = salt;
+      S.data.pinHash = await hashSecret(pin, salt);
+      S.photoKey = key;
       S.vaultUnlocked = true;
-      S.modal = null; save(); render(); return toast('PIN set');
+      await rewriteAllPhotos();
+      S.modal = null; save(); render();
+      return toast(key ? 'PIN set. Photos are encrypted.' : 'PIN set');
     }
     if (type === 'unlock') {
       const ok = (await hashSecret(form.pin.value, S.data.pinSalt)) === S.data.pinHash;
       S.authError = ok ? '' : 'Incorrect PIN';
       S.vaultUnlocked = ok;
+      if (ok) { S.photoKey = await photoKeyFrom(form.pin.value, S.data.pinSalt); await loadPhotos(); }
       return render();
     }
     if (type === 'post') {
@@ -1501,7 +1987,7 @@
       const text = form.text.value.trim();
       if (!text) return;
       const c = community();
-      c.posts.push({ id: uid(), author: meId(), text: text.slice(0, 600), tag: S.postTag || 'Win', phase: cycleInfo(S.data.profile).phase, ts: Date.now(), baseLikes: 0, likedBy: [], comments: [] });
+      c.posts.push({ id: uid(), author: meId(), text: text.slice(0, 600), tag: S.postTag || 'Win', phase: cyc().phase, ts: Date.now(), baseLikes: 0, likedBy: [], comments: [] });
       saveCommunity(c); render(); return toast('Shared with the community');
     }
     if (type === 'comment') {
@@ -1533,8 +2019,13 @@
     }
   });
 
-  // Keep the dark-mode browser chrome in sync with the system setting.
   if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => render());
+
+  // ---------- installable app ----------
+  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); S.installPrompt = e; });
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => { /* offline support unavailable */ }));
+  }
 
   // ---------- boot ----------
   (async function boot() {

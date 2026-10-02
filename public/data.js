@@ -342,5 +342,88 @@
     'Same here. The coach told me to keep steps up and it helped a lot.',
   ];
 
-  window.YOURS_DATA = { PHASES, PHASE_ORDER, WORKOUTS, ROTATION, MEALS, FAVORITE_OPTIONS, AVOID_OPTIONS, MEMBERS, SEED_POSTS, AUTO_REPLIES };
+  // Hormonal contraception and no-period modes use a steady weekly plan instead of phases.
+  PHASES.steady = {
+    name: 'Steady',
+    short: 'Consistent and strong',
+    energy: 'Steady energy',
+    hormones: 'Your hormones follow a steadier pattern, so your plan follows a weekly rhythm and your daily check-in instead of cycle phases. If you are postpartum, get clearance from your doctor before strenuous training.',
+    training: 'Strength 3-4 days a week with progressive overload. Let your daily readiness decide how hard to push.',
+    nutrition: 'Protein at every meal, plenty of fiber and colour, and carbs around training.',
+    tips: [
+      'Check in daily. Your readiness score sets the tone for training.',
+      'Add a rep or a little weight to your main lifts each week.',
+      'Keep steps consistent. They are your best recovery and fat-loss tool.',
+    ],
+    foods: ['Chicken', 'Salmon', 'Greek yogurt', 'Oats', 'Berries', 'Quinoa', 'Leafy greens', 'Eggs'],
+  };
+  ROTATION.steady = ['f-lower', 'f-upper', 'rest', 'o-glute', 'l-upper', 'f-hiit', 'rest']; // Monday first
+  MEALS.steady = MEALS.follicular;
+
+  const CYCLE_MODES = [
+    { id: 'natural', label: 'Natural cycle', desc: 'No hormonal contraception' },
+    { id: 'irregular', label: 'Irregular cycle', desc: 'Length changes a lot month to month' },
+    { id: 'pcos', label: 'PCOS', desc: 'Diagnosed or suspected' },
+    { id: 'perimenopause', label: 'Perimenopause', desc: 'Cycles changing in your 40s' },
+    { id: 'hormonal', label: 'Hormonal contraception', desc: 'Pill, implant, injection or hormonal IUD' },
+    { id: 'none', label: 'No period right now', desc: 'Postpartum, menopause or other' },
+  ];
+
+  const SYMPTOMS = ['Cramps', 'Bloating', 'Cravings', 'Headache', 'Tender breasts', 'Breakouts', 'Low mood', 'Poor sleep'];
+
+  // Grocery items per meal. Prefix: p protein, v produce, g grains and pantry, d dairy and eggs.
+  const GROCERY = {
+    'Warm cacao protein oats': ['g:Oats', 'g:Cacao powder', 'g:Protein powder', 'v:Bananas', 'g:Pumpkin seeds'],
+    'Spinach and feta egg scramble': ['d:Eggs', 'v:Spinach', 'd:Feta', 'g:Sourdough bread'],
+    'Tofu breakfast hash': ['p:Firm tofu', 'v:Sweet potatoes', 'v:Kale', 'g:Turmeric'],
+    'Lentil and beef bolognese bowl': ['p:Lean ground beef', 'g:Lentils', 'g:Brown rice', 'v:Spinach', 'g:Tomato passata'],
+    'Salmon and quinoa power bowl': ['p:Salmon fillets', 'g:Quinoa', 'v:Beets', 'v:Oranges'],
+    'Chickpea and spinach curry': ['g:Chickpeas', 'g:Coconut milk', 'v:Spinach', 'g:Basmati rice', 'g:Curry paste'],
+    'Ginger chicken bone broth soup': ['p:Chicken breast', 'g:Bone broth', 'v:Ginger', 'v:Bok choy', 'g:Rice noodles'],
+    'Miso-glazed cod with greens': ['p:Cod fillets', 'g:Miso paste', 'v:Kale', 'g:Jasmine rice'],
+    'Black bean and sweet potato chili': ['g:Black beans', 'v:Sweet potatoes', 'g:Chopped tomatoes', 'v:Avocados', 'v:Onions'],
+    'Dark chocolate and almonds': ['g:Dark chocolate (85%)', 'g:Almonds'],
+    'Greek yogurt and berries': ['d:Greek yogurt', 'v:Mixed berries'],
+    'Edamame with sea salt': ['v:Edamame (frozen)'],
+    'Greek yogurt protein parfait': ['d:Greek yogurt', 'g:Granola', 'v:Mixed berries', 'g:Chia seeds'],
+    'Veggie egg-white omelet': ['d:Egg whites', 'v:Bell peppers', 'v:Spinach', 'v:Avocados', 'g:Wholegrain bread'],
+    'Green protein smoothie': ['g:Pea protein powder', 'v:Spinach', 'v:Mango (frozen)', 'g:Oats', 'g:Ground flax'],
+    'Chicken kimchi rice bowl': ['p:Chicken breast', 'v:Kimchi', 'g:Brown rice', 'v:Cucumbers', 'g:Sesame seeds'],
+    'Shrimp poke bowl': ['p:Shrimp', 'g:Sushi rice', 'v:Edamame (frozen)', 'v:Mango (frozen)', 'g:Nori'],
+    'Tempeh quinoa salad': ['p:Tempeh', 'g:Quinoa', 'v:Sprouts', 'v:Fresh herbs', 'g:Tahini', 'v:Lemons'],
+    'Lemon herb chicken and potatoes': ['p:Chicken thighs', 'v:Baby potatoes', 'v:Green beans', 'v:Lemons'],
+    'Turkey zucchini meatballs': ['p:Lean ground turkey', 'v:Zucchini', 'g:Marinara sauce', 'g:Wholewheat pasta'],
+    'Tofu stir-fry with soba': ['p:Firm tofu', 'v:Broccoli', 'v:Snap peas', 'g:Soba noodles'],
+    'Cottage cheese and pineapple': ['d:Cottage cheese', 'v:Pineapple'],
+    'Rice cakes and turkey': ['g:Rice cakes', 'p:Turkey slices'],
+    'Protein shake and banana': ['g:Protein powder', 'v:Bananas'],
+    'Berry flax overnight oats': ['g:Oats', 'g:Ground flax', 'v:Mixed berries', 'd:Greek yogurt'],
+    'Smoked salmon avocado toast': ['p:Smoked salmon', 'v:Avocados', 'v:Arugula', 'g:Rye bread'],
+    'Tofu veggie scramble': ['p:Firm tofu', 'v:Bell peppers', 'v:Tomatoes', 'g:Black beans'],
+    'Salmon and roasted broccoli bowl': ['p:Salmon fillets', 'v:Broccoli', 'g:Quinoa', 'g:Tahini'],
+    'Turkey and cauliflower rice burrito bowl': ['p:Lean ground turkey', 'v:Cauliflower rice', 'g:Black beans', 'g:Salsa', 'v:Avocados'],
+    'Rainbow lentil salad': ['g:Lentils', 'v:Bell peppers', 'v:Red cabbage', 'd:Feta', 'v:Fresh herbs'],
+    'Grilled steak and Brussels sprouts': ['p:Sirloin steak', 'v:Brussels sprouts', 'v:Sweet potatoes'],
+    'Shrimp and veggie skewers': ['p:Shrimp', 'v:Zucchini', 'v:Bell peppers', 'g:Wild rice'],
+    'Chickpea cauliflower tikka': ['g:Chickpeas', 'v:Cauliflower', 'g:Tikka sauce', 'g:Basmati rice'],
+    'Apple and almond butter': ['v:Apples', 'g:Almond butter'],
+    'Hummus and crudites': ['g:Hummus', 'v:Carrots', 'v:Bell peppers', 'v:Cucumbers'],
+    'Protein yogurt bark': ['d:Greek yogurt', 'v:Mixed berries'],
+    'Sweet potato protein pancakes': ['v:Sweet potatoes', 'd:Eggs', 'g:Oats', 'g:Protein powder'],
+    'Peanut butter banana oats': ['g:Oats', 'v:Bananas', 'g:Peanut butter', 'g:Protein powder'],
+    'Savory tofu rice bowl': ['p:Firm tofu', 'g:Brown rice', 'v:Spinach', 'g:Sesame seeds'],
+    'Turkey sweet potato bowl': ['p:Lean ground turkey', 'v:Sweet potatoes', 'v:Kale', 'g:Tahini'],
+    'Salmon brown rice sushi bowl': ['p:Salmon fillets', 'g:Brown rice', 'v:Avocados', 'v:Cucumbers'],
+    'Lentil and pumpkin soup': ['g:Red lentils', 'v:Pumpkin', 'g:Cumin', 'g:Seeded bread'],
+    'Beef and black bean tacos': ['p:Lean ground beef', 'g:Black beans', 'v:Slaw mix', 'g:Corn tortillas'],
+    'Chicken and chickpea tray bake': ['p:Chicken thighs', 'g:Chickpeas', 'v:Bell peppers', 'g:Harissa'],
+    'Halloumi and roasted veggie couscous': ['d:Halloumi', 'v:Zucchini', 'v:Bell peppers', 'g:Couscous', 'g:Pumpkin seeds'],
+    'Dark chocolate and pumpkin seeds': ['g:Dark chocolate (85%)', 'g:Pumpkin seeds'],
+    'Banana and peanut butter': ['v:Bananas', 'g:Peanut butter'],
+    'Protein hot chocolate': ['g:Cacao powder', 'g:Protein powder', 'd:Milk of choice'],
+  };
+
+  const api = { PHASES, PHASE_ORDER, WORKOUTS, ROTATION, MEALS, FAVORITE_OPTIONS, AVOID_OPTIONS, MEMBERS, SEED_POSTS, AUTO_REPLIES, CYCLE_MODES, SYMPTOMS, GROCERY };
+  if (typeof window !== 'undefined') window.YOURS_DATA = api;
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

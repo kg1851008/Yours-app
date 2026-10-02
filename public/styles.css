@@ -177,7 +177,7 @@ h3 { font-size: 16px; font-weight: 600; }
 
 /* Phase */
 .phase-card { position: relative; overflow: hidden; }
-.phase-card .ring { width: 116px; height: 116px; flex-shrink: 0; }
+.ring { flex-shrink: 0; }
 .phase-name { font-size: 30px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
 .phase-list { list-style: none; margin-top: 14px; }
 .phase-list li { display: flex; gap: 10px; font-size: 14px; padding: 6px 0; }

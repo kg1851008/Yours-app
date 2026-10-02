@@ -14,12 +14,27 @@
 - **Community:** a feed for wins, questions and tips, with likes and comments, plus direct messages.
 - Light and dark mode, mobile-first layout, no emojis.
 
+### Coaching intelligence
+
+- **Learns her cycle.** Each logged period start updates her predicted cycle length (average of recent cycles, with range and regularity). A late period stays in luteal and is flagged, instead of silently starting a new cycle. Logging bleeding at check-in asks whether her period started.
+- **Supports every cycle type.** Natural, irregular, PCOS and perimenopause use phase predictions, labelled as estimates where appropriate. Hormonal contraception and no current period use a steady weekly plan driven by readiness.
+- **Daily check-in.** Energy, sleep, mood, soreness, symptoms and bleeding produce a 0-100 readiness score. Low readiness offers a lighter session with one tap and lowers suggested weights.
+- **Patterns.** After about 6 check-ins, YOURS shows when her energy dips (for example "around day 24"), which phase each symptom clusters in, and how energy varies by phase. Known dip days trigger a lighter-session suggestion.
+- **Suggested weights.** Every main lift gets a target weight and rep count from her last session, using double progression. Loads are about 10% lighter when menstrual or low on readiness and held steady in the luteal phase. Suggestions are pre-filled in the workout logger.
+- **PR detection** using estimated one-rep max, plus **strength by phase**, which compares her relative strength across phases on the same lifts.
+- **Weekly check-in.** Three questions (how training felt, hunger, next week's plans) plus her numbers (sessions, steps, readiness, weight trend, upcoming phase changes) produce plan changes she can accept or skip: sets on main lifts, step target and calories, all within safe limits.
+- **Forgiving streak.** A day counts for training, a check-in, or 60% of her step target, and one missed day a week is forgiven.
+- **Protein tracking** by marking meals as eaten, plus a **grocery list** for the next 7 days of meals that she can tick off and share.
+- **Share cards** (PRs, streak, strength by phase): 1080x1350 branded images, shared through the phone's share menu or downloaded.
+- **Installable app (PWA).** Home-screen icon, an offline app shell, and the Android install prompt. On iPhone, Safari's Add to Home Screen.
+- **Privacy.** With a vault PIN, photos are encrypted on the device with AES-GCM (key derived from the PIN with PBKDF2). She can export her data as JSON and delete everything.
+
 ## How data is stored
 
 The app stores everything on the user's device for now:
 
 - Accounts, profile and history are in `localStorage`. Passwords and the vault PIN are hashed with PBKDF2.
-- Progress photos are in IndexedDB. They are resized to at most 1024 px and never leave the device unless the user taps **Analyze**. The server only holds them in memory for that request and does not save them.
+- Progress photos are in IndexedDB, encrypted when a vault PIN is set. They are resized to at most 1024 px and never leave the device unless the user taps **Analyze**. The server only holds them in memory for that request and does not save them. A 4-digit PIN deters casual snooping but would not stop a determined attacker with the device.
 - Community posts and messages are shared only between accounts in the same browser. A real multi-user community needs a backend.
 
 ## AI coach
@@ -28,6 +43,12 @@ The app stores everything on the user's device for now:
 
 - Set `ANTHROPIC_API_KEY` in your Vercel project, or in your shell for local runs, to turn on the live coach. `ANTHROPIC_MODEL` is optional and defaults to `claude-opus-5-5`.
 - Without a key, the app uses a built-in on-device coach. It gives phase-aware answers and reviews progress from logged data. Photo review needs the live coach.
+
+## Tests
+
+```bash
+npm test   # coaching logic: cycle learning, readiness, load suggestions, PRs, patterns, weekly review, streak, grocery list
+```
 
 ## Run locally
 
