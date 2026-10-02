@@ -1385,7 +1385,8 @@
         <button class="btn primary block" data-action="start">Get started</button>
         <button class="btn ghost block" data-action="go-login">I have an account</button>
         ${billingOn() ? '' : '<button class="btn soft block" data-action="demo">Try the demo</button>'}
-        <div class="p-row" style="margin-top:18px;opacity:.7"><span>Cycle</span><span>Vol. 01</span></div>
+        <p class="tiny center" style="margin-top:14px">We never sell your data. <button class="link tiny" data-action="open-privacy">Privacy</button></p>
+        <div class="p-row" style="margin-top:12px;opacity:.7"><span>Cycle</span><span>Vol. 01</span></div>
       </div>
     </div>`;
   }
@@ -1414,6 +1415,7 @@
       <label class="field"><span class="label">Password</span><input class="input" type="password" name="password" autocomplete="new-password" minlength="${cloud ? 8 : 6}" required placeholder="At least ${cloud ? 8 : 6} characters"></label>
       ${S.authError ? `<p class="error" style="margin-top:12px">${esc(S.authError)}</p>` : ''}
       <button class="btn primary block" style="margin-top:18px" type="submit">Save my plan</button>
+      <p class="tiny muted center" style="margin-top:10px">We never sell or share your data. <button type="button" class="link tiny" data-action="open-privacy">Privacy</button></p>
     </form>`;
   }
 
@@ -1859,6 +1861,7 @@
       ${S.billingError ? `<p class="error" style="margin-top:12px">${esc(S.billingError)}</p>` : ''}
       <button class="btn primary block" style="margin-top:18px" data-action="pay-start" ${S.billingBusy ? 'disabled' : ''}>${S.billingBusy === 'confirming' ? 'Confirming your membership...' : S.billingBusy ? 'Opening secure checkout...' : trial ? `Start my ${trialDays()}-day free trial` : 'Continue'}</button>
       <p class="tiny muted center" style="margin-top:10px">${trial ? `Free until ${charge}. Then ${money(priceFor(plan))} ${plan === 'yearly' ? 'a year' : 'a month'}, renewing automatically. Cancel anytime before ${charge} in Profile and you won't be charged. Secure payment by Stripe.` : `${money(priceFor(plan))} ${plan === 'yearly' ? 'a year' : 'a month'}, renewing automatically. Cancel anytime in Profile. Secure payment by Stripe.`}</p>
+      <p class="tiny muted center" style="margin-top:8px">We never sell your data. <button class="link tiny" data-action="open-privacy">Privacy</button></p>
       <p class="center small" style="margin-top:14px"><button class="link" data-action="billing-recheck">I already subscribed</button>${S.sub && S.sub.status && S.sub.status !== 'none' ? ' · <button class="link" data-action="billing-portal">Manage billing</button>' : ''}</p>
     </div>`;
   }
@@ -2550,6 +2553,23 @@
       return sheet(esc(wk.name), `${m.from ? `<button class="link small" style="margin-bottom:8px" data-action="modal-back">Back to program</button>` : ''}<div class="eyebrow">${esc(wk.focus)} · ${wk.minutes} min · ${esc(wk.intensity)}</div><p class="small" style="margin-top:8px">${esc(wk.summary)}</p><div class="divider"></div>${exerciseList(wk, true)}
         <div class="row" style="margin-top:16px"><button class="btn primary grow" data-action="start-workout" data-id="${wk.id}">Start now</button>${isToday ? '' : `<button class="btn ghost" data-action="set-today" data-id="${wk.id}">Make today's</button>`}</div>`);
     }
+    if (m.type === 'privacy') {
+      const h = (t) => `<div class="label" style="margin-top:18px">${t}</div>`;
+      const li = (items) => `<ul class="phase-list" style="margin-top:6px">${items.map((x) => `<li class="small">${x}</li>`).join('')}</ul>`;
+      return sheet('Your data is yours', `
+        <div class="card" style="margin:0;background:var(--green);color:var(--bg);border:none"><div class="serif" style="font-size:24px;line-height:1.15">We never sell your data.</div>
+          <p class="small" style="margin-top:8px;opacity:.85">We don't share it with advertisers or data brokers. There are no ads and no tracking or analytics in YOURS. Your cycle, health and body data is never used for advertising.</p></div>
+        ${h('What we keep')}
+        ${li(['Your name and email, for your account.', 'Your plan and what you log: cycle, check-ins, workouts, food, steps and weight.', 'Your community posts, comments and messages.', 'Whether your membership is active. Your card details stay with Stripe; we never see them.'])}
+        ${h('Where it lives')}
+        ${li(['On your phone, and in your private YOURS account so it syncs across your devices. Other members can never see it; only your posts and messages are shared, with the people you share them with.', 'Progress photos stay on your phone, locked with your PIN. If you turn on backup, they are encrypted on your phone with your passphrase first, so we cannot see them.'])}
+        ${h('Services that help run YOURS')}
+        <p class="tiny muted" style="margin-top:4px">They process data only to provide their part of the app, not for their own purposes.</p>
+        ${li(['<strong>Supabase</strong>: accounts and storage.', '<strong>Vercel</strong>: hosts the app.', '<strong>Stripe</strong>: payments.', '<strong>Anthropic (Claude)</strong>: AI coach answers, food estimates and photo reviews, only when you use them. Photos are sent only when you tap Analyze or snap a plate, and are not stored or used to train AI models.', '<strong>Open Food Facts</strong>: the barcode number when you scan.', '<strong>Nutritionix</strong>: what you type when you search restaurant menus.', '<strong>Have I Been Pwned</strong>: a 5-character fragment of a scrambled version of a new password, to check it has not been leaked. Never the password itself.'])}
+        ${h('Your choices')}
+        ${li(['Export everything as a file from Profile.', 'Delete your account from Profile. It removes your data, posts, messages and photo backup, and cancels your membership.', 'Hide or report anyone in the community.'])}
+        <p class="tiny muted" style="margin-top:16px">Last updated October 2026.</p>`);
+    }
     if (m.type === 'confirmEmail') {
       return sheet('Check your email', `<p class="small">We sent a link to <strong>${esc(m.email)}</strong>. Tap it to confirm your account, then sign in here.</p>
         <p class="small muted" style="margin-top:10px">${m.migrating ? 'Until then you are signed in on this device as before.' : 'Your plan is saved on this device and moves into your account when you sign in.'} No email? Check spam, or wait a minute.</p>
@@ -2615,7 +2635,7 @@
         <div class="card flat small"><div class="label">Coach</div><p class="muted">${S.ai ? 'Live AI coach is connected.' : 'Running the on-device coach. Set ANTHROPIC_API_KEY on the server to enable the live AI coach and photo reviews.'}</p></div>
         ${billingOn() && isCloud() ? `<div class="card flat small"><div class="label">Membership</div><p class="muted">${esc(membershipLine())}</p>${S.sub && S.sub.status && !['none', 'comp'].includes(S.sub.status) ? '<button class="btn ghost sm block" style="margin-top:10px" data-action="billing-portal">Manage membership</button>' : ''}<p class="tiny muted" style="margin-top:8px">Cancel, switch plans or update your card on Stripe's secure page.</p></div>` : ''}
         ${isCloud() ? `<div class="card flat small"><div class="label">Account sync</div><p class="muted">${S.syncState === 'offline' ? 'Offline. Changes are saved on this device and sync when you are back online.' : S.syncState === 'saving' ? 'Saving...' : `Synced across your devices${S.syncedAt ? ` · ${timeAgo(S.syncedAt)}` : ''}.`}</p><button class="btn ghost sm block" style="margin-top:10px" data-action="sync-now">Sync now</button>${(S.data.blocked || []).length ? `<button class="link small" style="margin-top:10px" data-action="unblock-all">Show ${plural(S.data.blocked.length, 'hidden member')} again</button>` : ''}</div>` : cloud && !isGuest() ? '<div class="card flat small"><div class="label">Account sync</div><p class="muted">This account lives on this device only. Sign out and sign in again with the same email and password to move it to your YOURS account and sync across devices.</p></div>' : ''}
-        <div class="card flat small"><div class="label">Your data</div><p class="muted">${isCloud() ? 'Your plan and history are stored in your private YOURS account and on this device. Progress photos stay on this device unless you turn on encrypted backup. Nothing is used to train AI models.' : 'Everything is stored on this device. Nothing is used to train AI models.'}</p><button class="btn ghost sm block" style="margin-top:10px" data-action="export-data">${icon('download', 16)} Export my data</button></div>
+        <div class="card flat small"><div class="label">Your data</div><p><strong>We never sell your data</strong> or share it with advertisers. No ads, no tracking.</p><p class="muted" style="margin-top:6px">${isCloud() ? 'Your plan and history are stored in your private YOURS account and on this device. Progress photos stay on this device unless you turn on encrypted backup. Nothing is used to train AI models.' : 'Everything is stored on this device. Nothing is used to train AI models.'}</p><button class="btn ghost sm block" style="margin-top:10px" data-action="export-data">${icon('download', 16)} Export my data</button><button class="link small" style="margin-top:10px" data-action="open-privacy">Read our privacy promise</button></div>
         <button class="btn ghost block" style="margin-top:12px" data-action="logout">${isGuest() ? 'Start over' : 'Sign out'}</button>
         <button class="btn block" style="margin-top:8px;color:var(--danger)" data-action="delete-data">Delete my data</button>`);
     }
@@ -2955,6 +2975,7 @@
     },
     'go-welcome': () => { S.screen = 'welcome'; S.authError = ''; render(); },
     demo: () => demo(),
+    'open-privacy': () => { S.modal = { type: 'privacy' }; render(); },
     'pay-plan': (el) => { S.payPlan = el.dataset.plan; S.billingError = ''; render(); },
     'pay-start': async () => {
       S.billingBusy = 'opening'; S.billingError = ''; render();
