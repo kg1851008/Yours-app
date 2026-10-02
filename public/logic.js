@@ -367,6 +367,26 @@
   }
   const proteinFor = (data, key) => macrosFor(data, key).protein;
 
+  // Recipes: ingredients are logged-style items with macros for the amount used.
+  function recipeTotals(ingredients) {
+    const t = { kcal: 0, protein: 0, carbs: 0, fat: 0 };
+    (ingredients || []).forEach((i) => { t.kcal += i.kcal || 0; t.protein += i.protein || 0; t.carbs += i.carbs || 0; t.fat += i.fat || 0; });
+    return { kcal: Math.round(t.kcal), protein: Math.round(t.protein * 10) / 10, carbs: Math.round(t.carbs * 10) / 10, fat: Math.round(t.fat * 10) / 10 };
+  }
+  // A saved recipe as a loggable food: per serving, and per 100 g when the cooked weight is known.
+  function recipeFood(recipe) {
+    const t = recipeTotals(recipe.ingredients);
+    const servings = Math.max(1, Number(recipe.servings) || 1);
+    const grams = Number(recipe.totalGrams) > 0 ? Number(recipe.totalGrams) : null;
+    const per = (f) => Object.fromEntries(Object.entries(t).map(([k, v]) => [k, Math.round(v * f * 10) / 10]));
+    return {
+      barcode: null, recipeId: recipe.id, name: recipe.name, brand: 'My recipe', image: null, custom: true,
+      serving: { label: grams ? `1 serving (${Math.round(grams / servings)} g)` : `1 serving of ${servings}`, grams: grams ? Math.round(grams / servings) : null },
+      perServing: per(1 / servings),
+      per100: grams ? per(100 / grams) : null,
+    };
+  }
+
   // EAN-13 / UPC-A / EAN-8 check digit validation, so a misread scan is rejected before lookup.
   function validBarcode(code) {
     if (!/^\d{8}$|^\d{12,14}$/.test(code)) return false;
@@ -528,7 +548,7 @@
     GOALS, LEVELS, ACTIVITY, goalOf, activityOf, STEADY_MODES,
     learnCycle, addPeriod, cycleInfo, targets, readiness, readinessLabel, patterns,
     workoutById, plannedWorkout, workoutFor, adjustSets, parseReps, e1rm, suggestLoad, detectPRs, strengthByPhase, exerciseHistory,
-    mealOptions, mealFor, proteinFor, macrosFor, parseOFF, foodMacros, validBarcode, groceryList, streak, weeklyStats, weeklyAdjust, applyAdjustments, weeklyDue,
+    mealOptions, mealFor, proteinFor, macrosFor, parseOFF, foodMacros, validBarcode, recipeTotals, recipeFood, groceryList, streak, weeklyStats, weeklyAdjust, applyAdjustments, weeklyDue,
   };
   if (typeof window !== 'undefined') window.YOURS_LOGIC = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

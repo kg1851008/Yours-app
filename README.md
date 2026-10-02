@@ -8,7 +8,7 @@
 - **Onboarding:** fitness level, main goal, period start date, height/weight/age (metric or imperial), activity level, cycle and period length, favourite foods and foods to avoid.
 - **Home:** date, cycle ring with the current phase, hormone notes and tips, today's workout, protein/calorie/water/step targets, and a coach note.
 - **Workouts:** 12 preloaded sessions grouped by phase, a daily recommendation based on cycle day, sets adjusted for fitness level, a set-by-set logger, a weekly overview and a library.
-- **Meals:** breakfast, lunch, dinner and a snack for the current phase. Avoided foods are filtered out, favourites come first, each meal can be swapped, and portions scale to her calorie target.
+- **Meals (food diary):** a MyFitnessPal-style diary with Breakfast, Lunch, Dinner and Snacks, calories remaining (goal minus food) and macro bars. She can add food per meal, tap an entry to change the amount, and move between days to log past meals. Phase meal ideas sit below as optional suggestions with a "Log this" button (portion-adjustable, macros estimated), plus a grocery list.
 - **Advisor:** an AI coach chat that knows her phase, targets, workouts and steps. It can suggest in-app actions (swap today's workout, log water, open a tab) as buttons she can tap.
 - **Progress:** a private photo vault with an optional PIN. Photos are blurred until tapped, can be compared side by side, and can be sent for an AI review that says whether she is on track. Also tracks weight check-ins.
 - **Community:** a feed for wins, questions and tips, with likes and comments, plus direct messages.
@@ -24,6 +24,8 @@
 - **PR detection** using estimated one-rep max, plus **strength by phase**, which compares her relative strength across phases on the same lifts.
 - **Weekly check-in.** Three questions (how training felt, hunger, next week's plans) plus her numbers (sessions, steps, readiness, weight trend, upcoming phase changes) produce plan changes she can accept or skip: sets on main lifts, step target and calories, all within safe limits.
 - **Forgiving streak.** A day counts for training, a check-in, or 60% of her step target, and one missed day a week is forgiven.
+- **Recipes.** Build a meal from its ingredients (scan, search or create each), set how many servings it makes and optionally the cooked weight, then log a serving or any number of grams. Recipes are saved and editable. Quick add covers meals out.
+- **Food scale guidance.** A dismissible tip on the diary, plus hints in recipes and grams entry. Always optional.
 - **Barcode food logging.** Scan a packaged food with the phone camera (native BarcodeDetector on Android Chrome, the bundled ZXing reader on iPhone and everywhere else), scan from a photo, or type the number. Nutrition comes from Open Food Facts, a free open database; only the barcode is sent. Log by servings or grams to a meal. Products missing from the database can be added once from the label and are remembered. Also: food search, recent foods, and manual entries. Calories, protein, carbs and fat roll up into daily totals on Home and Meals.
 - **Protein tracking** by marking meals as eaten, plus a **grocery list** for the next 7 days of meals that she can tick off and share.
 - **Share cards** (PRs, streak, strength by phase): 1080x1350 branded images, shared through the phone's share menu or downloaded.

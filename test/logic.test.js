@@ -158,3 +158,24 @@ test('validBarcode checks the check digit', () => {
   assert.equal(L.validBarcode('036000291452'), true); // UPC-A
   assert.equal(L.validBarcode('abc'), false);
 });
+
+test('recipes total their ingredients and log per serving or by cooked weight', () => {
+  const recipe = { id: 'r1', name: 'Chicken rice bowl', servings: 4, totalGrams: 1600, ingredients: [
+    { kcal: 660, protein: 124, carbs: 0, fat: 14 },   // 600 g chicken breast
+    { kcal: 520, protein: 10, carbs: 112, fat: 2 },   // rice
+    { kcal: 120, protein: 0, carbs: 0, fat: 14 },     // olive oil
+  ] };
+  assert.deepEqual(L.recipeTotals(recipe.ingredients), { kcal: 1300, protein: 134, carbs: 112, fat: 30 });
+  const food = L.recipeFood(recipe);
+  assert.equal(food.perServing.kcal, 325);
+  assert.equal(food.serving.grams, 400);
+  assert.equal(L.foodMacros(food, 200, 'grams').kcal, 163); // half a serving by weight
+  assert.equal(L.recipeFood({ ...recipe, totalGrams: null }).per100, null);
+});
+
+test('suggested meals carry estimated carbs and fat', () => {
+  const D = require('../public/data.js');
+  const m = D.MEALS.follicular.lunch[0];
+  assert.ok(m.carbs > 0 && m.fat > 0);
+  assert.ok(Math.abs(m.protein * 4 + m.carbs * 4 + m.fat * 9 - m.kcal) <= 15);
+});

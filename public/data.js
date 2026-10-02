@@ -305,6 +305,17 @@
     },
   };
 
+  // Suggested meals list protein and calories. Estimate carbs and fat from the remaining calories
+  // so a logged suggestion carries all four macros (fat-rich ingredients shift the split).
+  Object.values(MEALS).forEach((slots) => Object.values(slots).forEach((list) => list.forEach((meal) => {
+    if (meal.carbs != null) return;
+    const rest = Math.max(0, meal.kcal - meal.protein * 4);
+    const fatShare = /salmon|avocado|almond|peanut|cheese|feta|halloumi|chocolate|egg|tahini|coconut|beef|steak|thigh|seed|miso|cod/i.test(meal.name + ' ' + meal.desc) ? 0.45 : 0.3;
+    meal.fat = Math.round((rest * fatShare) / 9);
+    meal.carbs = Math.round((rest * (1 - fatShare)) / 4);
+    meal.estimated = true;
+  })));
+
   const FAVORITE_OPTIONS = ['Chicken', 'Salmon', 'Eggs', 'Greek yogurt', 'Oats', 'Rice', 'Sweet potato', 'Avocado', 'Berries', 'Tofu', 'Beef', 'Turkey', 'Spinach', 'Quinoa', 'Shrimp', 'Chocolate'];
   const AVOID_OPTIONS = [
     { label: 'Dairy', tags: ['dairy'] },
