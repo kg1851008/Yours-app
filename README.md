@@ -61,6 +61,30 @@ The database schema is in `supabase/schema.sql` and is already applied to the `y
 
 **Before launch, in the Supabase dashboard:** Authentication > URL Configuration, set Site URL to your live address (for example your Vercel domain) and add it under Redirect URLs, so confirmation and password-reset emails link back to the app. The built-in email sender is rate-limited and for testing only; for real users, add your own SMTP provider under Authentication > Emails.
 
+## Membership and payments (Stripe)
+
+A 7-day free trial, then a monthly or yearly membership. Anyone can build their plan for free; the rest of the app needs a trial or a membership. Until the Stripe settings below are added, payments stay off and the app is open to everyone.
+
+- **Trial with card upfront.** She picks monthly or yearly and enters her card on Stripe's secure checkout. She is charged on day 8 unless she cancels. One free trial per member.
+- **Access** is open while the membership is trialing or active, and for 7 days while Stripe retries a failed card. Otherwise the app shows the membership screen; her data is kept.
+- **Manage membership** in Profile opens Stripe's customer portal (cancel, switch plan, update card). Home shows a reminder in the last 2 days of the trial.
+- **How it works.** `api/billing.js` creates Checkout and portal sessions for the signed-in member. `api/stripe-webhook.js` receives Stripe's updates (signature checked) and saves each member's status in the Supabase `subscriptions` table, which the app reads. Members can only read their own row; only the server can change it.
+- **Complimentary access** (you, testers, partners): in Supabase, Table Editor > subscriptions, add a row with the member's `user_id` and status `comp`.
+
+### Turning payments on
+
+1. **Stripe account** at stripe.com (start in Test mode). Products > Add product "YOURS membership" with two recurring prices: monthly ($14.99) and yearly ($99). Copy each price ID (`price_...`).
+2. **Webhook:** Developers > Webhooks > Add endpoint `https://yours-app-tau.vercel.app/api/stripe-webhook`, events `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`. Copy the signing secret (`whsec_...`).
+3. **Customer portal:** Settings > Billing > Customer portal > Activate (allow cancelling and updating payment methods).
+4. **Vercel** > Project > Settings > Environment Variables, then redeploy:
+   - `STRIPE_SECRET_KEY` (`sk_test_...` or `sk_live_...`)
+   - `STRIPE_PRICE_MONTHLY`, `STRIPE_PRICE_YEARLY`
+   - `STRIPE_WEBHOOK_SECRET`
+   - `SUPABASE_SECRET_KEY` (Supabase > Project Settings > API Keys > secret key)
+   - optional `APP_URL` (your live address, if it changes from yours-app-tau.vercel.app)
+
+Test with Stripe's test card 4242 4242 4242 4242, then switch Stripe to live mode and replace the keys, price IDs and webhook secret with the live ones.
+
 ## How data is stored on the device
 
 - Passwords for device-only accounts and the vault PIN are hashed with PBKDF2.

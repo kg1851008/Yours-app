@@ -3,13 +3,18 @@ const express = require('express');
 const path = require('path');
 const coach = require('./api/coach');
 const food = require('./api/food');
+const billing = require('./api/billing');
+const stripeWebhook = require('./api/stripe-webhook');
 
 const app = express();
+// Stripe needs the raw body to verify its signature, so this route comes before the JSON parser.
+app.post('/api/stripe-webhook', express.raw({ type: '*/*' }), stripeWebhook);
 app.use(express.json({ limit: '12mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.all('/api/coach', coach);
 app.get('/api/food', food);
+app.all('/api/billing', billing);
 
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));

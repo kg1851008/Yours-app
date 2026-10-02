@@ -1,5 +1,5 @@
 // YOURS service worker: offline app shell. The AI endpoint is never cached.
-const CACHE = 'yours-v17';
+const CACHE = 'yours-v18';
 const SHELL = ['/', '/index.html', '/styles.css', '/config.js', '/cloud.js', '/data.js', '/logic.js', '/app.js', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png', '/img/logo.png', '/fonts/fonts.css', '/fonts/anton.woff2', '/fonts/archivo-expanded-black.woff2', '/fonts/dm-mono-400.woff2', '/fonts/dm-mono-500.woff2', '/fonts/instrument-serif.woff2', '/fonts/instrument-serif-italic.woff2', '/fonts/inter.woff2', '/fonts/script.woff2'];
 
 self.addEventListener('install', (e) => {
