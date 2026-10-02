@@ -1513,13 +1513,14 @@
         <div class="rule" style="height:3px;margin-top:12px"></div>
         <ul class="phase-list" style="--line:#1F1F1A33"><li>Learns your real cycle and energy patterns from 20-second daily check-ins</li><li>Suggests the exact weight for every lift, adjusted for your phase</li><li>Reviews your week every Sunday and adjusts next week's plan</li></ul>
       </div>
-      <div class="card" style="margin-top:24px">
+      ${isGuest() ? `<div class="card" style="margin-top:24px">
         <h2>Save your plan</h2>
         <p class="muted small" style="margin:4px 0 16px">Create a free account to keep your plan and unlock progress photos and the community.</p>
         ${signupForm('reveal')}
       </div>
       <button class="btn ghost block" style="margin-top:12px" data-action="continue-guest">Continue as guest</button>
-      <p class="center small" style="margin-top:14px"><button class="link" data-action="go-login">I already have an account</button></p>
+      <p class="center small" style="margin-top:14px"><button class="link" data-action="go-login">I already have an account</button></p>` : `<button class="btn primary block" style="margin-top:24px" data-action="start-plan">Start my plan</button>
+      <p class="center small muted" style="margin-top:10px">Saved to your account${isCloud() ? ' and synced to your devices' : ''}.</p>`}
     </div>`;
   }
   const statTile = (label, value, unitLabel) => `<div class="stat"><div class="eyebrow">${label}</div><div class="value">${value}<small>${unitLabel}</small></div></div>`;
@@ -2848,6 +2849,7 @@
     },
     'go-welcome': () => { S.screen = 'welcome'; S.authError = ''; render(); },
     demo: () => demo(),
+    'start-plan': () => { S.data.planSeen = true; S.tab = 'home'; save(); render(); window.scrollTo(0, 0); },
     'continue-guest': () => { S.data.planSeen = true; save(); render(); window.scrollTo(0, 0); },
     'open-signup': (el) => { S.authError = ''; S.modal = { type: 'signup', reason: el.dataset.reason }; render(); },
 
