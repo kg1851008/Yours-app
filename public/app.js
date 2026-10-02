@@ -698,22 +698,30 @@
     return img ? `<img class="poster-img" src="${esc(img)}" alt=""><div class="shade"></div>` : `<div class="art art-${kind}"></div><div class="shade"></div>`;
   }
   const poster = (kind, inner, cls) => `<div class="poster ${cls || ''}">${backdrop(kind)}${inner}</div>`;
+  // Light studio poster tinted with a phase colour.
+  const studio = (phase, inner, cls) => `<div class="poster light ${cls || ''}">${D.IMAGERY[phase] ? backdrop(phase) : `<div class="art art-studio"></div><div class="tint tint-${phase}"></div>`}${inner}</div>`;
+  const corners = (tl, tr, bl, br) => `<div class="corners"><span class="tl">${tl || ''}</span><span class="tr">${tr || ''}</span><span class="bl">${bl || ''}</span><span class="br">${br || ''}</span></div>`;
+  // Small badge with a caption running around it.
+  function orbit(text, inner) {
+    const id = 'o' + Math.random().toString(36).slice(2, 7);
+    return `<div class="orbit"><svg class="ring-text" viewBox="0 0 100 100" aria-hidden="true"><defs><path id="${id}" d="M50,50 m-38,0 a38,38 0 1,1 76,0 a38,38 0 1,1 -76,0"/></defs><text font-family="DM Mono, monospace" font-size="9.6" letter-spacing="2.4" fill="currentColor"><textPath href="#${id}">${esc(text.toUpperCase())}</textPath></text></svg><div class="core">${inner}</div></div>`;
+  }
   const copyFor = (phase) => D.PHASE_COPY[phase] || D.PHASE_COPY.steady;
 
   // ---------- views: welcome + auth ----------
   function viewWelcome() {
-    return `<div class="welcome">${backdrop('welcome')}
-      <div class="p-row"><span>Vol. 01</span><span>Cycle-synced coaching</span></div>
+    return `<div class="welcome light">${D.IMAGERY.welcome ? backdrop('welcome') : '<div class="art art-studio"></div><div class="tint tint-ovulation" style="top:30%;right:-20%"></div><div class="tint tint-follicular" style="top:6%;left:-30%;right:auto;width:60%;opacity:.35"></div>'}
+      <div class="p-row"><span>Health</span><span>Strength</span></div>
       <div class="hero">
         <p class="lead">Train with your cycle, not against it.</p>
         <div class="wordmark xl">yours.</div>
-        <div class="tagline">For your body.</div>
+        <div class="script-sig">for your body</div>
       </div>
       <div class="stack">
-        <button class="btn cream block" data-action="start">Get started</button>
+        <button class="btn primary block" data-action="start">Get started</button>
         <button class="btn ghost block" data-action="go-login">I have an account</button>
         <button class="btn soft block" data-action="demo">Try the demo</button>
-        <div class="p-row" style="margin-top:18px;justify-content:center;opacity:.75">Strength . Cycle . Discipline</div>
+        <div class="p-row" style="margin-top:18px;opacity:.7"><span>Cycle</span><span>Vol. 01</span></div>
       </div>
     </div>`;
   }
@@ -889,9 +897,12 @@
   }
 
   // ---------- home ----------
-  function header(title, sub, big) {
+  function header(title, sub, style) {
     const name = myName();
-    return `<div class="top"><div class="grow"><div class="eyebrow">${esc(sub)}</div>${big ? `<div class="masthead" style="margin-top:8px">${title}</div>` : `<h1 class="serif" style="margin-top:6px">${title}</h1>`}</div>
+    const t = style === 'serif' ? `<div class="serif-tight" style="font-size:76px;margin-top:10px">${title}</div>`
+      : style === 'caps' ? `<div class="stack-caps" style="font-size:44px;margin-top:10px">${title}</div>`
+      : style ? `<div class="masthead" style="margin-top:8px">${title}</div>` : `<h1 class="serif" style="margin-top:6px">${title}</h1>`;
+    return `<div class="top"><div class="grow"><div class="eyebrow">${esc(sub)}</div>${t}</div>
       <button class="avatar" data-action="open-settings" aria-label="Profile and settings">${isGuest() ? icon('settings', 18) : esc(initials(name))}</button></div>`;
   }
 
@@ -910,7 +921,7 @@
     const ci = S.data.daily[todayKey()];
     if (!ci) {
       return `<button class="card accent" style="width:100%;text-align:left;margin-top:12px" data-action="open-checkin">
-        <div class="row"><div class="avatar alt sm">${icon('check', 16, 2.4)}</div><div class="grow"><strong>Daily check-in</strong><div class="small muted">20 seconds. Energy, sleep, mood and symptoms tune today's plan.</div></div><span style="transform:rotate(180deg);display:inline-flex">${icon('back', 18)}</span></div></button>`;
+        <div class="row" style="gap:14px">${orbit('Check in . Tune in . Show up . ', icon('check', 18, 2.4))}<div class="grow"><div class="serif" style="font-size:24px;line-height:1">Daily check-in</div><div class="small muted" style="margin-top:4px">20 seconds. Energy, sleep, mood and symptoms tune today's plan.</div></div></div></button>`;
     }
     const r = L.readiness(ci);
     return `<div class="card" style="margin-top:12px"><div class="row" style="gap:14px">${readinessRing(r, 64)}<div class="grow"><div class="eyebrow">Readiness</div><strong>${L.readinessLabel(r)}</strong><div class="small muted">${r >= 75 ? 'Green light. Push your main lifts.' : r >= 50 ? 'Train as planned. Listen to your body.' : 'Go lighter today. Movement still counts.'}</div></div><button class="link" data-action="open-checkin">Edit</button></div>
@@ -961,12 +972,12 @@
       ${header(`${greet}${name ? `, ${esc(name)}` : ''}`, fmtDate(today()))}
       ${st.count >= 2 ? `<button class="tag accent" style="margin:-8px 0 16px;height:30px;gap:6px" data-action="share-streak">${icon('flame', 15)} ${st.count}-day streak${st.todayDone ? '' : ' · keep it alive today'}</button>` : ''}
       ${resumeBanner()}${guestBanner()}
-      ${poster(c.phase, `
-        <div class="p-row"><span>${c.steady ? 'Steady mode' : `Day ${c.day} / ${c.len}${c.estimate ? ' · est.' : ''}`}</span><span style="text-align:right">${c.steady ? 'Readiness guides today' : c.late ? 'Period late' : `${esc(phaseName(c.next))} in ${plural(c.daysToNext, 'day')}`}</span></div>
+      ${studio(c.phase, `
+        ${corners(c.steady ? 'Steady mode' : `Day ${c.day} / ${c.len}${c.estimate ? ' · est.' : ''}`, c.steady ? 'Readiness' : c.late ? 'Period late' : `${esc(phaseName(c.next))} in ${plural(c.daysToNext, 'day')}`, '', '')}
         <div class="p-body">
           <div class="p-serif">${esc(copyFor(c.phase).serif)}</div>
-          <div class="p-title">${ph.name}</div>
-          <div class="row between" style="margin-top:16px;align-items:flex-end"><div><span class="tag glass">${c.late ? 'Period late' : esc(ph.energy)}</span><div class="p-cap">${esc(copyFor(c.phase).cap)}</div></div>${phaseRing(c, 78)}</div>
+          <div class="serif-tight ph-${c.phase}" style="font-size:${ph.name.length > 9 ? 84 : 104}px;margin:8px 0 4px -4px">${ph.name.toLowerCase()}</div>
+          <div class="row between" style="margin-top:14px;align-items:flex-end"><div><span class="tag glass">${c.late ? 'Period late' : esc(ph.energy)}</span><div class="p-cap">${esc(copyFor(c.phase).cap)}</div></div>${phaseRing(c, 78)}</div>
         </div>`)}
       <div class="card" style="margin-top:12px">
         <div class="eyebrow">The science</div>
@@ -982,7 +993,7 @@
         <div class="p-row"><span>${esc(wk.focus)}</span><span>${wk.minutes} min · ${esc(wk.intensity)}</span></div>
         <div class="p-body">
           <div class="p-serif">${esc(wk.summary.split('.')[0])}.</div>
-          <div class="p-title cream">${esc(wk.name)}</div>
+          <div class="p-title cream" style="margin-top:34px"><span class="over"><span class="script">today</span>${esc(wk.name)}</span></div>
           <div class="row" style="margin-top:18px">${done ? `<span class="btn cream sm" style="pointer-events:none">${icon('check', 16)} Completed</span>` : `<button class="btn cream sm" data-action="start-workout" data-id="${wk.id}">Start workout</button>`}<button class="btn outline sm" data-action="view-workout" data-id="${wk.id}">Details</button></div>
         </div>`, 'short')}
 
@@ -998,10 +1009,10 @@
       </div>
       ${comingUp(c)}
 
-      <div class="card accent" style="margin-top:16px">
-        <div class="row"><div class="avatar alt sm">${icon('advisor', 16)}</div><div class="grow"><div class="eyebrow">Coach note</div></div></div>
-        <p style="margin-top:10px">${esc(coachNote(c, t))}</p>
-        <button class="link" style="margin-top:10px" data-action="tab" data-tab="advisor">Ask your coach</button>
+      <div class="taped">
+        <div class="row between"><div class="eyebrow">Coach note</div><div class="eyebrow" style="color:#EFEAE0;opacity:.6">${fmtDate(today(), { month: 'short', day: 'numeric' })}</div></div>
+        <p class="serif" style="margin-top:10px">${esc(coachNote(c, t))}</p>
+        <button class="link" style="margin-top:12px;font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase" data-action="tab" data-tab="advisor">Ask your coach</button>
       </div>
     </div>`;
   }
@@ -1140,7 +1151,7 @@
     const eaten = S.data.eaten[k] || {};
     const had = L.proteinFor(S.data, k);
     return `<div class="screen">
-      ${header('Meals', `${ph.name} ${c.steady ? 'plan' : 'phase'} · ${fmtDate(today(), { month: 'short', day: 'numeric' })}`, true)}
+      ${header('the meal edit', `${ph.name} ${c.steady ? 'plan' : 'phase'} · ${fmtDate(today(), { month: 'short', day: 'numeric' })}`, 'serif')}
       <div class="card soft"><div class="eyebrow">Nutrition focus</div><p style="margin-top:6px">${esc(ph.nutrition)}</p>
         <div class="chips" style="margin-top:12px">${ph.foods.map((f) => `<span class="tag">${esc(f)}</span>`).join('')}</div></div>
       <div class="stats" style="margin-top:12px">
@@ -1217,7 +1228,7 @@
     return `
       <div class="card ${due ? 'accent' : ''}">
         <div class="row between"><div class="eyebrow">Weekly check-in</div>${last ? `<span class="tiny muted">Last: ${shortDate(last.date)}</span>` : ''}</div>
-        <h2 style="margin-top:6px">${due ? 'Your week is ready to review' : last ? 'Plan updated' : 'Every Sunday'}</h2>
+        ${due ? '<div class="stack-caps" style="font-size:38px;margin-top:10px">Ready to review your week?</div>' : `<h2 style="margin-top:6px">${last ? 'Plan updated' : 'Every Sunday'}</h2>`}
         <p class="small muted" style="margin-top:4px">${due ? 'Three quick questions, then I adjust next week\'s training, steps and calories.' : last ? esc(last.text.split('\n')[0]).slice(0, 180) : 'I review your sessions, steps, readiness and weight trend and adjust next week\'s plan.'}</p>
         ${planBits.length ? `<div class="chips" style="margin-top:10px">${planBits.map((b) => `<span class="tag">${esc(b)}</span>`).join('')}</div>` : ''}
         <button class="btn ${due ? 'primary' : 'ghost'} sm" style="margin-top:14px" data-action="open-weekly">${due ? 'Start check-in' : 'Run it now'}</button>
@@ -1322,7 +1333,7 @@
   // ---------- community ----------
   function viewCommunity() {
     return `<div class="screen">
-      ${header('Community', 'Wins, questions and support', true)}
+      ${header('Your<br>people.', 'Community · wins and support', 'caps')}
       <div class="segment" style="margin-bottom:20px"><button class="${S.communityView === 'feed' ? 'active' : ''}" data-action="community-view" data-value="feed">Feed</button><button class="${S.communityView === 'messages' ? 'active' : ''}" data-action="community-view" data-value="messages">Messages</button></div>
       ${S.communityView === 'feed' ? viewFeed() : S.openThread ? viewThread() : viewThreads()}
     </div>`;
@@ -1386,7 +1397,7 @@
     const m = S.modal;
     if (!m) return '';
     if (m.type === 'active') return viewActive();
-    const sheet = (title, body) => `<div class="overlay" data-action="overlay"><div class="sheet" role="dialog" aria-label="${esc(title)}"><div class="grab"></div><div class="sheet-head"><h2>${title}</h2><button class="icon-btn" data-action="close-modal" aria-label="Close">${icon('x', 18)}</button></div>${body}</div></div>`;
+    const sheet = (title, body) => `<div class="overlay" data-action="overlay"><div class="sheet" role="dialog" aria-label="${esc(title.replace(/<[^>]+>/g, ''))}"><div class="grab"></div><div class="sheet-head"><h2>${title}</h2><button class="icon-btn" data-action="close-modal" aria-label="Close">${icon('x', 18)}</button></div>${body}</div></div>`;
 
     if (m.type === 'signup') {
       const why = { progress: 'Progress photos are private to your account.', community: 'You need an account to post and message.' }[m.reason] || 'Keep your plan, history and coach chats safe.';
@@ -1459,7 +1470,7 @@
       const list = L.groceryList(S.data, start, 7);
       const checked = S.data.grocery.checked || {};
       const cats = Object.keys(list);
-      return sheet('Grocery list', `<p class="small muted">Everything for your next 7 days of meals, matched to your phases and food preferences.</p>
+      return sheet('<span class="serif-tight" style="font-size:44px">the grocery edit</span>', `<p class="small muted">Everything for your next 7 days of meals, matched to your phases and food preferences.</p>
         ${cats.map((cat) => `<div class="label" style="margin-top:16px">${esc(cat)}</div>${list[cat].map((it) => `<button class="list-item" style="width:100%;text-align:left;padding:10px 0" data-action="grocery-check" data-item="${esc(it.name)}"><span class="check ${checked[it.name] ? 'on' : ''}" style="width:28px;height:28px;border-radius:8px">${checked[it.name] ? icon('check', 14, 2.6) : ''}</span><span class="grow" style="${checked[it.name] ? 'text-decoration:line-through;opacity:.5' : ''}">${esc(it.name)}</span><span class="tiny muted">${it.count > 1 ? `x${it.count}` : ''}</span></button>`).join('')}`).join('')}
         <div class="row" style="margin-top:18px"><button class="btn ghost grow" data-action="grocery-clear">Clear ticks</button><button class="btn primary grow" data-action="grocery-share">${icon('share', 18)} Share list</button></div>`);
     }

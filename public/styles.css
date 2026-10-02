@@ -353,3 +353,70 @@ h3 { font-size: 16px; font-weight: 600; }
   .p-title { font-size: 60px; }
   .masthead { font-size: 46px; }
 }
+
+/* ---------- studio palette (second moodboard) ---------- */
+:root { --script: 'Mrs Saint Delafield', 'Snell Roundhand', cursive; --studio: #E8E2DA; --mocha: #4E3729; --ink: #1E1E19; }
+
+.script { font-family: var(--script); font-weight: 400; text-transform: none; letter-spacing: 0; line-height: 1; }
+.serif-tight { font-family: var(--serif); font-weight: 400; font-style: normal; text-transform: lowercase; letter-spacing: -0.045em; line-height: 0.78; }
+.stack-caps { font-family: var(--sans); font-weight: 900; text-transform: uppercase; letter-spacing: -0.035em; line-height: 0.92; }
+
+/* Light studio sweep: bright wall, soft floor shadow, a tint of the phase colour. */
+.art-studio { background: radial-gradient(60% 45% at 50% 18%, rgba(255, 255, 255, 0.95), transparent 70%), linear-gradient(180deg, #EFEAE3 0%, #E6DFD6 62%, #D3CABE 100%); filter: blur(10px); transform: none; }
+.art-studio::before { display: none; }
+.art-studio::after { left: 8%; top: auto; bottom: 6%; width: 84%; height: 16%; background: radial-gradient(closest-side, rgba(70, 55, 40, 0.28), transparent); transform: none; }
+.tint { position: absolute; z-index: 0; width: 70%; height: 55%; right: -12%; top: 10%; border-radius: 50%; filter: blur(46px); opacity: 0.55; }
+.tint-menstrual { background: #C97A62; } .tint-follicular { background: #B9C77E; } .tint-ovulation { background: #F0A36C; } .tint-luteal { background: #B89D7C; } .tint-steady { background: #CFC4B4; }
+
+.poster.light { color: var(--ink); background: var(--studio); }
+.poster.light::after { mix-blend-mode: multiply; opacity: 0.22; }
+.poster.light .shade { display: none; }
+.poster.light .tag.glass { background: rgba(30, 30, 25, 0.07); color: var(--ink); }
+.poster.light .ring text { fill: var(--ink); }
+.ph-menstrual { color: #8E4634; } .ph-follicular { color: #55642F; } .ph-ovulation { color: #B65D2E; } .ph-luteal { color: #6B533D; } .ph-steady { color: #4E4438; }
+
+/* Four-corner micro captions */
+.corners { position: absolute; inset: 16px 18px; z-index: 3; pointer-events: none; font-family: var(--mono); font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; }
+.corners span { position: absolute; opacity: 0.8; }
+.corners .tl { top: 0; left: 0; } .corners .tr { top: 0; right: 0; text-align: right; } .corners .bl { bottom: 0; left: 0; } .corners .br { bottom: 0; right: 0; text-align: right; }
+
+/* Script word over a bold title, like a marker note on a poster */
+.over { position: relative; display: inline-block; }
+.over .script { position: absolute; left: -4px; top: -0.62em; font-size: 0.72em; transform: rotate(-8deg); color: #F7F2EA; z-index: 1; text-shadow: 0 2px 12px rgba(0, 0, 0, 0.25); }
+.light .over .script { color: var(--accent); text-shadow: none; }
+
+/* Taped index card */
+.taped { position: relative; background: #2F3720; color: #EFEAE0; border-radius: 4px; padding: 26px 20px 20px; transform: rotate(-1.2deg); margin: 26px 6px 6px; box-shadow: 0 18px 30px -22px rgba(30, 30, 20, 0.6); }
+.taped::before { content: ''; position: absolute; top: -13px; left: 50%; width: 92px; height: 26px; transform: translateX(-50%) rotate(3deg); background: rgba(225, 220, 205, 0.72); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08); clip-path: polygon(3% 0, 97% 4%, 100% 50%, 96% 100%, 2% 96%, 0 50%); }
+.taped .eyebrow { color: #D8E0A2; }
+.taped .link { color: #D8E0A2; }
+.taped .serif { font-size: 21px; line-height: 1.22; }
+
+/* Curved caption around a badge */
+.orbit { position: relative; width: 74px; height: 74px; flex-shrink: 0; }
+.orbit svg.ring-text { position: absolute; inset: 0; animation: spin 24s linear infinite; }
+.orbit .core { position: absolute; inset: 17px; border-radius: 50%; background: var(--accent); color: var(--accent-text); display: flex; align-items: center; justify-content: center; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Contact-sheet photo grid */
+.photo-grid { gap: 3px; border-radius: 14px; overflow: hidden; }
+.photo { border-radius: 2px; }
+
+/* Light welcome (studio) */
+.welcome.light { background: var(--studio); color: var(--ink); }
+.welcome.light::after { mix-blend-mode: multiply; opacity: 0.2; }
+.welcome.light .shade { display: none; }
+.welcome.light .wordmark { color: var(--green); }
+.welcome.light .tagline, .welcome.light .muted { color: var(--ink); }
+.welcome.light .btn.ghost { border-color: rgba(30, 30, 25, 0.25); color: var(--ink); }
+.welcome.light .btn.soft { background: rgba(30, 30, 25, 0.06); color: var(--ink); }
+.welcome.light .lead { color: var(--ink); }
+.welcome .script-sig { font-family: var(--script); font-size: 64px; color: var(--accent); transform: rotate(-6deg); margin: -18px 0 0 36%; line-height: 1; }
+:root[data-theme="dark"] .welcome.light, :root[data-theme="dark"] .poster.light { --studio: #2A2620; --ink: #F1ECE3; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .welcome.light, :root:not([data-theme="light"]) .poster.light { --studio: #2A2620; --ink: #F1ECE3; } }
+:root[data-theme="dark"] .art-studio { background: radial-gradient(60% 45% at 50% 18%, rgba(255, 240, 220, 0.10), transparent 70%), linear-gradient(180deg, #2E2A23 0%, #26221C 62%, #1B1814 100%); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .art-studio { background: radial-gradient(60% 45% at 50% 18%, rgba(255, 240, 220, 0.10), transparent 70%), linear-gradient(180deg, #2E2A23 0%, #26221C 62%, #1B1814 100%); } }
+:root[data-theme="dark"] .ph-menstrual, :root[data-theme="dark"] .ph-follicular, :root[data-theme="dark"] .ph-ovulation, :root[data-theme="dark"] .ph-luteal, :root[data-theme="dark"] .ph-steady { filter: brightness(1.9) saturate(0.9); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) [class*="ph-"] { filter: brightness(1.9) saturate(0.9); } }
+.poster > .corners, .poster > .tint, .welcome > .tint { position: absolute !important; }
+.over .script { font-size: 0.95em; top: -0.72em; color: #D8E0A2; }

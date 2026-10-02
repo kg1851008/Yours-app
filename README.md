@@ -31,7 +31,7 @@
 
 ## Design
 
-The look is editorial athletic: grainy, motion-blurred campaign posters, condensed display headlines (Anton), italic serif accents (Instrument Serif), tracked monospace captions (DM Mono), Inter for body text, and the Archivo Expanded wordmark. All fonts are self-hosted in `public/fonts/` under the SIL Open Font License, so they work offline and make no third-party requests.
+The look is editorial athletic: grainy, motion-blurred campaign posters, condensed display headlines (Anton), italic serif accents (Instrument Serif), tracked monospace captions (DM Mono), Inter for body text, Mrs Saint Delafield script for handwritten accents, and the Archivo Expanded wordmark. Bright studio posters (warm greige sweep tinted by phase) sit alongside darker motion posters, with four-corner micro captions, a taped coach-note card, curved text badges and a contact-sheet photo grid. All fonts are self-hosted in `public/fonts/` under the SIL Open Font License, so they work offline and make no third-party requests.
 
 **Photography.** Posters currently use grainy motion-blur art in the brand palette. To use real campaign photos, add images to `public/img/` and set the paths in `IMAGERY` in `public/data.js` (`welcome`, each phase, and `session` for workouts). Grain and a legibility shade are applied automatically. Use photos you own or have licensed.
 
