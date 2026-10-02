@@ -470,6 +470,7 @@
     const bw = Number(p.weightKg) || 65;
     const consistent = stats.sessions >= Math.max(2, stats.planned - 1);
     const mostlyLuteal = (stats.phaseDays.luteal || 0) >= 4;
+    const cal = p.units === 'metric' ? 'kcal' : 'calories';
 
     if ((answers.feel === 'easy' || answers.next === 'push') && consistent && (stats.readinessAvg == null || stats.readinessAvg >= 55) && (plan.volume || 0) < 1) {
       adj.push({ key: 'volume', delta: 1, label: 'Add a set to your main lifts', why: 'Training felt easy and you were consistent.' });
@@ -487,17 +488,17 @@
     const k = plan.kcalAdjust || 0;
     if (['lose', 'recomp'].includes(p.goal)) {
       if ((w != null && w < -0.01 * bw) || answers.hunger === 'high') {
-        if (k < 300) adj.push({ key: 'kcalAdjust', delta: 100, label: 'Add 100 kcal a day', why: answers.hunger === 'high' ? 'Hunger was high, so a small increase keeps this sustainable.' : 'You are losing faster than 1% of body weight a week.' });
+        if (k < 300) adj.push({ key: 'kcalAdjust', delta: 100, label: `Add 100 ${cal} a day`, why: answers.hunger === 'high' ? 'Hunger was high, so a small increase keeps this sustainable.' : 'You are losing faster than 1% of body weight a week.' });
       } else if (w != null && w > -0.1 && consistent && !mostlyLuteal && k > -300) {
-        adj.push({ key: 'kcalAdjust', delta: -100, label: 'Trim 100 kcal a day', why: 'Your weight trend is flat even though you were consistent.' });
+        adj.push({ key: 'kcalAdjust', delta: -100, label: `Trim 100 ${cal} a day`, why: 'Your weight trend is flat even though you were consistent.' });
       } else if (w != null && w > -0.1 && mostlyLuteal) {
         notes.push('Your weight trend is flat, but you spent most of the week in your luteal phase, when water retention is common. Holding calories steady.');
       }
     } else if (['muscle', 'glutes', 'strength'].includes(p.goal)) {
-      if (w != null && w < 0.05 && k < 300) adj.push({ key: 'kcalAdjust', delta: 100, label: 'Add 100 kcal a day', why: 'Your weight is not moving up, and muscle needs fuel.' });
-      else if (w != null && w > 0.5 && k > -300) adj.push({ key: 'kcalAdjust', delta: -100, label: 'Trim 100 kcal a day', why: `You are gaining faster than about ${p.units === 'metric' ? '0.5 kg' : '1 lb'} a week.` });
+      if (w != null && w < 0.05 && k < 300) adj.push({ key: 'kcalAdjust', delta: 100, label: `Add 100 ${cal} a day`, why: 'Your weight is not moving up, and muscle needs fuel.' });
+      else if (w != null && w > 0.5 && k > -300) adj.push({ key: 'kcalAdjust', delta: -100, label: `Trim 100 ${cal} a day`, why: `You are gaining faster than about ${p.units === 'metric' ? '0.5 kg' : '1 lb'} a week.` });
     } else if (answers.hunger === 'high' && k < 300) {
-      adj.push({ key: 'kcalAdjust', delta: 100, label: 'Add 100 kcal a day', why: 'Hunger was high this week.' });
+      adj.push({ key: 'kcalAdjust', delta: 100, label: `Add 100 ${cal} a day`, why: 'Hunger was high this week.' });
     }
 
     if (answers.next === 'busy') notes.push('Busy week ahead: prioritise your 2-3 most important sessions and keep walking. Short and done beats perfect.');

@@ -123,6 +123,9 @@
   const loggedOn = (key) => S.data.workouts.filter((w) => w.date === key);
   const readinessToday = () => L.readiness(S.data.daily[todayKey()]);
   const unit = () => (S.data.profile.units === 'metric' ? 'kg' : 'lb');
+  // US labels say Calories; metric users expect kcal.
+  const calU = () => (S.data.profile.units === 'metric' ? 'kcal' : 'cal');
+  const calWord = () => (S.data.profile.units === 'metric' ? 'kcal' : 'calories');
   // Body weight is stored in kg; show it in her units.
   const bw = (kg) => (unit() === 'lb' ? `${Math.round(kg * 2.20462 * 10) / 10} lb` : `${kg} kg`);
   const rate = (kgPerWeek) => { const v = unit() === 'lb' ? kgPerWeek * 2.20462 : kgPerWeek; return `${v > 0 ? '+' : ''}${v.toFixed(unit() === 'lb' ? 1 : 2)} ${unit()} a week`; };
@@ -285,7 +288,7 @@
     }
     if (has('crav', 'sugar', 'chocolate', 'hungry', 'snack', 'binge')) {
       const snack = L.mealFor(S.data, today(), 'snack').meal;
-      return `${hi}${c.phase === 'luteal' ? 'cravings in the luteal phase are expected. Your metabolism runs slightly higher, so you genuinely need about 100-200 more calories. That is already built into your target.' : 'cravings usually mean a meal was light on protein or fiber, or sleep was short.'}\n\nTry this:\n- Lead every meal with protein (about ${Math.round(t.protein / 4)} g per meal).\n- Add complex carbs at dinner, which also helps sleep.\n- Plan a satisfying snack instead of fighting it: ${snack.name}.\n\nToday's target is ${t.kcal.toLocaleString()} kcal.\n[[action:open:meals]]`;
+      return `${hi}${c.phase === 'luteal' ? 'cravings in the luteal phase are expected. Your metabolism runs slightly higher, so you genuinely need about 100-200 more calories. That is already built into your target.' : 'cravings usually mean a meal was light on protein or fiber, or sleep was short.'}\n\nTry this:\n- Lead every meal with protein (about ${Math.round(t.protein / 4)} g per meal).\n- Add complex carbs at dinner, which also helps sleep.\n- Plan a satisfying snack instead of fighting it: ${snack.name}.\n\nToday's target is ${t.kcal.toLocaleString()} ${calWord()}.\n[[action:open:meals]]`;
     }
     if (has('protein')) {
       const had = L.proteinFor(S.data, todayKey());
@@ -314,11 +317,11 @@
       return `${hi}here is your last 7 days:\n\n- Sessions: ${s.sessions} of ${s.planned} planned\n- Step target hit: ${s.stepDays} of 7 days\n${s.readinessAvg != null ? `- Average readiness: ${s.readinessAvg}/100\n` : ''}${s.weightChange != null ? `- Weight trend: ${rate(s.weightChange)}\n` : '- No weight trend yet. Add check-ins in Progress.\n'}\nYour weekly check-in turns this into concrete changes to next week's plan.\n[[action:open:insights]]`;
     }
     if (has('lose', 'fat', 'weight', 'scale', 'lean', 'deficit')) {
-      return `${hi}sustainable fat loss looks like this:\n\n- A moderate deficit. Your target of ${t.kcal.toLocaleString()} kcal already accounts for that, and I never go below what your body needs to function.\n- High protein (${t.protein} g) and lifting to keep your muscle.\n- Steps: ${t.steps.toLocaleString()} a day.\n- Judge progress across a full cycle, not day to day. Luteal water retention can hide fat loss for a week.`;
+      return `${hi}sustainable fat loss looks like this:\n\n- A moderate deficit. Your target of ${t.kcal.toLocaleString()} ${calWord()} already accounts for that, and I never go below what your body needs to function.\n- High protein (${t.protein} g) and lifting to keep your muscle.\n- Steps: ${t.steps.toLocaleString()} a day.\n- Judge progress across a full cycle, not day to day. Luteal water retention can hide fat loss for a week.`;
     }
     if (has('muscle', 'build', 'gain', 'tone', 'bigger', 'shape', 'stronger', 'strength')) {
       const sbp = L.strengthByPhase(S.data.workouts);
-      return `${hi}building muscle comes down to progressive overload plus enough food.\n\n- I suggest your weight for every main lift based on your last session.\n- Train each muscle about twice a week.\n- Eat ${t.kcal.toLocaleString()} kcal with ${t.protein} g of protein.\n${sbp ? `\nFrom your logs: you lift about ${Math.round(sbp.diff)}% more in your ${phaseName(sbp.best).toLowerCase()} phase than your ${phaseName(sbp.low).toLowerCase()} phase. Plan your heaviest work there.` : ''}\n[[action:open:workouts]]`;
+      return `${hi}building muscle comes down to progressive overload plus enough food.\n\n- I suggest your weight for every main lift based on your last session.\n- Train each muscle about twice a week.\n- Eat ${t.kcal.toLocaleString()} ${calWord()} with ${t.protein} g of protein.\n${sbp ? `\nFrom your logs: you lift about ${Math.round(sbp.diff)}% more in your ${phaseName(sbp.best).toLowerCase()} phase than your ${phaseName(sbp.low).toLowerCase()} phase. Plan your heaviest work there.` : ''}\n[[action:open:workouts]]`;
     }
     if (has('meal', 'eat', 'food', 'breakfast', 'lunch', 'dinner', 'recipe', 'diet', 'grocer', 'shop')) {
       const pick = (s) => L.mealFor(S.data, today(), s).meal.name;
@@ -768,7 +771,7 @@
     return amount === 1 ? s : `${amount} x ${s}`;
   }
 
-  const foodMacroTiles = (mac) => [['kcal', mac.kcal, ''], ['Protein', mac.protein, 'g'], ['Carbs', mac.carbs, 'g'], ['Fat', mac.fat, 'g']].map(([l, v, u]) => `<div class="stat" style="padding:10px"><div class="eyebrow" style="font-size:9px">${l}</div><div class="value" style="font-size:24px">${Math.round(v)}<small>${u}</small></div></div>`).join('');
+  const foodMacroTiles = (mac) => [[calU() === 'cal' ? 'Calories' : 'kcal', mac.kcal, ''], ['Protein', mac.protein, 'g'], ['Carbs', mac.carbs, 'g'], ['Fat', mac.fat, 'g']].map(([l, v, u]) => `<div class="stat" style="padding:10px"><div class="eyebrow" style="font-size:9px">${l}</div><div class="value" style="font-size:24px">${Math.round(v)}<small>${u}</small></div></div>`).join('');
 
   function logFood() {
     const m = S.modal;
@@ -781,7 +784,7 @@
     S.modal = null;
     save();
     render();
-    toast(`Logged ${f.name} · ${mac.kcal} kcal, ${Math.round(mac.protein)} g protein`);
+    toast(`Logged ${f.name} · ${mac.kcal} ${calU()}, ${Math.round(mac.protein)} g protein`);
   }
 
   async function searchFoods(q) {
@@ -994,7 +997,7 @@
           <div><div class="k">Phase</div><div class="v">${ph.name}</div></div>
           <div><div class="k">Today</div><div class="v" style="font-size:22px">${esc(wk.name)}</div></div>
           <div><div class="k">Protein</div><div class="v">${t.protein}<small>g</small></div></div>
-          <div><div class="k">Calories</div><div class="v">${t.kcal.toLocaleString()}<small>kcal</small></div></div>
+          <div><div class="k">Calories</div><div class="v">${t.kcal.toLocaleString()}<small>${calU()}</small></div></div>
           <div><div class="k">Water</div><div class="v">${t.water}<small>L</small></div></div>
           <div><div class="k">Steps</div><div class="v">${t.steps.toLocaleString()}</div></div>
         </div>
@@ -1178,7 +1181,7 @@
     if (c.phase === 'ovulation') return 'Peak-strength days. If a lift feels great, go for a rep PR, but warm up thoroughly and keep your knees tracking over your toes.';
     if (c.phase === 'menstrual') return 'Lower intensity is still progress. Walk, move and eat iron-rich food. You will come back stronger in a few days.';
     if (c.steady) return 'Check in daily so I can match today\'s session to how you actually feel. Consistency is what wins here.';
-    return `Your luteal phase needs about ${t.kcal.toLocaleString()} kcal today, including roughly 150 extra. Eat them on purpose with complex carbs and magnesium-rich foods.`;
+    return `Your luteal phase needs about ${t.kcal.toLocaleString()} ${calWord()} today, including roughly 150 extra. Eat them on purpose with complex carbs and magnesium-rich foods.`;
   }
 
   // ---------- workouts ----------
@@ -1297,10 +1300,10 @@
     const log = S.data.foodLog[k] || [];
     const line = (label, v, target, unitLabel, color) => `<div style="margin-top:10px"><div class="row between"><span class="eyebrow" style="color:var(--text)">${label}</span><span class="tiny" style="font-family:var(--mono)">${v} / ${target} ${unitLabel}</span></div><div class="meter" style="margin-top:6px"><div style="width:${clamp((v / target) * 100, 0, 100)}%;background:${color}"></div></div></div>`;
     return `<div class="card">
-      <div class="row between" style="align-items:flex-end"><div><div class="eyebrow">Eaten today</div><div class="big-number" style="font-size:52px;margin-top:6px">${m.kcal.toLocaleString()}<span class="eyebrow" style="font-size:11px;margin-left:6px">/ ${t.kcal.toLocaleString()} kcal</span></div></div></div>
+      <div class="row between" style="align-items:flex-end"><div><div class="eyebrow">Eaten today</div><div class="big-number" style="font-size:52px;margin-top:6px">${m.kcal.toLocaleString()}<span class="eyebrow" style="font-size:11px;margin-left:6px">/ ${t.kcal.toLocaleString()} ${calU()}</span></div></div></div>
       ${line('Protein', m.protein, t.protein, 'g', 'var(--accent)')}${line('Carbs', m.carbs, t.carbs, 'g', 'var(--follicular)')}${line('Fat', m.fat, t.fat, 'g', 'var(--luteal)')}
       <div class="row" style="margin-top:16px"><button class="btn primary grow" data-action="open-scanner">${icon('barcode', 18)} Scan barcode</button><button class="btn ghost" data-action="open-food-search" aria-label="Search foods">${icon('search', 18)}</button><button class="btn ghost" data-action="open-food-manual" aria-label="Add food manually">${icon('plus', 18)}</button></div>
-      ${log.length ? `<div class="divider"></div>${log.map((f) => `<div class="list-item" style="padding:10px 0"><div class="grow"><strong class="small">${esc(f.name)}</strong><div class="tiny muted">${esc(SLOT_LABEL[f.slot] || '')} · ${esc(f.label)}${f.brand ? ` · ${esc(f.brand)}` : ''}</div></div><div class="tiny" style="font-family:var(--mono);text-align:right">${f.kcal} kcal<br>${Math.round(f.protein)} g P</div><button class="icon-btn" style="width:30px;height:30px" data-action="food-del" data-id="${f.id}" aria-label="Remove ${esc(f.name)}">${icon('x', 14)}</button></div>`).join('')}` : ''}
+      ${log.length ? `<div class="divider"></div>${log.map((f) => `<div class="list-item" style="padding:10px 0"><div class="grow"><strong class="small">${esc(f.name)}</strong><div class="tiny muted">${esc(SLOT_LABEL[f.slot] || '')} · ${esc(f.label)}${f.brand ? ` · ${esc(f.brand)}` : ''}</div></div><div class="tiny" style="font-family:var(--mono);text-align:right">${f.kcal} ${calU()}<br>${Math.round(f.protein)} g P</div><button class="icon-btn" style="width:30px;height:30px" data-action="food-del" data-id="${f.id}" aria-label="Remove ${esc(f.name)}">${icon('x', 14)}</button></div>`).join('')}` : ''}
     </div>`;
   }
 
@@ -1325,7 +1328,7 @@
       ${slots.map(([s, label], i) => { const { meal, count, compromised } = picks[i]; const isEaten = eaten[s] && eaten[s].name === meal.name; return `
         <div class="section-title"><div class="slot">${label}</div>${count > 1 && !isEaten ? `<button class="link row" style="gap:4px" data-action="swap-meal" data-slot="${s}">${icon('swap', 16)} Swap</button>` : ''}</div>
         <div class="card meal"><h3>${esc(meal.name)}</h3><p class="small muted">${esc(meal.desc)}</p>
-          <div class="macro"><span><strong>${Math.round(meal.protein * portion)} g</strong> protein</span><span><strong>${Math.round(meal.kcal * portion)}</strong> kcal</span></div>
+          <div class="macro"><span><strong>${Math.round(meal.protein * portion)} g</strong> protein</span><span><strong>${Math.round(meal.kcal * portion)}</strong> ${calU()}</span></div>
           <div class="why">${esc(meal.why)}</div>
           ${compromised ? '<p class="tiny error">No option fully matches your food filters here. Swap ingredients as needed.</p>' : ''}
           <button class="btn ${isEaten ? 'soft' : 'ghost'} sm" style="margin-top:8px;align-self:flex-start" data-action="eat-meal" data-slot="${s}" data-name="${esc(meal.name)}" data-protein="${Math.round(meal.protein * portion)}" data-kcal="${Math.round(meal.kcal * portion)}">${isEaten ? `${icon('check', 16, 2.4)} Eaten` : 'Mark as eaten'}</button>
@@ -1626,7 +1629,7 @@
         <p id="scan-status" class="mono center" style="margin-top:14px;color:#F7F2EA;opacity:.85">Starting camera...</p>
         <div class="row" style="margin-top:16px"><label class="btn outline grow" style="cursor:pointer">${icon('image', 18)} Scan from photo<input type="file" accept="image/*" capture="environment" data-scan-photo hidden></label></div>
         <form class="row" data-form="barcode" style="margin-top:10px"><input class="input grow" name="code" inputmode="numeric" pattern="[0-9]*" maxlength="14" placeholder="Or type the barcode number" aria-label="Barcode number" style="background:rgba(247,242,234,.08);border-color:rgba(247,242,234,.25);color:#F7F2EA"><button class="btn cream sm" type="submit">Look up</button></form>
-        ${recent.length ? `<div class="eyebrow" style="margin-top:24px;color:#F7F2EA;opacity:.7">Recent</div>${recent.slice(0, 5).map((r, i) => `<button class="list-item" style="width:100%;text-align:left;color:#F7F2EA;border-color:rgba(247,242,234,.15)" data-action="recent-food" data-i="${i}"><div class="grow"><strong class="small">${esc(r.food.name)}</strong><div class="tiny" style="opacity:.7">${esc(foodLabel(r.food, r.amount, r.mode))}</div></div><span class="tiny" style="font-family:var(--mono)">${L.foodMacros(r.food, r.amount, r.mode).kcal} kcal</span></button>`).join('')}` : ''}
+        ${recent.length ? `<div class="eyebrow" style="margin-top:24px;color:#F7F2EA;opacity:.7">Recent</div>${recent.slice(0, 5).map((r, i) => `<button class="list-item" style="width:100%;text-align:left;color:#F7F2EA;border-color:rgba(247,242,234,.15)" data-action="recent-food" data-i="${i}"><div class="grow"><strong class="small">${esc(r.food.name)}</strong><div class="tiny" style="opacity:.7">${esc(foodLabel(r.food, r.amount, r.mode))}</div></div><span class="tiny" style="font-family:var(--mono)">${L.foodMacros(r.food, r.amount, r.mode).kcal} ${calU()}</span></button>`).join('')}` : ''}
         <p class="tiny center" style="margin-top:20px;color:#F7F2EA;opacity:.55">Only the barcode number is sent to Open Food Facts, an open food database.</p>
       </div></div>`;
     }
@@ -1660,7 +1663,7 @@
       return sheet('Search foods', `<form class="row" data-form="food-search"><input class="input grow" name="q" value="${esc(m.q || '')}" placeholder="e.g. greek yogurt, protein bar" maxlength="80" aria-label="Search foods" autofocus><button class="btn primary sm" type="submit">Search</button></form>
         ${m.loading ? '<div class="empty">Searching...</div>' : ''}
         ${m.error ? '<p class="tiny error" style="margin-top:10px">Could not reach the food database. Showing your saved foods.</p>' : ''}
-        ${(m.results || []).map((f, i) => `<button class="list-item" style="width:100%;text-align:left" data-action="search-pick" data-i="${i}">${f.image ? `<img src="${esc(f.image)}" alt="" style="width:40px;height:40px;object-fit:contain;border-radius:8px;background:#fff" referrerpolicy="no-referrer" loading="lazy">` : ''}<div class="grow"><strong class="small">${esc(f.name)}</strong><div class="tiny muted">${esc(f.brand || '')}${f.brand ? ' · ' : ''}${esc(f.serving.label)}</div></div><span class="tiny" style="font-family:var(--mono);text-align:right">${Math.round(f.perServing.kcal)} kcal<br>${Math.round(f.perServing.protein)} g P</span></button>`).join('')}
+        ${(m.results || []).map((f, i) => `<button class="list-item" style="width:100%;text-align:left" data-action="search-pick" data-i="${i}">${f.image ? `<img src="${esc(f.image)}" alt="" style="width:40px;height:40px;object-fit:contain;border-radius:8px;background:#fff" referrerpolicy="no-referrer" loading="lazy">` : ''}<div class="grow"><strong class="small">${esc(f.name)}</strong><div class="tiny muted">${esc(f.brand || '')}${f.brand ? ' · ' : ''}${esc(f.serving.label)}</div></div><span class="tiny" style="font-family:var(--mono);text-align:right">${Math.round(f.perServing.kcal)} ${calU()}<br>${Math.round(f.perServing.protein)} g P</span></button>`).join('')}
         ${!m.loading && m.q && !(m.results || []).length ? `<div class="empty">Nothing found. <button class="link" data-action="open-food-manual">Add it manually</button></div>` : ''}`);
     }
     if (m.type === 'protein') {
