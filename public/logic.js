@@ -1,0 +1,785 @@
+// YOURS coaching logic. Pure functions over the user's data so they can be tested in Node.
+(function () {
+  const D = typeof window !== 'undefined' ? window.YOURS_DATA : require('./data.js');
+
+  // ---------- dates ----------
+  const pad = (n) => String(n).padStart(2, '0');
+  const dateKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const parseKey = (k) => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); };
+  const today = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
+  const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+  const daysBetween = (a, b) => Math.round((b - a) / 86400000);
+  const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
+  const round = (n, step) => Math.round(n / step) * step;
+  const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+  const weekdayIndex = (d) => (d.getDay() + 6) % 7; // Monday = 0
+
+  // ---------- cycle ----------
+  const STEADY_MODES = ['hormonal', 'none', 'menopause'];
+  const MENO_MODES = ['perimenopause', 'menopause'];
+  const ESTIMATE_MODES = ['irregular', 'pcos', 'perimenopause'];
+
+  // Average of recent gaps between logged period starts.
+  function learnCycle(periods) {
+    const sorted = Array.from(new Set(periods || [])).sort();
+    const gaps = [];
+    for (let i = 1; i < sorted.length; i++) {
+      const g = daysBetween(parseKey(sorted[i - 1]), parseKey(sorted[i]));
+      if (g >= 18 && g <= 50) gaps.push(g);
+    }
+    const recent = gaps.slice(-6);
+    if (!recent.length) return null;
+    const min = Math.min(...recent), max = Math.max(...recent);
+    return { length: Math.round(mean(recent)), samples: recent.length, min, max, regular: max - min <= 7 };
+  }
+
+  // Record a period start. Entries within a week of each other are the same period being corrected.
+  function addPeriod(data, key) {
+    const list = (data.periods || []).filter((p) => Math.abs(daysBetween(parseKey(p), parseKey(key))) > 7);
+    list.push(key);
+    list.sort();
+    data.periods = list;
+    data.profile.periodStart = list[list.length - 1];
+    const learned = learnCycle(list);
+    data.profile.learnedLength = learned ? learned.length : null;
+    return learned;
+  }
+
+  function cycleInfo(profile, date) {
+    date = date || today();
+    const mode = profile.cycleMode || 'natural';
+    if (STEADY_MODES.includes(mode) || !profile.periodStart) {
+      return { steady: true, phase: mode === 'menopause' ? 'menopause' : 'steady', mode, day: null, len: null, dayInPhase: weekdayIndex(date), next: null, daysToNext: null, daysToPeriod: null, estimate: false, late: false, ranges: null };
+    }
+    const len = clamp(Number(profile.learnedLength || profile.cycleLength) || 28, 21, 45);
+    const periodLen = clamp(Number(profile.periodLength) || 5, 2, 8);
+    const ov = len - 14;
+    const ranges = {
+      menstrual: [1, periodLen],
+      follicular: [periodLen + 1, Math.max(periodLen, ov - 2)],
+      ovulation: [Math.max(periodLen + 1, ov - 1), ov + 1],
+      luteal: [ov + 2, len],
+    };
+    const diff = daysBetween(parseKey(profile.periodStart), date);
+    const isPastOrToday = date <= today();
+    let day, late = false, daysLate = 0;
+    if (diff >= 0 && diff < len) day = diff + 1;
+    else if (diff >= len && diff < len + 10 && isPastOrToday) { day = diff + 1; late = true; daysLate = diff + 1 - len; }
+    else day = (((diff % len) + len) % len) + 1;
+
+    let phase = 'luteal';
+    if (!late) for (const p of D.PHASE_ORDER) if (day >= ranges[p][0] && day <= ranges[p][1]) { phase = p; break; }
+    const next = D.PHASE_ORDER[(D.PHASE_ORDER.indexOf(phase) + 1) % 4];
+    const daysToNext = late ? 0 : next === 'menstrual' ? len - day + 1 : ranges[next][0] - day;
+    return { steady: false, mode, day, len, phase, dayInPhase: day - ranges[phase][0], ranges, next, daysToNext, daysToPeriod: late ? 0 : len - day + 1, late, daysLate, estimate: ESTIMATE_MODES.includes(mode) || !profile.learnedLength };
+  }
+
+  // ---------- targets ----------
+  const GOALS = [
+    { id: 'lose', label: 'Lose body fat', desc: 'Lean out while keeping muscle', kcal: 0.82, protein: 2.2 },
+    { id: 'muscle', label: 'Build muscle', desc: 'Add lean size and shape', kcal: 1.08, protein: 2.0 },
+    { id: 'glutes', label: 'Grow my glutes', desc: 'Lower-body and glute focus', kcal: 1.05, protein: 2.0 },
+    { id: 'recomp', label: 'Tone and recomp', desc: 'Lose fat and build muscle together', kcal: 0.95, protein: 2.2 },
+    { id: 'strength', label: 'Get stronger', desc: 'Lift heavier on the big lifts', kcal: 1.05, protein: 1.8 },
+    { id: 'health', label: 'Feel healthier', desc: 'Energy, mood and consistency', kcal: 1.0, protein: 1.6 },
+  ];
+  const LEVELS = [
+    { id: 'beginner', label: 'Beginner', desc: 'New to lifting or returning after a long break' },
+    { id: 'intermediate', label: 'Intermediate', desc: 'Training consistently for 6+ months' },
+    { id: 'advanced', label: 'Advanced', desc: 'Years of structured strength training' },
+  ];
+  const ACTIVITY = [
+    { id: 'sedentary', label: 'Mostly sitting', desc: 'Desk job, under 5,000 steps a day', mult: 1.2, steps: 7000, water: 0 },
+    { id: 'light', label: 'Lightly active', desc: 'Some walking, 5,000-8,000 steps', mult: 1.375, steps: 8000, water: 250 },
+    { id: 'moderate', label: 'Active', desc: 'On your feet a lot, 8,000-11,000 steps', mult: 1.55, steps: 9000, water: 500 },
+    { id: 'very', label: 'Very active', desc: 'Physical job or 11,000+ steps', mult: 1.725, steps: 10000, water: 750 },
+  ];
+  const goalOf = (p) => GOALS.find((g) => g.id === p.goal) || GOALS[5];
+  const activityOf = (p) => ACTIVITY.find((a) => a.id === p.activity) || ACTIVITY[1];
+
+  function targets(profile, cyc, plan) {
+    plan = plan || {};
+    const w = Number(profile.weightKg) || 65;
+    const h = Number(profile.heightCm) || 165;
+    const age = Number(profile.age) || 28;
+    const goal = goalOf(profile);
+    const act = activityOf(profile);
+    const bmr = 10 * w + 6.25 * h - 5 * age - 161;
+    const phaseKcal = { menstrual: 50, luteal: 150 }[cyc.phase] || 0;
+    const kcal = round(Math.max(bmr * 1.1, bmr * act.mult * goal.kcal + (plan.kcalAdjust || 0)) + phaseKcal, 10);
+    const perKg = MENO_MODES.includes(profile.cycleMode) ? Math.max(goal.protein, 2.0) : goal.protein;
+    const protein = round(Math.min(w * perKg, (kcal * 0.35) / 4) + (cyc.phase === 'luteal' ? 5 : 0), 5);
+    const fat = round(w * 0.9, 5);
+    const carbs = Math.max(80, round((kcal - protein * 4 - fat * 9) / 4, 5));
+    const waterMl = w * 35 + act.water + (cyc.phase === 'luteal' || cyc.phase === 'menstrual' ? 250 : 0);
+    const stepPhase = { menstrual: -1500, follicular: 1000, ovulation: 1500 }[cyc.phase] || 0;
+    const steps = Math.max(4000, round(act.steps + (profile.goal === 'lose' || profile.goal === 'recomp' ? 2000 : 0) + stepPhase + (plan.stepBonus || 0), 500));
+    return { kcal, protein, fat, carbs, water: Math.round(waterMl / 100) / 10, waterMl: round(waterMl, 50), steps, bmr: Math.round(bmr) };
+  }
+
+  // ---------- readiness + check-ins ----------
+  function readiness(c) {
+    if (!c) return null;
+    const s = ((c.energy - 1) / 4) * 35 + ((c.sleep - 1) / 4) * 30 + ((c.mood - 1) / 4) * 15 + ((5 - c.soreness) / 4) * 20;
+    const sym = c.symptoms || [];
+    const penalty = (sym.includes('Cramps') ? 8 : 0) + (sym.includes('Headache') ? 5 : 0) + (sym.includes('Poor sleep') ? 3 : 0);
+    return clamp(Math.round(s - penalty), 0, 100);
+  }
+  const readinessLabel = (r) => (r == null ? 'Not checked in' : r >= 75 ? 'High' : r >= 50 ? 'Moderate' : 'Low');
+
+  // Patterns across cycles from daily check-ins (each stores its cycle day and phase).
+  function patterns(daily) {
+    const entries = Object.entries(daily || {}).map(([date, c]) => ({ date, ...c })).filter((c) => c.cycleDay && D.PHASE_ORDER.includes(c.phase));
+    const out = { insights: [], dipDays: [], byPhase: {} };
+    if (entries.length < 6) return out;
+
+    for (const p of D.PHASE_ORDER) {
+      const es = entries.filter((e) => e.phase === p);
+      if (es.length >= 2) out.byPhase[p] = { energy: mean(es.map((e) => e.energy)), readiness: mean(es.map((e) => readiness(e))), n: es.length };
+    }
+    const phases = Object.keys(out.byPhase);
+    if (phases.length >= 2) {
+      const hi = phases.reduce((a, b) => (out.byPhase[a].energy >= out.byPhase[b].energy ? a : b));
+      const lo = phases.reduce((a, b) => (out.byPhase[a].energy <= out.byPhase[b].energy ? a : b));
+      if (out.byPhase[hi].energy - out.byPhase[lo].energy >= 0.8) {
+        out.insights.push(`Your energy is highest in your ${D.PHASES[hi].name.toLowerCase()} phase (${out.byPhase[hi].energy.toFixed(1)}/5) and lowest in your ${D.PHASES[lo].name.toLowerCase()} phase (${out.byPhase[lo].energy.toFixed(1)}/5).`);
+      }
+    }
+
+    const byDay = {};
+    entries.forEach((e) => { (byDay[e.cycleDay] = byDay[e.cycleDay] || []).push(e.energy); });
+    out.dipDays = Object.keys(byDay).map(Number).filter((d) => byDay[d].length >= 2 && mean(byDay[d]) <= 2.5).sort((a, b) => a - b);
+    if (out.dipDays.length) {
+      const runs = [];
+      out.dipDays.forEach((d) => { const r = runs[runs.length - 1]; if (r && d - r[1] <= 1) r[1] = d; else runs.push([d, d]); });
+      const text = runs.map(([a, b]) => (a === b ? `day ${a}` : `days ${a}-${b}`)).join(' and ');
+      out.insights.push(`Your energy usually dips around ${text} of your cycle. I plan lighter sessions for those days.`);
+    }
+
+    D.SYMPTOMS.forEach((sym) => {
+      const hits = entries.filter((e) => (e.symptoms || []).includes(sym));
+      if (hits.length < 3) return;
+      const count = {};
+      hits.forEach((h) => { count[h.phase] = (count[h.phase] || 0) + 1; });
+      const top = Object.keys(count).reduce((a, b) => (count[a] >= count[b] ? a : b));
+      if (count[top] / hits.length >= 0.6) {
+        const days = hits.filter((h) => h.phase === top).map((h) => h.cycleDay);
+        out.insights.push(`${sym} mostly shows up in your ${D.PHASES[top].name.toLowerCase()} phase (${count[top]} of ${hits.length} times, around days ${Math.min(...days)}-${Math.max(...days)}).`);
+      }
+    });
+    return out;
+  }
+
+  // ---------- workouts ----------
+  const workoutById = (id) => D.WORKOUTS.find((w) => w.id === id);
+  function plannedWorkout(data, date) {
+    const cyc = cycleInfo(data.profile, date);
+    const rot = D.ROTATION[cyc.phase];
+    return workoutById(rot[cyc.dayInPhase % rot.length]);
+  }
+  function workoutFor(data, date) {
+    const ov = (data.overrides || {})[dateKey(date)];
+    if (ov && workoutById(ov)) return workoutById(ov);
+    const pg = programDay(data, date);
+    if (pg && !pg.complete) return pg.session || workoutById(pg.program.offDay || 'rest');
+    return plannedWorkout(data, date);
+  }
+
+  // ---------- 8-week programs ----------
+  // data.program = { id, start: dateKey, days: [weekday numbers] }. Sessions rotate through the current block
+  // on her chosen days; a missed day just moves that session to the next training day.
+  const programById = (id) => (D.PROGRAMS || []).find((p) => p.id === id);
+  const isProgramWorkout = (w, id) => typeof w.templateId === 'string' && (workoutById(w.templateId) || {}).program === id;
+  function programDay(data, date) {
+    const p = data.program;
+    const program = p && programById(p.id);
+    if (!program) return null;
+    date = date || today();
+    const start = parseKey(p.start);
+    const diff = daysBetween(start, date);
+    if (diff < 0) return null;
+    const total = Math.max(...program.blocks.map((b) => b.to));
+    const week = Math.floor(diff / 7) + 1;
+    if (week > total) return { program, week: total, total, complete: true };
+    const block = program.blocks.find((b) => week >= b.from && week <= b.to);
+    const weekStart = dateKey(addDays(start, (week - 1) * 7));
+    const key = dateKey(date);
+    const mine = (data.workouts || []).filter((w) => isProgramWorkout(w, program.id) && w.date >= weekStart);
+    const before = mine.filter((w) => w.date < key).length;
+    const doneToday = mine.some((w) => w.date === key);
+    const scheduled = (p.days || []).includes(date.getDay());
+    const weekDone = before >= program.perWeek;
+    const session = scheduled && !weekDone ? workoutById(block.sessions[before % block.sessions.length]) : null;
+    return { program, week, total, block, scheduled, session, doneThisWeek: before + (doneToday ? 1 : 0), doneToday, perWeek: program.perWeek };
+  }
+  function programProgress(data) {
+    const p = data.program;
+    const program = p && programById(p.id);
+    if (!program) return null;
+    const start = parseKey(p.start);
+    const total = Math.max(...program.blocks.map((b) => b.to));
+    const weeks = Array.from({ length: total }, (_, i) => {
+      const from = dateKey(addDays(start, i * 7));
+      const to = dateKey(addDays(start, i * 7 + 6));
+      return (data.workouts || []).filter((w) => isProgramWorkout(w, program.id) && w.date >= from && w.date <= to).length;
+    });
+    const done = weeks.reduce((n, x) => n + Math.min(x, program.perWeek), 0);
+    return { weeks, done, planned: total * program.perWeek, pct: Math.round((done / (total * program.perWeek)) * 100) };
+  }
+  function adjustSets(ex, level, plan) {
+    if (ex.sets === 1) return 1; // walks and single holds
+    let sets = ex.sets;
+    if (level === 'beginner') sets = Math.max(2, sets - 1);
+    if (level === 'advanced' && ex.main) sets += 1;
+    if (ex.main && plan && plan.volume) sets += plan.volume;
+    return Math.max(2, Math.min(sets, 6));
+  }
+
+  function parseReps(str) {
+    const m = /^(\d+)(?:\s*-\s*(\d+))?(?:\s*\/\s*(?:leg|side))?$/.exec(String(str || '').trim());
+    if (!m) return null;
+    const lo = Number(m[1]);
+    return { lo, hi: m[2] ? Number(m[2]) : lo };
+  }
+  const e1rm = (w, r) => (r > 0 && w > 0 ? (r === 1 ? w : w * (1 + r / 30)) : 0);
+  const toKg = (w, unit) => (unit === 'lb' ? w / 2.20462 : w);
+  const fromKg = (w, unit) => (unit === 'lb' ? w * 2.20462 : w);
+  const roundLoad = (x, inc) => Math.max(inc, Number((Math.round(x / inc) * inc).toFixed(2)));
+
+  function increment(name, top, unit) {
+    if (/raise|curl|fly|pushdown|kickback|abduction|face pull|extension|calf|arnold/i.test(name)) return unit === 'lb' ? 2.5 : 1;
+    const big = /squat|deadlift|hip thrust|leg press|sled/i.test(name);
+    if (unit === 'lb') return big && top >= 130 ? 10 : 5;
+    return big && top >= 60 ? 5 : 2.5;
+  }
+
+  function exerciseHistory(workouts, name) {
+    return (workouts || [])
+      .filter((w) => w.detail)
+      .map((w) => ({ date: w.date, phase: w.phase, unit: w.unit || 'kg', ex: w.detail.find((e) => e.name === name) }))
+      .filter((x) => x.ex && x.ex.sets.some((s) => s.weight > 0 && s.reps > 0))
+      .sort((a, b) => (a.date < b.date ? -1 : 1));
+  }
+
+  // Double progression, adjusted for cycle phase and readiness.
+  function suggestLoad(name, repsStr, workouts, ctx) {
+    const target = parseReps(repsStr);
+    if (!target) return null;
+    const unit = ctx.unit || 'kg';
+    const hist = exerciseHistory(workouts, name);
+    if (!hist.length) return { first: true, unit, reps: target.lo, reason: 'First time logging this lift. Pick a weight you could lift for 2-3 more reps.' };
+    const last = hist[hist.length - 1];
+    const sets = last.ex.sets.filter((s) => s.weight > 0 && s.reps > 0);
+    let top = Math.max(...sets.map((s) => s.weight));
+    const minReps = Math.min(...sets.filter((s) => s.weight === top).map((s) => s.reps));
+    const converted = last.unit !== unit;
+    if (converted) top = fromKg(toKg(top, last.unit), unit);
+    const inc = increment(name, top, unit);
+    if (converted) top = roundLoad(top, inc); // only snap to the plate grid when switching units
+
+    let weight = top, reps, reason;
+    if (minReps >= target.hi) { weight = top + inc; reps = target.lo; reason = 'You hit the top of the rep range last time, so add weight.'; }
+    else if (minReps >= target.lo) { reps = Math.min(minReps + 1, target.hi); reason = 'Same weight, beat last time by a rep.'; }
+    else {
+      const prev = hist[hist.length - 2];
+      const missedTwice = prev && Math.min(...prev.ex.sets.filter((s) => s.weight > 0).map((s) => s.reps)) < target.lo;
+      reps = target.lo;
+      if (missedTwice) { weight = roundLoad(top * 0.9, inc); reason = 'Two sessions short of target, so reset 10% and build back.'; }
+      else reason = 'Same weight. Own the target reps first.';
+    }
+
+    const low = ctx.readiness != null && ctx.readiness < 45;
+    if (ctx.phase === 'menstrual' || low) {
+      weight = Math.min(weight, roundLoad(top * 0.9, inc));
+      reps = target.lo;
+      reason = low ? 'Readiness is low today, so about 10% lighter. Quality reps only.' : 'About 10% lighter for your menstrual phase. Smooth, controlled reps.';
+    } else if (ctx.phase === 'luteal' && weight > top) {
+      weight = top;
+      reps = Math.min(minReps + 1, target.hi);
+      reason = 'Holding the weight in your luteal phase. Chase clean reps instead.';
+    }
+    return { weight: Number(weight.toFixed(2)), reps, unit, reason, last: { weight: roundLoad(top, 0.5), reps: minReps, date: last.date } };
+  }
+
+  function bestE1rm(ex, unit) {
+    return Math.max(0, ...ex.sets.filter((s) => s.weight > 0 && s.reps > 0 && s.reps <= 20).map((s) => e1rm(toKg(s.weight, unit), s.reps)));
+  }
+
+  function detectPRs(workout, prior) {
+    const prs = [];
+    (workout.detail || []).forEach((ex) => {
+      const now = bestE1rm(ex, workout.unit);
+      if (!now) return;
+      const before = exerciseHistory(prior, ex.name).map((h) => bestE1rm(h.ex, h.unit));
+      if (before.length && now > Math.max(...before) * 1.001) {
+        const best = ex.sets.filter((s) => s.weight > 0 && s.reps > 0).reduce((a, b) => (e1rm(b.weight, b.reps) > e1rm(a.weight, a.reps) ? b : a));
+        prs.push({ name: ex.name, weight: best.weight, reps: best.reps, unit: workout.unit || 'kg' });
+      }
+    });
+    return prs;
+  }
+
+  // Relative strength by phase, normalised per exercise.
+  function strengthByPhase(workouts) {
+    const byEx = {};
+    (workouts || []).forEach((w) => {
+      if (!w.detail || !D.PHASE_ORDER.includes(w.phase)) return;
+      w.detail.forEach((ex) => { const v = bestE1rm(ex, w.unit); if (v) (byEx[ex.name] = byEx[ex.name] || []).push({ phase: w.phase, v }); });
+    });
+    const ratios = {};
+    Object.values(byEx).forEach((list) => {
+      if (list.length < 3 || new Set(list.map((x) => x.phase)).size < 2) return;
+      const m = mean(list.map((x) => x.v));
+      list.forEach((x) => (ratios[x.phase] = ratios[x.phase] || []).push(x.v / m));
+    });
+    const byPhase = {};
+    Object.keys(ratios).forEach((p) => { if (ratios[p].length >= 2) byPhase[p] = { pct: (mean(ratios[p]) - 1) * 100, n: ratios[p].length }; });
+    const ps = Object.keys(byPhase);
+    if (ps.length < 2) return null;
+    const best = ps.reduce((a, b) => (byPhase[a].pct >= byPhase[b].pct ? a : b));
+    const low = ps.reduce((a, b) => (byPhase[a].pct <= byPhase[b].pct ? a : b));
+    const diff = ((1 + byPhase[best].pct / 100) / (1 + byPhase[low].pct / 100) - 1) * 100;
+    return { byPhase, best, low, diff };
+  }
+
+  // ---------- nutrition ----------
+  function avoidTags(profile) {
+    const set = new Set();
+    (profile.avoid || []).forEach((label) => { const o = D.AVOID_OPTIONS.find((x) => x.label === label); if (o) o.tags.forEach((t) => set.add(t)); });
+    return set;
+  }
+  function mealOptions(profile, phase, slot) {
+    const avoid = avoidTags(profile);
+    const favs = (profile.favorites || []).map((f) => f.toLowerCase().split(' ')[0]);
+    const dislikes = (profile.foodNotes || '').toLowerCase().split(/[,\n]/).map((x) => x.trim()).filter((x) => x.length > 2);
+    const scored = D.MEALS[phase][slot].map((meal, i) => {
+      const text = (meal.name + ' ' + meal.desc).toLowerCase();
+      const conflicts = meal.tags.filter((t) => avoid.has(t)).length;
+      const score = favs.filter((f) => text.includes(f)).length * 2 - conflicts * 10 - (dislikes.some((d) => text.includes(d)) ? 3 : 0);
+      return { meal, i, conflicts, score };
+    });
+    const ok = scored.filter((s) => s.conflicts === 0);
+    const list = (ok.length ? ok : scored).sort((a, b) => b.score - a.score || a.i - b.i);
+    return { list: list.map((s) => s.meal), compromised: !ok.length };
+  }
+  function mealFor(data, date, slot) {
+    const phase = cycleInfo(data.profile, date).phase;
+    const { list, compromised } = mealOptions(data.profile, phase, slot);
+    const swaps = ((data.mealSwaps || {})[dateKey(date)] || {})[slot] || 0;
+    return { meal: list[swaps % list.length], count: list.length, compromised, phase };
+  }
+  // ---------- food log (barcode scans, search, manual entries) ----------
+  const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) && n >= 0 ? n : null; };
+
+  // Normalise an Open Food Facts product into per-serving and per-100 g macros.
+  function parseOFF(product, barcode) {
+    if (!product) return null;
+    const n = product.nutriments || {};
+    const kcal100 = num(n['energy-kcal_100g']) ?? (num(n.energy_100g) != null ? num(n.energy_100g) / 4.184 : null);
+    const per100 = { kcal: kcal100, protein: num(n.proteins_100g), carbs: num(n.carbohydrates_100g), fat: num(n.fat_100g) };
+    const grams = num(product.serving_quantity);
+    let perServing = { kcal: num(n['energy-kcal_serving']), protein: num(n.proteins_serving), carbs: num(n.carbohydrates_serving), fat: num(n.fat_serving) };
+    if (perServing.kcal == null && grams && per100.kcal != null) {
+      perServing = Object.fromEntries(Object.entries(per100).map(([k, v]) => [k, v == null ? null : (v * grams) / 100]));
+    }
+    const hasServing = perServing.kcal != null;
+    const hasPer100 = per100.kcal != null;
+    if (!hasServing && !hasPer100) return null;
+    const name = (product.product_name || product.generic_name || '').trim() || 'Unnamed product';
+    const round1 = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, v == null ? 0 : Math.round(v * 10) / 10]));
+    return {
+      barcode: barcode || product.code || null,
+      name,
+      brand: (product.brands || '').split(',')[0].trim(),
+      image: product.image_front_small_url || null,
+      serving: hasServing ? { label: product.serving_size || (grams ? `${grams} g` : '1 serving'), grams: grams || null } : { label: '100 g', grams: 100 },
+      perServing: round1(hasServing ? perServing : per100),
+      per100: hasPer100 ? round1(per100) : null,
+    };
+  }
+
+  // Macros for an amount: servings of the label serving, or grams when per-100 g data exists.
+  function foodMacros(food, amount, mode) {
+    const base = mode === 'grams' && food.per100 ? food.per100 : food.perServing;
+    const factor = mode === 'grams' && food.per100 ? amount / 100 : amount;
+    return { kcal: Math.round(base.kcal * factor), protein: Math.round(base.protein * factor * 10) / 10, carbs: Math.round(base.carbs * factor * 10) / 10, fat: Math.round(base.fat * factor * 10) / 10 };
+  }
+
+  function macrosFor(data, key) {
+    const total = { kcal: 0, protein: 0, carbs: 0, fat: 0 };
+    Object.values((data.eaten || {})[key] || {}).forEach((m) => { total.kcal += m.kcal || 0; total.protein += m.protein || 0; total.carbs += m.carbs || 0; total.fat += m.fat || 0; });
+    ((data.foodLog || {})[key] || []).forEach((f) => { total.kcal += f.kcal; total.protein += f.protein; total.carbs += f.carbs; total.fat += f.fat; });
+    total.protein += (data.proteinExtra || {})[key] || 0;
+    return { kcal: Math.round(total.kcal), protein: Math.round(total.protein), carbs: Math.round(total.carbs), fat: Math.round(total.fat) };
+  }
+  const proteinFor = (data, key) => macrosFor(data, key).protein;
+
+  // Recipes: ingredients are logged-style items with macros for the amount used.
+  function recipeTotals(ingredients) {
+    const t = { kcal: 0, protein: 0, carbs: 0, fat: 0 };
+    (ingredients || []).forEach((i) => { t.kcal += i.kcal || 0; t.protein += i.protein || 0; t.carbs += i.carbs || 0; t.fat += i.fat || 0; });
+    return { kcal: Math.round(t.kcal), protein: Math.round(t.protein * 10) / 10, carbs: Math.round(t.carbs * 10) / 10, fat: Math.round(t.fat * 10) / 10 };
+  }
+  // A saved recipe as a loggable food: per serving, and per 100 g when the cooked weight is known.
+  function recipeFood(recipe) {
+    const t = recipeTotals(recipe.ingredients);
+    const servings = Math.max(1, Number(recipe.servings) || 1);
+    const grams = Number(recipe.totalGrams) > 0 ? Number(recipe.totalGrams) : null;
+    const per = (f) => Object.fromEntries(Object.entries(t).map(([k, v]) => [k, Math.round(v * f * 10) / 10]));
+    return {
+      barcode: null, recipeId: recipe.id, name: recipe.name, brand: 'My recipe', image: null, custom: true,
+      serving: { label: grams ? `1 serving (${Math.round(grams / servings)} g)` : `1 serving of ${servings}`, grams: grams ? Math.round(grams / servings) : null },
+      perServing: per(1 / servings),
+      per100: grams ? per(100 / grams) : null,
+    };
+  }
+
+  // EAN-13 / UPC-A / EAN-8 check digit validation, so a misread scan is rejected before lookup.
+  function validBarcode(code) {
+    if (!/^\d{8}$|^\d{12,14}$/.test(code)) return false;
+    const digits = code.split('').map(Number);
+    const check = digits.pop();
+    const sum = digits.reverse().reduce((s, d, i) => s + d * (i % 2 === 0 ? 3 : 1), 0);
+    return (10 - (sum % 10)) % 10 === check;
+  }
+
+  const CATS = { p: 'Protein', v: 'Produce', g: 'Pantry and grains', d: 'Dairy and eggs' };
+  // Best-guess aisle for free-text items (recipe ingredients, items she adds).
+  function aisleFor(name) {
+    const x = name.toLowerCase();
+    if (/milk|yogurt|cheese|butter|cream|egg|kefir|cottage/.test(x)) return CATS.d;
+    if (/chicken|turkey|beef|steak|pork|bacon|salmon|tuna|cod|shrimp|fish|tofu|tempeh|sausage|ham|lamb/.test(x)) return CATS.p;
+    if (/lettuce|spinach|kale|arugula|tomato|onion|garlic|pepper|potato|berr|banana|apple|avocado|lemon|lime|orange|broccoli|carrot|cucumber|zucchini|squash|herb|cilantro|parsley|mushroom|celery|cabbage|fruit|grape|mango|pineapple|ginger/.test(x)) return CATS.v;
+    return CATS.g;
+  }
+  // Ingredient names from foods can carry prep notes ("Jasmine rice, uncooked"); keep the shopping part.
+  const shopName = (name) => name.split(/,|\(/)[0].trim();
+
+  // Sources: meal ideas for the next `days` days, chosen saved recipes, and her own items.
+  function groceryList(data, start, days, opts) {
+    opts = opts || {};
+    const items = {};
+    const add = (name, cat) => {
+      const k = name.toLowerCase();
+      items[k] = items[k] || { name, cat, count: 0 };
+      items[k].count++;
+    };
+    if (opts.ideas !== false) {
+      for (let i = 0; i < (days || 7); i++) {
+        const date = addDays(start, i);
+        ['breakfast', 'lunch', 'dinner', 'snack'].forEach((slot) => {
+          const { meal } = mealFor(data, date, slot);
+          (D.GROCERY[meal.name] || []).forEach((code) => { const [c, name] = code.split(':'); add(name, CATS[c] || 'Other'); });
+        });
+      }
+    }
+    (opts.recipes || []).forEach((r) => (r.ingredients || []).forEach((g) => { const nm = shopName(g.name); if (nm) add(nm, aisleFor(nm)); }));
+    (opts.custom || []).forEach((nm) => add(nm, aisleFor(nm)));
+    const out = {};
+    Object.values(items).sort((a, b) => a.name.localeCompare(b.name)).forEach((it) => { (out[it.cat] = out[it.cat] || []).push(it); });
+    return out;
+  }
+  const storeLink = (store, item) => store.search + encodeURIComponent(item);
+
+  // Restaurant build-your-own: total the chosen options.
+  function buildTotals(restaurant, picks) {
+    const t = { kcal: 0, protein: 0, carbs: 0, fat: 0 };
+    const names = [];
+    (restaurant.build ? restaurant.build.sections : []).forEach((sec) => (picks[sec.id] || []).forEach((i) => {
+      const o = sec.options[i];
+      if (!o) return;
+      t.kcal += o.kcal; t.protein += o.protein; t.carbs += o.carbs; t.fat += o.fat;
+      if (o.kcal || sec.id !== 'base') names.push(o.name);
+    }));
+    return { totals: { kcal: Math.round(t.kcal), protein: Math.round(t.protein * 10) / 10, carbs: Math.round(t.carbs * 10) / 10, fat: Math.round(t.fat * 10) / 10 }, names };
+  }
+
+  // ---------- streak ----------
+  // A day counts if she trained, walked at least 60% of her steps, or checked in.
+  // One missed day per week is forgiven so a rest day never breaks the streak.
+  function streak(data) {
+    const active = (d) => {
+      const k = dateKey(d);
+      if ((data.workouts || []).some((w) => w.date === k)) return true;
+      if ((data.daily || {})[k]) return true;
+      const t = targets(data.profile, cycleInfo(data.profile, d), data.plan);
+      return ((data.steps || {})[k] || 0) >= t.steps * 0.6;
+    };
+    let d = today();
+    const todayDone = active(d);
+    if (!todayDone) d = addDays(d, -1);
+    let count = 0, sinceGrace = 7;
+    for (let i = 0; i < 366; i++) {
+      if (active(d)) { count++; sinceGrace++; }
+      else if (sinceGrace >= 6 && count > 0 && active(addDays(d, -1))) { sinceGrace = 0; }
+      else break;
+      d = addDays(d, -1);
+    }
+    return { count, todayDone };
+  }
+
+  // ---------- weekly check-in ----------
+  function weeklyStats(data, now) {
+    now = now || today();
+    const days = Array.from({ length: 7 }, (_, i) => addDays(now, i - 6));
+    const keys = days.map(dateKey);
+    const sessions = (data.workouts || []).filter((w) => keys.includes(w.date)).length;
+    const planned = days.filter((d) => plannedWorkout(data, d).id !== 'rest').length;
+    let stepDays = 0, stepTotal = 0, proteinDays = 0, proteinLogged = false;
+    days.forEach((d) => {
+      const k = dateKey(d);
+      const t = targets(data.profile, cycleInfo(data.profile, d), data.plan);
+      const s = (data.steps || {})[k] || 0;
+      stepTotal += s;
+      if (s >= t.steps) stepDays++;
+      const p = proteinFor(data, k);
+      if (p > 0) proteinLogged = true;
+      if (p >= t.protein * 0.9) proteinDays++;
+    });
+    const ready = keys.map((k) => readiness((data.daily || {})[k])).filter((r) => r != null);
+    const checks = (data.checkins || []).slice().sort((a, b) => (a.date < b.date ? -1 : 1));
+    const recent = checks.filter((c) => daysBetween(parseKey(c.date), now) <= 7);
+    const before = checks.filter((c) => { const g = daysBetween(parseKey(c.date), now); return g > 7 && g <= 21; });
+    let weightChange = null;
+    if (recent.length && before.length) {
+      const span = Math.max(7, daysBetween(parseKey(before[before.length - 1].date), parseKey(recent[recent.length - 1].date)));
+      weightChange = ((mean(recent.map((c) => c.kg)) - mean(before.map((c) => c.kg))) / span) * 7;
+    }
+    const phaseDays = {};
+    days.forEach((d) => { const p = cycleInfo(data.profile, d).phase; phaseDays[p] = (phaseDays[p] || 0) + 1; });
+    const upcoming = [];
+    let prev = cycleInfo(data.profile, now).phase;
+    for (let i = 1; i <= 7; i++) {
+      const d = addDays(now, i);
+      const c = cycleInfo(data.profile, d);
+      if (c.phase !== prev) upcoming.push({ phase: c.phase, date: dateKey(d) });
+      prev = c.phase;
+    }
+    const prs = (data.prs || []).filter((p) => keys.includes(p.date));
+    return { from: keys[0], to: keys[6], sessions, planned, stepDays, stepAvg: Math.round(stepTotal / 7), proteinDays: proteinLogged ? proteinDays : null, readinessAvg: ready.length ? Math.round(mean(ready)) : null, checkinDays: ready.length, weightChange, phaseDays, upcoming, prs: prs.length };
+  }
+
+  // Answers: feel (easy|right|hard), hunger (low|ok|high), next (normal|busy|travel|push).
+  function weeklyAdjust(stats, answers, data) {
+    const p = data.profile;
+    const plan = data.plan || {};
+    const adj = [];
+    const notes = [];
+    const bw = Number(p.weightKg) || 65;
+    const consistent = stats.sessions >= Math.max(2, stats.planned - 1);
+    const mostlyLuteal = (stats.phaseDays.luteal || 0) >= 4;
+    const cal = p.units === 'metric' ? 'kcal' : 'calories';
+
+    if ((answers.feel === 'easy' || answers.next === 'push') && consistent && (stats.readinessAvg == null || stats.readinessAvg >= 55) && (plan.volume || 0) < 1) {
+      adj.push({ key: 'volume', delta: 1, label: 'Add a set to your main lifts', why: 'Training felt easy and you were consistent.' });
+    } else if ((answers.feel === 'hard' || (stats.readinessAvg != null && stats.readinessAvg < 50)) && (plan.volume || 0) > -1) {
+      adj.push({ key: 'volume', delta: -1, label: 'Remove a set from your main lifts', why: answers.feel === 'hard' ? 'Training felt too hard. Recover, then build back.' : 'Your readiness averaged under 50 this week.' });
+    }
+
+    if (stats.stepDays <= 2 && (plan.stepBonus || 0) > -2000) {
+      adj.push({ key: 'stepBonus', delta: -1000, label: 'Lower your step target by 1,000', why: `You hit it on ${stats.stepDays} of 7 days. A target you can win builds the habit.` });
+    } else if (stats.stepDays >= 6 && ['lose', 'recomp'].includes(p.goal) && (plan.stepBonus || 0) < 3000) {
+      adj.push({ key: 'stepBonus', delta: 500, label: 'Raise your step target by 500', why: 'You hit your steps 6 or more days. Time for a small step up.' });
+    }
+
+    const w = stats.weightChange;
+    const k = plan.kcalAdjust || 0;
+    if (['lose', 'recomp'].includes(p.goal)) {
+      if ((w != null && w < -0.01 * bw) || answers.hunger === 'high') {
+        if (k < 300) adj.push({ key: 'kcalAdjust', delta: 100, label: `Add 100 ${cal} a day`, why: answers.hunger === 'high' ? 'Hunger was high, so a small increase keeps this sustainable.' : 'You are losing faster than 1% of body weight a week.' });
+      } else if (w != null && w > -0.1 && consistent && !mostlyLuteal && k > -300) {
+        adj.push({ key: 'kcalAdjust', delta: -100, label: `Trim 100 ${cal} a day`, why: 'Your weight trend is flat even though you were consistent.' });
+      } else if (w != null && w > -0.1 && mostlyLuteal) {
+        notes.push('Your weight trend is flat, but you spent most of the week in your luteal phase, when water retention is common. Holding calories steady.');
+      }
+    } else if (['muscle', 'glutes', 'strength'].includes(p.goal)) {
+      if (w != null && w < 0.05 && k < 300) adj.push({ key: 'kcalAdjust', delta: 100, label: `Add 100 ${cal} a day`, why: 'Your weight is not moving up, and muscle needs fuel.' });
+      else if (w != null && w > 0.5 && k > -300) adj.push({ key: 'kcalAdjust', delta: -100, label: `Trim 100 ${cal} a day`, why: `You are gaining faster than about ${p.units === 'metric' ? '0.5 kg' : '1 lb'} a week.` });
+    } else if (answers.hunger === 'high' && k < 300) {
+      adj.push({ key: 'kcalAdjust', delta: 100, label: `Add 100 ${cal} a day`, why: 'Hunger was high this week.' });
+    }
+
+    if (answers.next === 'busy') notes.push('Busy week ahead: prioritise your 2-3 most important sessions and keep walking. Short and done beats perfect.');
+    if (answers.next === 'travel') notes.push('Travelling: use hotel-gym or bodyweight versions, hit your steps exploring, and pack protein snacks.');
+    stats.upcoming.forEach((u) => notes.push(`${D.PHASES[u.phase].name} starts ${parseKey(u.date).toLocaleDateString(undefined, { weekday: 'long' })}. ${D.PHASES[u.phase].training}`));
+    return { adjustments: adj, notes };
+  }
+
+  function applyAdjustments(plan, adjustments) {
+    const lim = { volume: [-1, 1], stepBonus: [-3000, 3000], kcalAdjust: [-300, 300] };
+    adjustments.forEach((a) => { plan[a.key] = clamp((plan[a.key] || 0) + a.delta, lim[a.key][0], lim[a.key][1]); });
+    return plan;
+  }
+
+  // Perimenopause / menopause: how often key symptoms show up, and what they do to readiness.
+  function menoInsights(daily, now) {
+    now = now || today();
+    const days = Array.from({ length: 28 }, (_, i) => dateKey(addDays(now, -i))).map((k) => (daily || {})[k]).filter(Boolean);
+    const out = [];
+    if (days.length < 5) return out;
+    ['Hot flashes', 'Night sweats', 'Brain fog', 'Joint aches'].forEach((sym) => {
+      const withS = days.filter((d) => (d.symptoms || []).includes(sym));
+      if (withS.length < 2) return;
+      const without = days.filter((d) => !(d.symptoms || []).includes(sym));
+      let text = `${sym} on ${withS.length} of your last ${days.length} check-ins.`;
+      if (without.length >= 2) {
+        const diff = Math.round(mean(without.map(readiness)) - mean(withS.map(readiness)));
+        if (diff >= 8) text += ` Readiness runs about ${diff} points lower on those days, so I go lighter when you log them.`;
+      }
+      out.push(text);
+    });
+    const ns = days.filter((d) => (d.symptoms || []).includes('Night sweats'));
+    if (ns.length >= 2 && mean(ns.map((d) => d.sleep)) <= 2.5) out.push('Night sweats are costing you sleep. A cooler room, lighter bedding and less alcohol in the evening are worth trying, and talk to your doctor if they are frequent.');
+    return out;
+  }
+
+  // ---------- talk to log / plate estimates ----------
+  const NUM_WORDS = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, twelve: 12, half: 0.5, couple: 2, few: 3, some: 1, single: 1, double: 2 };
+  const SLOT_WORDS = { breakfast: 'breakfast', brekkie: 'breakfast', lunch: 'lunch', dinner: 'dinner', supper: 'dinner', snack: 'snack', snacks: 'snack' };
+  const UNIT_RE = /^(g|grams?|oz|ounces?|cups?|tbsps?|tablespoons?|tsps?|teaspoons?|slices?|scoops?|pieces?|pcs|servings?|bowls?|handfuls?|cans?|strips?|glass(?:es)?)\b\s*(?:of\s+)?/;
+
+  function slotIn(text) {
+    const m = /\b(breakfast|brekkie|lunch|dinner|supper|snacks?)\b/.exec(text);
+    return m ? SLOT_WORDS[m[1]] : null;
+  }
+
+  // "log my usual breakfast", "same lunch as yesterday" -> { slot, yesterday }
+  function usualRequest(text) {
+    const t = String(text || '').toLowerCase();
+    if (!/\b(usual|normal|regular|same|typical)\b/.test(t)) return null;
+    return { slot: slotIn(t), yesterday: /\byesterday\b/.test(t) };
+  }
+
+  // Her usual meal for a slot: the most often repeated set of foods in the last 3 weeks (ties go to the most recent),
+  // or yesterday's when asked. Returns diary entries without ids, or null.
+  function usualMeal(data, slot, now, opts) {
+    now = now || today();
+    const log = data.foodLog || {};
+    const pick = (k) => (log[k] || []).filter((e) => e.slot === slot);
+    if (opts && opts.yesterday) {
+      const y = pick(dateKey(addDays(now, -1)));
+      return y.length ? y.map(strip) : null;
+    }
+    const seen = {};
+    for (let i = 1; i <= 21; i++) {
+      const items = pick(dateKey(addDays(now, -i)));
+      if (!items.length) continue;
+      const sig = items.map((e) => e.name.toLowerCase() + '|' + e.label).sort().join('+');
+      if (!seen[sig]) seen[sig] = { count: 0, last: i, items };
+      seen[sig].count++;
+    }
+    const best = Object.values(seen).sort((a, b) => b.count - a.count || a.last - b.last)[0];
+    return best ? best.items.map(strip) : null;
+    function strip(e) { const c = { ...e }; delete c.id; delete c.ts; return c; }
+  }
+
+  function parseQty(s) {
+    let qty = null;
+    let m = /^(\d+(?:\.\d+)?)\s*\/\s*(\d+)\s*/.exec(s);
+    if (m) { qty = +m[1] / +m[2]; s = s.slice(m[0].length); }
+    else if ((m = /^(\d+(?:\.\d+)?)\s*(½|¼|¾)?\s*/.exec(s))) { qty = +m[1] + ({ '½': 0.5, '¼': 0.25, '¾': 0.75 }[m[2]] || 0); s = s.slice(m[0].length); }
+    else if ((m = /^(½|¼|¾)\s*/.exec(s))) { qty = { '½': 0.5, '¼': 0.25, '¾': 0.75 }[m[1]]; s = s.slice(m[0].length); }
+    else {
+      m = /^(a\s+couple|a\s+few|a\s+half|half\s+an?|[a-z]+)\b\s*(?:of\s+)?/.exec(s);
+      if (m) {
+        const w = m[1].replace(/\s+/g, ' ');
+        const v = w === 'a couple' ? 2 : w === 'a few' ? 3 : /half/.test(w) ? 0.5 : NUM_WORDS[w];
+        if (v != null) { qty = v; s = s.slice(m[0].length); }
+      }
+    }
+    return { qty, rest: s };
+  }
+
+  // Free text ("two eggs and toast with butter") -> matched everyday foods. Offline and approximate.
+  function parseFoodText(text, foods) {
+    let t = String(text || '').toLowerCase().replace(/[.!?]+$/g, '').trim();
+    const slot = slotIn(t);
+    t = t.replace(/\b(for|at|with)\s+(my\s+)?(breakfast|brekkie|lunch|dinner|supper|snacks?)\b/g, ' ')
+      .replace(/^(breakfast|brekkie|lunch|dinner|supper|snacks?)\s*[:\-]?\s*/, '')
+      .replace(/^(?:(?:so\s+)?(?:today\s+)?i\s+(?:just\s+)?(?:had|ate|have|eaten|grabbed|made)|log(?:ged)?|add|ate|had)\s+/, '')
+      .replace(/\b(this morning|today|tonight|earlier|just now|please)\b/g, ' ');
+    const parts = t.split(/\s*(?:,|;|&|\+|\band then\b|\bthen\b|\band\b|\bwith\b|\bplus\b|\bon\b)\s*/).map((x) => x.trim()).filter(Boolean);
+    const items = [];
+    const unknown = [];
+    parts.forEach((raw) => {
+      let { qty, rest } = parseQty(raw);
+      let unit = null;
+      const um = UNIT_RE.exec(rest);
+      if (um) { unit = um[1].replace(/(glass|inch)es$/, '$1').replace(/([^s])s$/, '$1').replace(/^gram$/, 'g').replace(/^ounce$/, 'oz').replace(/^tablespoon$/, 'tbsp').replace(/^teaspoon$/, 'tsp'); rest = rest.slice(um[0].length); }
+      if (qty == null && unit !== 'g' && unit !== 'oz') { const again = parseQty(rest); if (again.qty != null) { qty = again.qty; rest = again.rest; } }
+      const name = rest.replace(/^(of|my|some|the)\s+/, '').trim();
+      if (!name) return;
+      let best = null;
+      foods.forEach((f) => f.names.forEach((a) => {
+        if (new RegExp(`(^|\\s)${a.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\s|$)`).test(name) && (!best || a.length > best.alias.length)) best = { food: f, alias: a };
+      }));
+      if (!best) { unknown.push(raw); return; }
+      const f = best.food;
+      // The food's own unit, e.g. "2 tbsp" -> 2 tbsp; "1/2 avocado" -> half of one.
+      const fu = /^(\d+\/\d+|\d+)\s+(cups?|tbsp|slices?|scoops?)\b/.exec(f.unit);
+      const fuN = fu ? (fu[1].includes('/') ? +fu[1].split('/')[0] / +fu[1].split('/')[1] : +fu[1]) : 1;
+      const fuWord = fu ? fu[2].replace(/s$/, '') : null;
+      const q = qty == null ? 1 : qty;
+      let servings = q;
+      if (unit === 'g') servings = q / f.grams;
+      else if (unit === 'oz') servings = (q * 28.35) / f.grams;
+      else if (unit && unit === fuWord) servings = q / fuN;
+      else if (unit === 'tsp' && fuWord === 'tbsp') servings = q / 3 / fuN;
+      else if (!unit && qty != null && /^1\/2 /.test(f.unit)) servings = q * 2; // "an avocado" is two halves
+      servings = Math.round(servings * 100) / 100;
+      if (!(servings > 0)) { unknown.push(raw); return; }
+      const frac = (v) => ({ 0.25: '1/4', 0.5: '1/2', 0.75: '3/4' }[v] || String(v));
+      const label = unit && unit !== 'serving' ? `${frac(q)} ${unit}${q > 1 && !['g', 'oz', 'tbsp', 'tsp'].includes(unit) ? (unit === 'glass' ? 'es' : 's') : ''}` : servings === 1 ? f.unit : `${frac(servings)} x ${f.unit}`;
+      const r1 = (v) => Math.round(v * servings * 10) / 10;
+      const shown = ['protein', 'oil', 'nuts', 'pb'].includes(best.alias) ? f.names[0] : best.alias;
+      items.push({ name: shown.charAt(0).toUpperCase() + shown.slice(1), portion: label, grams: Math.round(f.grams * servings), kcal: Math.round(f.kcal * servings), protein: r1(f.protein), carbs: r1(f.carbs), fat: r1(f.fat), confidence: 'medium' });
+    });
+    return { slot, items, unknown };
+  }
+
+  // Clean AI estimates before showing them: sane ranges, no blanks.
+  function cleanEstimates(items) {
+    const num = (v, max) => { const x = Number(v); return Number.isFinite(x) ? Math.min(max, Math.max(0, x)) : 0; };
+    return (Array.isArray(items) ? items : []).filter((i) => i && typeof i.name === 'string' && i.name.trim()).slice(0, 15).map((i) => ({
+      name: i.name.trim().slice(0, 60),
+      portion: String(i.portion || '1 portion').slice(0, 40),
+      grams: Math.round(num(i.grams, 3000)) || null,
+      kcal: Math.round(num(i.kcal, 3000)),
+      protein: Math.round(num(i.protein, 300) * 10) / 10,
+      carbs: Math.round(num(i.carbs, 500) * 10) / 10,
+      fat: Math.round(num(i.fat, 300) * 10) / 10,
+      confidence: ['high', 'medium', 'low'].includes(i.confidence) ? i.confidence : 'medium',
+    }));
+  }
+
+  // An estimate as a loggable food: one serving is the estimated portion.
+  function estimateFood(item, source) {
+    const per100 = item.grams ? { kcal: (item.kcal / item.grams) * 100, protein: (item.protein / item.grams) * 100, carbs: (item.carbs / item.grams) * 100, fat: (item.fat / item.grams) * 100 } : null;
+    return { barcode: null, name: item.name, brand: source === 'photo' ? 'Plate photo estimate' : 'Estimate', image: null, custom: true, estimated: true, serving: { label: item.portion, grams: item.grams || null }, perServing: { kcal: item.kcal, protein: item.protein, carbs: item.carbs, fat: item.fat }, per100 };
+  }
+
+  // Check-in day: her chosen weekday (0 = Sunday). Due on that day or the day after, once a week.
+  const checkinDay = (data) => (Number.isInteger(data.checkinDay) ? data.checkinDay : 0);
+  function weeklyDue(data, now) {
+    now = now || today();
+    const reviews = data.reviews || [];
+    const last = reviews[reviews.length - 1];
+    if (last && daysBetween(parseKey(last.date), now) < 6) return false;
+    const day = checkinDay(data);
+    const wd = now.getDay();
+    if (wd === day || wd === (day + 1) % 7) return true;
+    const dates = (data.workouts || []).map((w) => w.date).sort();
+    return !last && dates.length > 0 && daysBetween(parseKey(dates[0]), now) >= 7;
+  }
+  const checkinTomorrow = (data, now) => ((now || today()).getDay() + 1) % 7 === checkinDay(data);
+
+  const api = {
+    dateKey, parseKey, today, addDays, daysBetween, clamp, round, mean, weekdayIndex,
+    GOALS, LEVELS, ACTIVITY, goalOf, activityOf, STEADY_MODES, MENO_MODES, menoInsights, checkinDay, checkinTomorrow,
+    learnCycle, addPeriod, cycleInfo, targets, readiness, readinessLabel, patterns,
+    workoutById, plannedWorkout, workoutFor, programById, programDay, programProgress, adjustSets, parseReps, e1rm, suggestLoad, detectPRs, strengthByPhase, exerciseHistory,
+    mealOptions, mealFor, proteinFor, aisleFor, storeLink, buildTotals, macrosFor, parseOFF, foodMacros, validBarcode, recipeTotals, recipeFood, groceryList, parseFoodText, usualRequest, usualMeal, cleanEstimates, estimateFood, streak, weeklyStats, weeklyAdjust, applyAdjustments, weeklyDue,
+  };
+  if (typeof window !== 'undefined') window.YOURS_LOGIC = api;
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})();
