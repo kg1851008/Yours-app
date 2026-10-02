@@ -2620,17 +2620,23 @@
     } catch (e) { S.authBusy = false; S.authError = window.YOURS_CLOUD.friendlyError(e); render(); }
   }
 
+  // Signed in to the cloud: bring along her guest plan if this device has one, then start syncing.
+  async function enterCloudAccount(u) {
+    const email = u.email;
+    rememberCloudUser(email, u.name);
+    const hasLocal = !!store.get(`yours.data.${email}`, null);
+    const guest = store.get('yours.data.guest', null);
+    if (!hasLocal && guest && guest.onboarded) { guest.planSeen = true; guest._updated = 0; store.set(`yours.data.${email}`, guest); }
+    if (guest) store.del('yours.data.guest');
+    await startSession({ kind: 'user', email, cloud: true });
+  }
+
   async function cloudLogin(email, password) {
     S.authBusy = true; render();
     try {
       const u = await cloud.signIn(email, password);
-      rememberCloudUser(email, u.name);
-      const hasLocal = !!store.get(`yours.data.${email}`, null);
-      const guest = store.get('yours.data.guest', null);
-      if (!hasLocal && guest && guest.onboarded) { guest.planSeen = true; guest._updated = 0; store.set(`yours.data.${email}`, guest); }
-      if (guest) store.del('yours.data.guest');
       S.authError = ''; S.authBusy = false; S.modal = null;
-      await startSession({ kind: 'user', email, cloud: true });
+      await enterCloudAccount(u);
       render();
       return true;
     } catch (e) {
@@ -3483,8 +3489,16 @@
         const u = cloud ? await cloud.init() : null;
         if (u) { await syncPull(); startCloudCommunity(); }
         else if (cloud && navigator.onLine) { S.session = null; S.data = null; store.del('yours.session'); S.screen = 'login'; S.authError = 'Please sign in again.'; }
-      } else { loadData(); await loadPhotos(); }
-    } else if (cloud) await cloud.init();
+      } else {
+        loadData(); await loadPhotos();
+        // A guest who just confirmed her email arrives signed in to the cloud: switch her to the account.
+        if (isGuest() && cloud) { const u = await cloud.init(); if (u) await enterCloudAccount(u); }
+      }
+    } else if (cloud) {
+      // Arriving from the confirmation email: the link carries her session, so sign her straight in.
+      const u = await cloud.init();
+      if (u) await enterCloudAccount(u);
+    }
     render();
     checkAI();
     fetch('/api/food').then((r) => r.json()).then((j) => { S.foodApi = !!j.available; }).catch(() => { S.foodApi = false; });
