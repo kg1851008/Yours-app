@@ -225,7 +225,8 @@
       targets: { calories: t.kcal, proteinG: t.protein, carbsG: t.carbs, fatG: t.fat, waterL: t.water, steps: t.steps },
       planAdjustments: S.data.plan,
       todaysWorkout: { id: wk.id, name: wk.name, completed: loggedOn(todayKey()).length > 0, suggestedLoads: todaysLoads() },
-      workoutCatalog: D.WORKOUTS.map((w) => ({ id: w.id, name: w.name, phase: w.phase, intensity: w.intensity })),
+      program: programContext(),
+      workoutCatalog: D.WORKOUTS.filter((w) => w.phase !== 'program' || (S.data.program && w.program === S.data.program.id)).map((w) => ({ id: w.id, name: w.name, phase: w.phase, intensity: w.intensity })),
       recentWorkouts: S.data.workouts.slice(-10).map((w) => ({ date: w.date, name: w.name, minutes: w.minutes, phase: w.phase })),
       recentPRs: S.data.prs.slice(-5),
       proteinTodayG: L.proteinFor(S.data, todayKey()),
@@ -1485,6 +1486,7 @@
         <div class="p-row"><span>${esc(wk.focus)}</span><span>${wk.minutes} min · ${esc(wk.intensity)}</span></div>
         <div class="p-body">
           <div class="p-serif">${esc(wk.summary.split('.')[0])}.</div>
+          ${(() => { const pg = L.programDay(S.data, today()); return pg && !pg.complete ? `<div class="p-cap" style="margin-top:10px">${esc(pg.program.name)} · week ${pg.week} of ${pg.total}</div>` : ''; })()}
           <div class="p-title cream" style="margin-top:34px"><span class="over"><span class="script">today</span>${esc(wk.name)}</span></div>
           <div class="row" style="margin-top:18px">${done ? `<span class="btn cream sm" style="pointer-events:none">${icon('check', 16)} Completed</span>` : `<button class="btn cream sm" data-action="start-workout" data-id="${wk.id}">Start workout</button>`}<button class="btn outline sm" data-action="view-workout" data-id="${wk.id}">Details</button></div>
         </div>`, 'short')}
@@ -1525,7 +1527,10 @@
   }
 
   // ---------- workouts ----------
+  // Bodyweight and skill work gets no weight suggestion.
+  const BODYWEIGHT = /pelvic|breathing|clam|heel slide|bird dog|dead bug|wall push|sit-to-stand|plank|hang\b|hollow|pogo|marching|balance|heel drop|scapular|negative|pull-up attempt|assisted pull|inverted row|frog pump|box jump|jump rope|band pull|band row|banded|pallof|cat-cow|90\/90|stretch|rotation|walk\b/i;
   function loadHint(ex) {
+    if (BODYWEIGHT.test(ex.name)) return '';
     const s = L.suggestLoad(ex.name, ex.reps, S.data.workouts, { phase: cyc().phase, readiness: readinessToday(), unit: unit() });
     if (!s) return '';
     if (s.first) return '<div class="tiny" style="margin-top:4px;color:var(--accent)">First time: pick a weight with 2-3 reps left in the tank</div>';
@@ -1553,13 +1558,14 @@
       <div class="week">${days.map((d) => { const k = dateKey(d); return `<div class="day ${k === todayKey() ? 'today' : ''} ${loggedOn(k).length ? 'done' : ''}"><div class="d">${d.toLocaleDateString(undefined, { weekday: 'narrow' })}</div><div class="n">${d.getDate()}</div><div class="mk"></div></div>`; }).join('')}</div>
       <p class="small muted" style="margin-top:10px">${plural(thisWeek.length, 'session')} logged this week</p>
       ${smartSuggestion(c, wk)}
+      ${programSection()}
 
-      <div class="section-title"><h2>Recommended today</h2><span class="tag">${esc(wk.intensity)}</span></div>
-      ${poster(wk.phase === 'any' ? 'steady' : wk.phase, `
+      <div class="section-title"><h2>${S.data.program && L.programDay(S.data, today()) && !L.programDay(S.data, today()).complete ? 'Today in your program' : 'Recommended today'}</h2><span class="tag">${esc(wk.intensity)}</span></div>
+      ${poster(wk.phase === 'any' ? 'steady' : wk.phase === 'program' ? (c.steady ? 'steady' : c.phase) : wk.phase, `
         <div class="p-row"><span>${esc(wk.focus)}</span><span>${wk.minutes} min</span></div>
         <div class="p-body"><div class="p-serif">${esc(wk.summary.split('.')[0])}.</div><div class="p-title">${esc(wk.name)}</div><div class="p-cap">${esc(copyFor(c.phase).cap)}</div></div>`, 'short')}
       <div class="card" style="margin-top:12px">
-        <div class="why" style="margin-top:0">${esc(ph.training)}</div>
+        <div class="why" style="margin-top:0">${esc(wk.phase === 'program' ? (() => { const pg = L.programDay(S.data, today()); return pg && pg.block ? `${pg.block.title}: ${pg.block.note}${c.phase === 'menstrual' ? ' On heavy-flow days, drop a set if you need to.' : ''}` : wk.summary; })() : ph.training)}</div>
         ${exerciseList(wk, true)}
         <p class="tiny muted" style="margin-top:8px">${levelNote}${vol ? ` Your weekly check-in ${vol > 0 ? 'added' : 'removed'} a set on main lifts.` : ''} Suggested weights adjust for your phase and readiness.</p>
         <div class="row" style="margin-top:14px">
@@ -1577,6 +1583,62 @@
     </div>`;
   }
 
+  // ---------- 8-week programs ----------
+  function recommendedPrograms() {
+    const p = S.data.profile;
+    const rec = [];
+    if (p.postpartum) rec.push('postpartum');
+    if (L.MENO_MODES.includes(p.cycleMode)) rec.push('menopause');
+    if (p.goal === 'glutes') rec.push('glutes');
+    return rec;
+  }
+  function programContext() {
+    const pg = L.programDay(S.data, today());
+    if (!pg) return null;
+    const pr = L.programProgress(S.data);
+    return { name: pg.program.name, week: pg.week, of: pg.total, complete: !!pg.complete, block: pg.block ? pg.block.title : null, sessionsThisWeek: pg.doneThisWeek || 0, perWeek: pg.program.perWeek, todaysSession: pg.session ? pg.session.name : null, completedPct: pr.pct };
+  }
+  function programSection() {
+    const pg = L.programDay(S.data, today());
+    if (pg) {
+      const pr = L.programProgress(S.data);
+      const dayNames = (S.data.program.days || []).slice().sort().map((d) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ');
+      return `<div class="section-title"><h2>Your program</h2><button class="link" data-action="open-program" data-id="${pg.program.id}">Details</button></div>
+        <div class="card" style="background:var(--green);color:var(--bg);border:none">
+          <div class="row between"><span class="eyebrow" style="color:var(--bg);opacity:.7">${pg.complete ? 'Complete' : `Week ${pg.week} of ${pg.total} · ${esc(pg.block.title)}`}</span><span class="eyebrow" style="color:var(--bg);opacity:.7">${pr.pct}%</span></div>
+          <div class="serif" style="font-size:32px;margin-top:6px">${esc(pg.program.name)}</div>
+          <div class="row" style="gap:4px;margin-top:14px">${pr.weeks.map((n, i) => `<div class="grow" title="Week ${i + 1}: ${n} of ${pg.program.perWeek}" style="height:6px;border-radius:3px;background:${i + 1 === pg.week && !pg.complete ? 'var(--accent)' : 'rgba(247,242,234,.25)'};position:relative;overflow:hidden"><div style="position:absolute;inset:0;width:${Math.min(100, (n / pg.program.perWeek) * 100)}%;background:var(--bg)"></div></div>`).join('')}</div>
+          <p class="small" style="margin-top:12px;opacity:.85">${pg.complete ? esc(pg.program.finish) : `${esc(pg.block.note)} ${pg.doneThisWeek} of ${pg.perWeek} sessions this week. Training days: ${dayNames}.`}</p>
+          ${pg.complete ? `<button class="btn cream sm" style="margin-top:12px" data-action="program-leave">Finish and choose another</button>` : !pg.scheduled && !pg.doneToday ? `<p class="tiny" style="margin-top:8px;opacity:.7">Not a training day. ${pg.program.offDay ? 'Daily reset below: pelvic floor and a walk.' : 'Walk, stretch and hit your steps.'}</p>` : ''}
+          ${pg.program.cue && !pg.complete ? `<p class="tiny" style="margin-top:10px;opacity:.7">${esc(pg.program.cue)}</p>` : ''}
+        </div>`;
+    }
+    const rec = recommendedPrograms();
+    const list = D.PROGRAMS.slice().sort((a, b) => (rec.includes(b.id) ? 1 : 0) - (rec.includes(a.id) ? 1 : 0));
+    return `<div class="section-title"><h2>8-week programs</h2></div>
+      <div class="h-scroll">${list.map((pr) => `<button class="poster mini" style="text-align:left" data-action="open-program" data-id="${pr.id}">${backdrop(pr.id === 'menopause' ? 'menopause' : pr.id === 'postpartum' ? 'menstrual' : pr.id === 'pullup' ? 'follicular' : 'ovulation')}<div class="p-row"><span>${esc(pr.kicker)}</span><span>${rec.includes(pr.id) ? 'For you' : `${pr.perWeek}x / week`}</span></div><div class="p-body"><div class="p-title" style="${Math.max(...pr.name.split(' ').map((w) => w.length)) >= 9 ? 'font-size:27px' : ''}">${esc(pr.name)}</div></div></button>`).join('')}</div>`;
+  }
+  function programSheet(m) {
+    const pr = D.PROGRAMS.find((x) => x.id === m.id);
+    const active = S.data.program && S.data.program.id === pr.id;
+    const names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const flagged = (m.screen || []).length > 0;
+    const ready = m.days.length === pr.perWeek && (!pr.clearance || m.cleared);
+    return `<p class="serif" style="font-size:22px;margin:0">${esc(pr.tagline)}</p>
+      <p class="small muted" style="margin-top:10px">${esc(pr.who)}</p>
+      ${pr.blocks.map((b) => `<div class="card" style="margin:12px 0 0;padding:14px"><div class="row between"><span class="eyebrow" style="color:var(--text)">${esc(b.title)}</span><span class="eyebrow">Weeks ${b.from}${b.to > b.from ? `-${b.to}` : ''}</span></div><p class="small muted" style="margin-top:6px">${esc(b.note)}</p>${b.sessions.map((id) => { const w = workoutById(id); return `<button class="list-item" style="width:100%;text-align:left;padding:8px 0" data-action="view-workout" data-id="${id}"><div class="grow"><strong class="small">${esc(w.name)}</strong><div class="tiny muted">${esc(w.focus)} · ${w.minutes} min</div></div>${icon('back', 14)}</button>`; }).join('')}</div>`).join('')}
+      ${pr.cue ? `<div class="banner" style="margin-top:12px;background:var(--green-soft)">${icon('shield', 18)}<div class="grow tiny">${esc(pr.cue)}</div></div>` : ''}
+      ${active ? `<button class="btn ghost block" style="margin-top:16px" data-action="program-leave">Leave this program</button>` : `
+        ${pr.screen ? `<div class="label" style="margin-top:18px">Do you have any of these?</div>${pr.screen.map((q, i) => `<button class="list-item" style="width:100%;text-align:left" data-action="program-screen" data-i="${i}"><span class="check ${(m.screen || []).includes(i) ? 'on' : ''}" style="width:24px;height:24px;border-radius:7px">${(m.screen || []).includes(i) ? icon('check', 12) : ''}</span><span class="small grow">${esc(q)}</span></button>`).join('')}
+          ${flagged ? `<div class="banner" style="margin-top:10px">${icon('heart', 18)}<div class="grow small">These are common and treatable. See a pelvic health physiotherapist before progressing past Reconnect, and stay in weeks 1-2 until they improve. You can still start now.</div></div>` : ''}` : ''}
+        ${pr.clearance ? `<button class="list-item" style="width:100%;text-align:left;margin-top:8px" data-action="program-cleared"><span class="check ${m.cleared ? 'on' : ''}" style="width:24px;height:24px;border-radius:7px">${m.cleared ? icon('check', 12) : ''}</span><span class="small grow">My doctor or midwife has cleared me for exercise</span></button>` : ''}
+        <div class="label" style="margin-top:18px">Pick ${pr.perWeek} training days</div>
+        <div class="chips">${[1, 2, 3, 4, 5, 6, 0].map((d) => `<button class="chip ${m.days.includes(d) ? 'selected' : ''}" data-action="program-day" data-d="${d}">${names[d]}</button>`).join('')}</div>
+        ${S.data.program ? `<p class="tiny muted" style="margin-top:10px">This replaces ${esc((D.PROGRAMS.find((x) => x.id === S.data.program.id) || {}).name || 'your current program')}.</p>` : ''}
+        <p class="tiny muted" style="margin-top:10px">On other days your plan is ${pr.offDay ? 'a short daily reset' : 'active recovery and steps'}. Suggested weights still adjust to your cycle and readiness, and you can swap any day.</p>
+        <button class="btn primary block" style="margin-top:14px" data-action="program-start" ${ready ? '' : 'disabled'}>${ready ? 'Start today' : pr.clearance && !m.cleared ? 'Confirm clearance to start' : `Pick ${pr.perWeek - m.days.length > 0 ? pr.perWeek - m.days.length + ' more' : 'only ' + pr.perWeek} day${Math.abs(pr.perWeek - m.days.length) === 1 ? '' : 's'}`}</button>`}`;
+  }
+
   function startWorkout(id) {
     const wk = workoutById(id);
     const c = cyc();
@@ -1585,7 +1647,7 @@
       templateId: id, name: wk.name, startedAt: Date.now(), unit: u, phase: c.phase,
       exercises: wk.exercises.map((ex) => {
         const s = L.suggestLoad(ex.name, ex.reps, S.data.workouts, { phase: c.phase, readiness: readinessToday(), unit: u });
-        const weighted = !!L.parseReps(ex.reps);
+        const weighted = !!L.parseReps(ex.reps) && !BODYWEIGHT.test(ex.name);
         return { name: ex.name, reps: ex.reps, weighted, suggestion: s && !s.first ? s : null, sets: Array.from({ length: adjustSets(ex) }, () => ({ weight: s && !s.first ? String(s.weight) : '', reps: '', target: s ? s.reps : '', done: false })) };
       }),
     };
@@ -2200,12 +2262,16 @@
     if (m.type === 'workout') {
       const wk = workoutById(m.id);
       const isToday = todaysWorkout().id === wk.id;
-      return sheet(esc(wk.name), `<div class="eyebrow">${esc(wk.focus)} · ${wk.minutes} min · ${esc(wk.intensity)}</div><p class="small" style="margin-top:8px">${esc(wk.summary)}</p><div class="divider"></div>${exerciseList(wk, true)}
+      return sheet(esc(wk.name), `${m.from ? `<button class="link small" style="margin-bottom:8px" data-action="modal-back">Back to program</button>` : ''}<div class="eyebrow">${esc(wk.focus)} · ${wk.minutes} min · ${esc(wk.intensity)}</div><p class="small" style="margin-top:8px">${esc(wk.summary)}</p><div class="divider"></div>${exerciseList(wk, true)}
         <div class="row" style="margin-top:16px"><button class="btn primary grow" data-action="start-workout" data-id="${wk.id}">Start now</button>${isToday ? '' : `<button class="btn ghost" data-action="set-today" data-id="${wk.id}">Make today's</button>`}</div>`);
+    }
+    if (m.type === 'program') {
+      const pr = D.PROGRAMS.find((x) => x.id === m.id);
+      return sheet(esc(pr.name), programSheet(m));
     }
     if (m.type === 'swap') {
       const c = cyc();
-      const list = D.WORKOUTS.filter((w) => c.steady || w.phase === c.phase || w.phase === 'any');
+      const list = D.WORKOUTS.filter((w) => w.phase === 'program' ? !!(S.data.program && w.program === S.data.program.id) : c.steady || w.phase === c.phase || w.phase === 'any');
       return sheet('Choose today\'s workout', `<p class="small muted" style="margin-bottom:14px">${c.steady ? 'Any session works in steady mode.' : `Options that suit your ${phaseName(c.phase).toLowerCase()} phase.`}</p><div class="options">${list.map((w) => `<button class="option ${todaysWorkout().id === w.id ? 'selected' : ''}" data-action="set-today" data-id="${w.id}"><strong>${esc(w.name)}</strong><span>${w.minutes} min · ${esc(w.intensity)} · ${esc(w.focus)}</span></button>`).join('')}</div>
         <button class="btn ghost block" style="margin-top:12px" data-action="reset-today">Use the recommended plan</button>`);
     }
@@ -2232,7 +2298,8 @@
           <button class="btn ghost sm block" style="margin-top:14px" data-action="edit-plan">Edit my plan</button></div>
         ${c.steady ? '' : '<button class="btn soft block" style="margin-top:12px" data-action="open-period">Log a period start</button>'}
         <div class="card flat"><div class="label">Weekly check-in day</div><div class="chips">${WEEKDAYS.map((w, i) => `<button class="chip ${L.checkinDay(S.data) === i ? 'selected' : ''}" data-action="set-checkin-day" data-value="${i}">${w.slice(0, 3)}</button>`).join('')}</div>
-          <div class="row between" style="margin-top:14px"><span class="small">Daily weigh-in prompt</span><button class="chip ${S.data.weighDaily === false ? '' : 'selected'}" data-action="toggle-weigh">${S.data.weighDaily === false ? 'Off' : 'On'}</button></div></div>
+          <div class="row between" style="margin-top:14px"><span class="small">Daily weigh-in prompt</span><button class="chip ${S.data.weighDaily === false ? '' : 'selected'}" data-action="toggle-weigh">${S.data.weighDaily === false ? 'Off' : 'On'}</button></div>
+          <div class="row between" style="margin-top:14px"><span class="small">Had a baby in the last year</span><button class="chip ${S.data.profile.postpartum ? 'selected' : ''}" data-action="toggle-postpartum">${S.data.profile.postpartum ? 'Yes' : 'No'}</button></div></div>
         <div class="card flat"><div class="label">Units</div><div class="segment">${[['imperial', 'lb · ft'], ['metric', 'kg · cm']].map(([v, l]) => `<button class="${(p.units === 'metric' ? 'metric' : 'imperial') === v ? 'active' : ''}" data-action="set-units" data-value="${v}">${l}</button>`).join('')}</div><p class="tiny muted" style="margin-top:8px">Past workouts keep the unit they were logged in. Suggested weights convert automatically.</p></div>
         <div class="card flat"><div class="label">Appearance</div><div class="segment">${['system', 'light', 'dark'].map((x) => `<button class="${theme === x ? 'active' : ''}" data-action="theme" data-value="${x}">${x[0].toUpperCase() + x.slice(1)}</button>`).join('')}</div></div>
         ${S.installPrompt ? '<button class="btn primary block" style="margin-top:12px" data-action="install">Install YOURS on this device</button>' : ios ? '<div class="card flat small"><div class="label">Install on iPhone</div><p class="muted">Tap the Share button in Safari, then Add to Home Screen.</p></div>' : ''}
@@ -2556,7 +2623,28 @@
       toast(chosen.length ? 'Next week\'s plan is updated' : 'Check-in saved');
     },
 
-    'view-workout': (el) => { S.modal = { type: 'workout', id: el.dataset.id }; render(); },
+    'view-workout': (el) => { S.modal = { type: 'workout', id: el.dataset.id, from: S.modal && S.modal.type === 'program' ? S.modal : null }; render(); },
+    'modal-back': () => { S.modal = S.modal.from; render(); },
+    'toggle-postpartum': () => { S.data.profile.postpartum = !S.data.profile.postpartum; save(); render(); if (S.data.profile.postpartum) toast('Postpartum return is now suggested in Workouts'); },
+    'open-program': (el) => { const cur = S.data.program && S.data.program.id === el.dataset.id ? S.data.program.days : [1, 3, 5]; S.modal = { type: 'program', id: el.dataset.id, days: cur.slice(), screen: [], cleared: false }; render(); },
+    'program-day': (el) => { const d = Number(el.dataset.d); const m = S.modal; m.days = m.days.includes(d) ? m.days.filter((x) => x !== d) : m.days.concat(d); render(); },
+    'program-screen': (el) => { const i = Number(el.dataset.i); const m = S.modal; m.screen = m.screen.includes(i) ? m.screen.filter((x) => x !== i) : m.screen.concat(i); render(); },
+    'program-cleared': () => { S.modal.cleared = !S.modal.cleared; render(); },
+    'program-start': () => {
+      const m = S.modal;
+      const pr = D.PROGRAMS.find((x) => x.id === m.id);
+      S.data.program = { id: pr.id, start: todayKey(), days: m.days.slice().sort(), flagged: m.screen.length > 0 };
+      if (pr.id === 'postpartum') S.data.profile.postpartum = true;
+      delete S.data.overrides[todayKey()];
+      S.modal = null;
+      save(); render();
+      toast(`${pr.name} starts today`);
+    },
+    'program-leave': () => {
+      const pg = L.programDay(S.data, today());
+      if (pg && !pg.complete && !confirm('Leave this program? Your logged workouts stay in your history.')) return;
+      S.data.program = null; S.modal = null; save(); render();
+    },
     'start-workout': (el) => {
       if (S.data.activeWorkout && S.data.activeWorkout.templateId === el.dataset.id) { S.modal = { type: 'active' }; return render(); }
       if (S.data.activeWorkout && !confirm('You have a workout in progress. Replace it?')) return;

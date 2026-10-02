@@ -179,9 +179,55 @@
   }
   function workoutFor(data, date) {
     const ov = (data.overrides || {})[dateKey(date)];
-    return (ov && workoutById(ov)) || plannedWorkout(data, date);
+    if (ov && workoutById(ov)) return workoutById(ov);
+    const pg = programDay(data, date);
+    if (pg && !pg.complete) return pg.session || workoutById(pg.program.offDay || 'rest');
+    return plannedWorkout(data, date);
+  }
+
+  // ---------- 8-week programs ----------
+  // data.program = { id, start: dateKey, days: [weekday numbers] }. Sessions rotate through the current block
+  // on her chosen days; a missed day just moves that session to the next training day.
+  const programById = (id) => (D.PROGRAMS || []).find((p) => p.id === id);
+  const isProgramWorkout = (w, id) => typeof w.templateId === 'string' && (workoutById(w.templateId) || {}).program === id;
+  function programDay(data, date) {
+    const p = data.program;
+    const program = p && programById(p.id);
+    if (!program) return null;
+    date = date || today();
+    const start = parseKey(p.start);
+    const diff = daysBetween(start, date);
+    if (diff < 0) return null;
+    const total = Math.max(...program.blocks.map((b) => b.to));
+    const week = Math.floor(diff / 7) + 1;
+    if (week > total) return { program, week: total, total, complete: true };
+    const block = program.blocks.find((b) => week >= b.from && week <= b.to);
+    const weekStart = dateKey(addDays(start, (week - 1) * 7));
+    const key = dateKey(date);
+    const mine = (data.workouts || []).filter((w) => isProgramWorkout(w, program.id) && w.date >= weekStart);
+    const before = mine.filter((w) => w.date < key).length;
+    const doneToday = mine.some((w) => w.date === key);
+    const scheduled = (p.days || []).includes(date.getDay());
+    const weekDone = before >= program.perWeek;
+    const session = scheduled && !weekDone ? workoutById(block.sessions[before % block.sessions.length]) : null;
+    return { program, week, total, block, scheduled, session, doneThisWeek: before + (doneToday ? 1 : 0), doneToday, perWeek: program.perWeek };
+  }
+  function programProgress(data) {
+    const p = data.program;
+    const program = p && programById(p.id);
+    if (!program) return null;
+    const start = parseKey(p.start);
+    const total = Math.max(...program.blocks.map((b) => b.to));
+    const weeks = Array.from({ length: total }, (_, i) => {
+      const from = dateKey(addDays(start, i * 7));
+      const to = dateKey(addDays(start, i * 7 + 6));
+      return (data.workouts || []).filter((w) => isProgramWorkout(w, program.id) && w.date >= from && w.date <= to).length;
+    });
+    const done = weeks.reduce((n, x) => n + Math.min(x, program.perWeek), 0);
+    return { weeks, done, planned: total * program.perWeek, pct: Math.round((done / (total * program.perWeek)) * 100) };
   }
   function adjustSets(ex, level, plan) {
+    if (ex.sets === 1) return 1; // walks and single holds
     let sets = ex.sets;
     if (level === 'beginner') sets = Math.max(2, sets - 1);
     if (level === 'advanced' && ex.main) sets += 1;
@@ -731,7 +777,7 @@
     dateKey, parseKey, today, addDays, daysBetween, clamp, round, mean, weekdayIndex,
     GOALS, LEVELS, ACTIVITY, goalOf, activityOf, STEADY_MODES, MENO_MODES, menoInsights, checkinDay, checkinTomorrow,
     learnCycle, addPeriod, cycleInfo, targets, readiness, readinessLabel, patterns,
-    workoutById, plannedWorkout, workoutFor, adjustSets, parseReps, e1rm, suggestLoad, detectPRs, strengthByPhase, exerciseHistory,
+    workoutById, plannedWorkout, workoutFor, programById, programDay, programProgress, adjustSets, parseReps, e1rm, suggestLoad, detectPRs, strengthByPhase, exerciseHistory,
     mealOptions, mealFor, proteinFor, aisleFor, storeLink, buildTotals, macrosFor, parseOFF, foodMacros, validBarcode, recipeTotals, recipeFood, groceryList, parseFoodText, usualRequest, usualMeal, cleanEstimates, estimateFood, streak, weeklyStats, weeklyAdjust, applyAdjustments, weeklyDue,
   };
   if (typeof window !== 'undefined') window.YOURS_LOGIC = api;

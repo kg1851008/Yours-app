@@ -28,6 +28,9 @@
 - **Daily weigh-in** prompt on Home (can be turned off), with trends shown as 7-day averages.
 - **Weekly review.** Three questions (how training felt, hunger, next week's plans) plus her numbers (sessions, steps, readiness, weight trend, upcoming phase changes) produce plan changes she can accept or skip: sets on main lifts, step target and calories, all within safe limits.
 - **Forgiving streak.** A day counts for training, a check-in, or 60% of her step target, and one missed day a week is forgiven.
+- **Snap your plate.** Photograph a meal and the coach lists each food with an estimated portion, calories and macros (cooking oils and sauces too, flagged "check this" when guessed). She can untick items, change portions in quarter steps, edit any number, pick the meal, and only then log. The photo is resized on the device, sent once for the estimate, and never stored.
+- **Talk to log.** Say or type "two eggs and toast" or "150 g chicken and a cup of rice" (uses the phone's speech recognition where available). With the live coach it handles any food; without it, an on-device parser covers about 50 everyday foods plus her recent foods. "Log my usual breakfast" repeats her most repeated breakfast from the last 3 weeks, and "same lunch as yesterday" copies yesterday's. Saying "I had..." in the coach chat opens the same review sheet.
+- **8-week programs** in Workouts: Postpartum return (doctor or midwife clearance required, a symptom check that points to a pelvic health physio, breath and pelvic floor first, daily resets on off days, an impact test before running), Glute build (volume, strength, peak), First pull-up (hangs, negatives, singles) and Strong through menopause (heavy, brief lifting plus gentle impact for bone). She picks 3 training days; a missed day moves that session to the next training day. Progress shows per week, Home shows the program week, suggested weights still adjust to her cycle and readiness, and the coach knows where she is. Programs matching her life stage or goal are marked "For you".
 - **Recipes.** Build a meal from its ingredients (scan, search or create each), set how many servings it makes and optionally the cooked weight, then log a serving or any number of grams. Recipes are saved and editable. Quick add covers meals out.
 - **Eating out.** A Restaurants option in Add food. Built-in starter menus (Chipotle build-your-own bowl, burrito or tacos with double protein; Chick-fil-A; Starbucks) use approximate values from published nutrition info and are labelled that way. With Nutritionix keys set, she can search every restaurant's menu. Anything missing can be saved once under its restaurant.
 - **Grocery shopping by store.** The grocery list combines the week's meal ideas, any saved recipes she picks, and her own items, sorted by aisle. She picks a store (Walmart, Target, Kroger, Whole Foods, Trader Joe's, Costco, Instacart, Amazon Fresh) and each item has a Find link to that store's search. Ticks, store and selections are remembered, and the list can be shared.
@@ -54,10 +57,10 @@ The app stores everything on the user's device for now:
 
 ## AI coach
 
-`api/coach.js` calls Claude through the Anthropic SDK. It handles both coach chat and progress-photo review.
+`api/coach.js` calls Claude through the Anthropic SDK. It handles coach chat, progress-photo review, and food estimates from a plate photo or her words (structured JSON output).
 
 - Set `ANTHROPIC_API_KEY` in your Vercel project, or in your shell for local runs, to turn on the live coach. `ANTHROPIC_MODEL` is optional and defaults to `claude-opus-5-5`.
-- Without a key, the app uses a built-in on-device coach. It gives phase-aware answers and reviews progress from logged data. Photo review needs the live coach.
+- Without a key, the app uses a built-in on-device coach. It gives phase-aware answers and reviews progress from logged data. Photo review and plate photos need the live coach; talk to log falls back to the on-device parser.
 
 ## Restaurant search (optional)
 

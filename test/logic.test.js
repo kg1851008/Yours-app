@@ -280,3 +280,34 @@ test('plate estimates are cleaned and become loggable foods', () => {
   assert.equal(L.foodMacros(f, 1.5, 'servings').kcal, 435);
   assert.equal(Math.round(L.foodMacros(f, 71, 'grams').kcal), 145);
 });
+
+test('programs: sessions rotate on her days, missed days roll forward, weeks progress', () => {
+  const start = new Date(2026, 8, 7); // a Monday
+  const day = (n) => L.addDays(start, n);
+  const data = { profile: profile(), workouts: [], overrides: {}, program: { id: 'glutes', start: L.dateKey(start), days: [1, 3, 5] } };
+  assert.equal(L.workoutFor(data, day(0)).id, 'gb-1a');
+  assert.equal(L.workoutFor(data, day(1)).id, 'rest'); // off day
+  // Missed Monday: Wednesday still gets session A.
+  assert.equal(L.workoutFor(data, day(2)).id, 'gb-1a');
+  data.workouts.push({ date: L.dateKey(day(2)), templateId: 'gb-1a' });
+  assert.equal(L.programDay(data, day(2)).doneToday, true);
+  assert.equal(L.workoutFor(data, day(4)).id, 'gb-1b');
+  // Week 4 is the strength block.
+  assert.equal(L.programDay(data, day(21)).block.title, 'Strength');
+  assert.equal(L.workoutFor(data, day(21)).id, 'gb-2a');
+  // After 8 weeks the program is complete and the normal plan returns.
+  assert.equal(L.programDay(data, day(56)).complete, true);
+  assert.notEqual(L.workoutFor(data, day(56)).phase, 'program');
+  // Overrides still win.
+  data.overrides[L.dateKey(day(7))] = 'f-upper';
+  assert.equal(L.workoutFor(data, day(7)).id, 'f-upper');
+  assert.deepEqual(L.programProgress(data).weeks.slice(0, 2), [1, 0]);
+});
+
+test('postpartum program uses a daily reset on off days', () => {
+  const start = new Date(2026, 8, 7);
+  const data = { profile: profile(), workouts: [], program: { id: 'postpartum', start: L.dateKey(start), days: [1, 3, 5] } };
+  assert.equal(L.workoutFor(data, start).id, 'pp-1a');
+  assert.equal(L.workoutFor(data, L.addDays(start, 1)).id, 'pp-daily');
+  assert.equal(L.programDay(data, L.addDays(start, 49)).block.title, 'Strengthen');
+});

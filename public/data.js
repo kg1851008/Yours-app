@@ -532,6 +532,260 @@
     },
   ];
 
+  // ---------- 8-week programs ----------
+  // Each block lists the sessions she rotates through on her training days. Loads progress through the normal
+  // suggested-weight logic (double progression, lighter when menstrual or low readiness).
+  const pw = (id, program, name, focus, minutes, intensity, summary, exercises) => ({ id, phase: 'program', program, name, focus, minutes, intensity, summary, exercises });
+  const PF = 'Exhale as you lift or push, gently drawing the pelvic floor up. Stop if you leak, feel heaviness or pain, or see doming along your midline.';
+  const PROGRAM_WORKOUTS = [
+    // Postpartum return to training
+    pw('pp-1a', 'postpartum', 'Reconnect A', 'Breath, pelvic floor and core', 25, 'Very low', 'Reconnect breath, pelvic floor and deep core before adding load.', [
+      e('360 breathing', 2, '6 breaths', '30s', 'Breathe into your ribs and back; let the pelvic floor relax on the inhale.'),
+      e('Pelvic floor holds', 2, '8 x 5s hold', '45s', 'Lift as if stopping wind and urine, hold, then fully let go.'),
+      e('Pelvic floor quick lifts', 2, '10', '30s', 'Quick lift, full release, every rep.'),
+      e('Heel slides', 2, '8 / side', '30s', 'Exhale and connect as the leg slides out.'),
+      e('Glute bridge', 3, '10', '45s', 'Exhale and lift; squeeze the glutes at the top.'),
+      e('Side-lying clam', 2, '12 / side', '30s', 'Keep the hips stacked.'),
+      e('Walk', 1, '20 min', '-', 'Pram walks count.'),
+    ]),
+    pw('pp-1b', 'postpartum', 'Reconnect B', 'Posture and upper body', 25, 'Very low', 'Gentle upper body and posture work for feeding and carrying.', [
+      e('360 breathing', 2, '6 breaths', '30s', 'Ribs expand in every direction.'),
+      e('Pelvic floor holds', 2, '8 x 5s hold', '45s', 'Relax fully between reps.'),
+      e('Wall push-up', 3, '10', '45s', 'Exhale as you push away.'),
+      e('Band pull-apart', 3, '12', '30s', 'Shoulders down and back.'),
+      e('Bird dog (from knees)', 2, '6 / side', '30s', 'Slow and steady.'),
+      e('Sit-to-stand', 3, '8', '45s', 'Exhale as you stand.'),
+      e('Walk', 1, '20 min', '-', 'Conversational pace.'),
+    ]),
+    pw('pp-2a', 'postpartum', 'Rebuild A', 'Lower body and core', 30, 'Low', 'Bodyweight strength with the breath leading every rep.', [
+      e('Pelvic floor holds', 2, '10 x 8s hold', '45s', 'Build the hold before you build the load.'),
+      e('Box squat', 3, '10', '60s', 'Exhale on the way up.', true),
+      e('Glute bridge march', 3, '6 / side', '45s', 'Hips stay level.'),
+      e('Supported split squat', 3, '8 / side', '60s', 'Hold a rail or wall for balance.'),
+      e('Dead bug heel taps', 2, '6 / side', '45s', 'Low back stays heavy on the floor.'),
+      e('Suitcase carry (light)', 3, '20 m / side', '45s', 'Stand tall; do not lean.'),
+    ]),
+    pw('pp-2b', 'postpartum', 'Rebuild B', 'Upper body and core', 30, 'Low', 'Rows, presses and anti-rotation work.', [
+      e('Pelvic floor quick lifts', 2, '10', '30s', 'Full release every rep.'),
+      e('Incline push-up', 3, '8', '60s', 'Bench or counter height.', true),
+      e('Band row', 3, '12', '45s', 'Squeeze the shoulder blades.'),
+      e('Pallof press', 3, '8 / side', '45s', 'Exhale as you press; resist the twist.'),
+      e('Side plank (knees)', 2, '20s / side', '30s', 'Hips in line with shoulders.'),
+      e('Walk', 1, '25 min', '-', 'Hills if you feel good.'),
+    ]),
+    pw('pp-3a', 'postpartum', 'Load A', 'Lower body strength', 35, 'Moderate', 'Dumbbells come back in. Keep the breath with every rep.', [
+      e('Goblet squat', 3, '8-10', '75s', 'Exhale and lift the pelvic floor as you stand.', true),
+      e('Dumbbell Romanian deadlift', 3, '8-10', '75s', 'Hinge with a long spine.', true),
+      e('Step-up', 3, '8 / side', '60s', 'Low box first.'),
+      e('Glute bridge', 3, '12', '45s', 'Add a dumbbell on the hips when easy.'),
+      e('Dead bug', 2, '8 / side', '45s', 'Arms and legs move together.'),
+    ]),
+    pw('pp-3b', 'postpartum', 'Load B', 'Upper body strength', 35, 'Moderate', 'Rows and presses for carrying a growing baby.', [
+      e('One-arm dumbbell row', 3, '8-10 / side', '60s', 'Brace on a bench.', true),
+      e('Dumbbell floor press', 3, '8-10', '75s', 'Exhale as you press.', true),
+      e('Half-kneeling Pallof press', 3, '8 / side', '45s', 'Tall through the crown of the head.'),
+      e('Farmer carry', 3, '30 m', '60s', 'Moderate weight, tall posture.'),
+      e('Side plank (knees)', 2, '30s / side', '30s', 'Progress to feet when it feels solid.'),
+    ]),
+    pw('pp-4a', 'postpartum', 'Strengthen A', 'Strength and impact prep', 40, 'Moderate', 'Heavier lower body and the first impact prep for a return to running.', [
+      e('Goblet squat', 4, '8', '90s', 'A little heavier than last block.', true),
+      e('Hip thrust', 3, '10', '75s', 'Exhale at the top.', true),
+      e('Reverse lunge', 3, '8 / side', '60s', 'Controlled, no rush.'),
+      e('Calf raise', 3, '15', '45s', 'Full range.'),
+      e('Marching on the spot', 2, '1 min', '45s', 'Then progress to a gentle jog on the spot if it feels good.'),
+      e('Pogo hops (impact test)', 2, '10', '60s', 'Only if you have no leaking, heaviness or pain. Stop at any symptom.'),
+    ]),
+    pw('pp-4b', 'postpartum', 'Strengthen B', 'Full body strength', 40, 'Moderate', 'Full body strength with loaded carries.', [
+      e('Dumbbell Romanian deadlift', 4, '8', '90s', 'Heavier than last block.', true),
+      e('One-arm dumbbell row', 3, '10 / side', '60s', 'Pause at the top.', true),
+      e('Half-kneeling dumbbell press', 3, '8 / side', '60s', 'Ribs stay down.'),
+      e('Single-leg glute bridge', 3, '8 / side', '45s', 'Hips level.'),
+      e('Suitcase carry', 3, '30 m / side', '60s', 'Heavier than before.'),
+      e('Plank', 2, '30s', '45s', 'Only if there is no doming; otherwise stay on your knees.'),
+    ]),
+    pw('pp-daily', 'postpartum', 'Daily reset', 'Pelvic floor and walking', 15, 'Very low', 'A few minutes of pelvic floor work and a walk on your off days.', [
+      e('Pelvic floor holds', 1, '10 x 5-10s hold', '-', 'Lying, sitting or standing.'),
+      e('Pelvic floor quick lifts', 1, '10', '-', 'Full release every rep.'),
+      e('Walk', 1, '15-30 min', '-', 'Fresh air counts as training right now.'),
+    ]),
+
+    // Glute Build
+    pw('gb-1a', 'glutes', 'Glute Build: Thrust day', 'Glutes, hamstrings', 50, 'Moderate', 'Volume block: lots of quality reps close to failure.', [
+      e('Barbell hip thrust', 4, '10-12', '90s', 'Chin tucked, ribs down, 1-second squeeze.', true),
+      e('Romanian deadlift', 3, '10', '90s', 'Push the hips back; feel the hamstrings.', true),
+      e('Cable kickback', 3, '12-15 / side', '45s', 'Small lean forward, kick back and out.'),
+      e('Seated hip abduction', 3, '15-20', '45s', 'Lean forward slightly for more glute.'),
+      e('Back extension (glute bias)', 2, '15', '60s', 'Round the upper back and squeeze.'),
+    ]),
+    pw('gb-1b', 'glutes', 'Glute Build: Squat day', 'Quads and glutes', 50, 'Moderate', 'Single-leg work and deep knee bends for the whole glute.', [
+      e('Bulgarian split squat', 3, '10 / side', '90s', 'Slight forward lean for glutes.', true),
+      e('Goblet squat', 3, '12', '75s', 'Sit deep, knees out.', true),
+      e('Single-leg hip thrust', 3, '10 / side', '60s', 'Drive through the heel.'),
+      e('Cable pull-through', 3, '15', '60s', 'Snap the hips through.'),
+      e('Banded lateral walk', 2, '12 / side', '45s', 'Stay low.'),
+    ]),
+    pw('gb-1c', 'glutes', 'Glute Build: Full body', 'Full body', 45, 'Moderate', 'Upper body to stay balanced, plus a glute finisher.', [
+      e('Lat pulldown', 3, '10', '75s', 'Elbows to your back pockets.', true),
+      e('Dumbbell bench press', 3, '10', '75s', 'Control the lowering.', true),
+      e('Seated cable row', 3, '12', '60s', 'Squeeze and pause.'),
+      e('45-degree hip extension', 3, '15', '60s', 'Toes turned out.'),
+      e('Frog pump', 2, '25', '45s', 'Fast reps, hard squeeze.'),
+    ]),
+    pw('gb-2a', 'glutes', 'Glute Build: Heavy thrust', 'Glutes, hamstrings', 55, 'High', 'Strength block: heavier loads, fewer reps.', [
+      e('Barbell hip thrust', 4, '6-8', '2-3 min', 'Heavier. Pause 1 second at the top.', true),
+      e('Romanian deadlift', 4, '6-8', '2 min', 'Heavier, same clean hinge.', true),
+      e('B-stance hip thrust', 3, '10 / side', '60s', 'Front leg does the work.'),
+      e('Cable kickback', 3, '12 / side', '45s', 'Slow on the way back.'),
+      e('Seated hip abduction', 3, '20', '45s', 'Pause at the top.'),
+    ]),
+    pw('gb-2b', 'glutes', 'Glute Build: Heavy legs', 'Quads and glutes', 55, 'High', 'Heavy single-leg work and a deep squat pattern.', [
+      e('Bulgarian split squat', 4, '8 / side', '2 min', 'Dumbbells heavier than block one.', true),
+      e('Hack squat', 3, '8-10', '2 min', 'Feet high and wide for glutes.', true),
+      e('Walking lunge', 3, '10 / side', '75s', 'Long steps.'),
+      e('Single-leg Romanian deadlift', 3, '8 / side', '60s', 'Hips square.'),
+      e('Banded glute bridge', 2, '25', '45s', 'Knees out against the band.'),
+    ]),
+    pw('gb-3a', 'glutes', 'Glute Build: Peak thrust', 'Glutes', 55, 'High', 'Peak block. In week 8, work up to a heavy set of 8 on the hip thrust and compare with week 1.', [
+      e('Barbell hip thrust', 5, '5-6', '3 min', 'Your heaviest block. Week 8: work up to a best set of 8.', true),
+      e('Deficit Romanian deadlift', 3, '8', '2 min', 'Stand on a small plate for more range.', true),
+      e('Single-leg hip thrust', 3, '12 / side', '60s', 'Burnout set to finish.'),
+      e('Cable kickback', 3, '15 / side', '45s', 'Hold the squeeze.'),
+      e('Seated hip abduction', 3, '20 + 10 partials', '45s', 'Finish with partials.'),
+    ]),
+
+    // First pull-up
+    pw('pu-1a', 'pullup', 'Pull-Up: Hang and pull', 'Grip, back and core', 40, 'Moderate', 'Build grip, shoulder control and pulling strength.', [
+      e('Dead hang', 3, '20-30s', '60s', 'Active shoulders: pull them down away from the ears.'),
+      e('Scapular pull-up', 3, '8', '60s', 'Arms straight; lift the body by pulling the shoulders down.'),
+      e('Inverted row (high bar)', 3, '8-10', '75s', 'Body straight as a plank.', true),
+      e('Lat pulldown', 3, '10', '75s', 'Pull to the top of the chest.', true),
+      e('Hollow body hold', 3, '20s', '45s', 'Low back pressed down.'),
+    ]),
+    pw('pu-1b', 'pullup', 'Pull-Up: Strength', 'Back, biceps and legs', 45, 'Moderate', 'Pulling strength plus legs to stay balanced.', [
+      e('Flexed-arm hang', 3, '10s', '75s', 'Jump to the top, chin over the bar, hold.'),
+      e('One-arm dumbbell row', 3, '10 / side', '60s', 'Heavy and strict.', true),
+      e('Goblet squat', 3, '10', '75s', 'Keep legs in the plan.', true),
+      e('Dumbbell curl', 3, '10', '45s', 'No swinging.'),
+      e('Dead hang', 2, 'max', '60s', 'Note your time and beat it.'),
+    ]),
+    pw('pu-2a', 'pullup', 'Pull-Up: Negatives', 'Eccentric strength', 45, 'High', 'Lowering slowly builds strength fastest at this stage.', [
+      e('Negative pull-up', 4, '3 x 5s lower', '2 min', 'Jump or step to the top and lower as slowly as you can.', true),
+      e('Band-assisted pull-up', 3, '5', '2 min', 'Heavy band, full range.', true),
+      e('Inverted row (lower bar)', 3, '8', '75s', 'Lower the bar from last block.'),
+      e('Flexed-arm hang', 3, '15s', '75s', 'Chin over the bar.'),
+      e('Hollow body hold', 3, '25s', '45s', 'Arms overhead if you can.'),
+    ]),
+    pw('pu-2b', 'pullup', 'Pull-Up: Pulldown and legs', 'Back and legs', 45, 'Moderate', 'Heavier pulldowns and lower body.', [
+      e('Lat pulldown', 4, '6-8', '2 min', 'Heavier than block one.', true),
+      e('Romanian deadlift', 3, '8', '2 min', 'Hinge, do not squat.', true),
+      e('Chest-supported row', 3, '10', '75s', 'Pause at the top.'),
+      e('Hammer curl', 3, '10', '45s', 'Slow lowering.'),
+      e('Dead hang', 2, 'max', '60s', 'Beat last week.'),
+    ]),
+    pw('pu-3a', 'pullup', 'Pull-Up: Singles', 'Pull-up attempts', 45, 'High', 'Fresh, high-quality attempts. Week 8: test your first strict pull-up.', [
+      e('Pull-up attempt', 5, '1', '2-3 min', 'Dead hang start, chin over the bar. Use the lightest band you can if needed.', true),
+      e('Negative pull-up', 3, '2 x 8s lower', '2 min', 'Slower than last block.', true),
+      e('Inverted row (feet elevated)', 3, '6-8', '90s', 'Hardest row variation.'),
+      e('Flexed-arm hang', 2, '20s', '75s', 'Chin over the bar.'),
+      e('Hollow body rock', 3, '10', '45s', 'Stay tight.'),
+    ]),
+
+    // Strong through menopause
+    pw('sm-1a', 'menopause', 'Strong: Foundation A', 'Squat, push and balance', 45, 'Moderate', 'Learn the patterns with good form before going heavy.', [
+      e('Goblet squat', 3, '8-10', '90s', 'Sit between your heels.', true),
+      e('Dumbbell bench press', 3, '8-10', '90s', 'Control the lowering.', true),
+      e('Step-up', 3, '8 / side', '60s', 'Drive through the whole foot.'),
+      e('Single-leg balance', 2, '30s / side', '30s', 'Near a wall for safety.'),
+      e('Farmer carry', 3, '30 m', '60s', 'Tall and steady.'),
+    ]),
+    pw('sm-1b', 'menopause', 'Strong: Foundation B', 'Hinge, pull and posture', 45, 'Moderate', 'Hinge and pull for a strong back and hips.', [
+      e('Dumbbell Romanian deadlift', 3, '8-10', '90s', 'Long spine, hips back.', true),
+      e('One-arm dumbbell row', 3, '10 / side', '60s', 'Brace on a bench.', true),
+      e('Glute bridge', 3, '12', '45s', 'Pause at the top.'),
+      e('Back extension', 2, '12', '60s', 'Strong upper back helps posture.'),
+      e('Heel drops', 2, '10', '45s', 'Rise onto toes and drop onto heels: gentle impact for bone.'),
+    ]),
+    pw('sm-2a', 'menopause', 'Strong: Build A', 'Heavy lower and impact', 50, 'High', 'Heavier sets of 5 plus jump prep. Bone responds to heavy, brief loading.', [
+      e('Trap bar deadlift', 4, '5', '2-3 min', 'Heavy but smooth. Stop with a rep in reserve.', true),
+      e('Goblet squat', 3, '6-8', '2 min', 'Heavier than block one.', true),
+      e('Pogo hops', 3, '10', '60s', 'Small, springy hops. Skip if your pelvic floor or joints complain.'),
+      e('Reverse lunge', 3, '8 / side', '75s', 'Controlled.'),
+      e('Suitcase carry', 3, '30 m / side', '60s', 'Heavy enough to challenge your grip.'),
+    ]),
+    pw('sm-2b', 'menopause', 'Strong: Build B', 'Heavy upper and posture', 50, 'High', 'Pressing and pulling heavy for upper body and spine.', [
+      e('Overhead press', 4, '5-6', '2 min', 'Ribs down, glutes tight.', true),
+      e('Lat pulldown', 4, '6-8', '2 min', 'Pull to the chest.', true),
+      e('Hip thrust', 3, '8', '90s', 'Pause at the top.'),
+      e('Back extension', 3, '10', '60s', 'Hold a plate when it gets easy.'),
+      e('Single-leg balance (eyes closed)', 2, '20s / side', '30s', 'Near a wall.'),
+    ]),
+    pw('sm-3a', 'menopause', 'Strong: Peak A', 'Heavy lower and power', 55, 'High', 'Your strongest block: heavier triples and fives, plus low jumps.', [
+      e('Trap bar deadlift', 5, '3-5', '3 min', 'Heaviest block. Week 8: a best set of 5.', true),
+      e('Front-loaded squat', 4, '5', '2-3 min', 'Goblet or front squat.', true),
+      e('Low box jump', 3, '5', '90s', 'Step down, do not jump down.'),
+      e('Walking lunge', 3, '10 / side', '75s', 'Long stride.'),
+      e('Farmer carry', 3, '40 m', '75s', 'Heaviest yet.'),
+    ]),
+    pw('sm-3b', 'menopause', 'Strong: Peak B', 'Heavy upper and balance', 55, 'High', 'Heavy pressing and pulling with balance work.', [
+      e('Overhead press', 5, '3-5', '2-3 min', 'Strict press.', true),
+      e('Chest-supported row', 4, '6', '2 min', 'Heavy and paused.', true),
+      e('Dumbbell bench press', 3, '8', '90s', 'Controlled.'),
+      e('Step-down', 3, '8 / side', '60s', 'Slow lowering for knee and balance control.'),
+      e('Jump rope or skips', 3, '30s', '60s', 'Light impact. March instead if needed.'),
+    ]),
+  ];
+
+  const PROGRAMS = [
+    {
+      id: 'postpartum', name: 'Postpartum return', kicker: 'After baby', perWeek: 3, offDay: 'pp-daily',
+      tagline: 'Pelvic floor first, then strength, then a safe path back to running and lifting.',
+      who: 'From your postnatal check (usually 6 weeks or later) once a doctor or midwife has cleared you for exercise. After a C-section, wait for their go-ahead.',
+      clearance: true,
+      screen: ['Leaking when you cough, sneeze, laugh or lift', 'Heaviness, dragging or bulging in the vagina', 'Pelvic, back or scar pain', 'A ridge or doming along your midline when you lift your head'],
+      blocks: [
+        { from: 1, to: 2, title: 'Reconnect', note: 'Breath, pelvic floor and gentle strength. Daily pelvic floor work on the other days.', sessions: ['pp-1a', 'pp-1b'] },
+        { from: 3, to: 4, title: 'Rebuild', note: 'Bodyweight strength and anti-rotation core.', sessions: ['pp-2a', 'pp-2b'] },
+        { from: 5, to: 6, title: 'Load', note: 'Dumbbells come back. Keep exhaling on effort.', sessions: ['pp-3a', 'pp-3b'] },
+        { from: 7, to: 8, title: 'Strengthen', note: 'Heavier work and an impact test before any running.', sessions: ['pp-4a', 'pp-4b'] },
+      ],
+      cue: PF,
+      finish: 'If you can do 10 single-leg hops a side, jog on the spot for a minute and lunge 10 times a side without leaking, heaviness or pain, you are ready to start a walk-run plan. If not, a pelvic health physio can help.',
+    },
+    {
+      id: 'glutes', name: 'Glute build', kicker: '8 weeks', perWeek: 3,
+      tagline: 'Three blocks: volume, strength, then a peak. Test your hip thrust in week 1 and week 8.',
+      who: 'For anyone comfortable in a gym. Needs a barbell or machine for hip thrusts.',
+      blocks: [
+        { from: 1, to: 3, title: 'Volume', note: 'Sets of 10-15 close to failure.', sessions: ['gb-1a', 'gb-1b', 'gb-1c'] },
+        { from: 4, to: 6, title: 'Strength', note: 'Heavier sets of 6-8.', sessions: ['gb-2a', 'gb-2b', 'gb-1c'] },
+        { from: 7, to: 8, title: 'Peak', note: 'Heaviest work. Week 8 is a test.', sessions: ['gb-3a', 'gb-2b', 'gb-1c'] },
+      ],
+      finish: 'Compare your week 8 hip thrust with week 1 in Strength by phase, and take check-in photos with the same poses and light.',
+    },
+    {
+      id: 'pullup', name: 'First pull-up', kicker: '8 weeks', perWeek: 3,
+      tagline: 'Hangs, rows and slow negatives, then singles. Test a strict pull-up in week 8.',
+      who: 'For anyone who cannot yet do a strict pull-up. Needs a pull-up bar; a band and a lat pulldown help.',
+      blocks: [
+        { from: 1, to: 2, title: 'Hang and pull', note: 'Grip, shoulder control and rows.', sessions: ['pu-1a', 'pu-1b'] },
+        { from: 3, to: 5, title: 'Negatives', note: 'Slow lowering builds the strength to pull up.', sessions: ['pu-2a', 'pu-2b'] },
+        { from: 6, to: 8, title: 'Singles', note: 'Fresh, quality attempts. Week 8 is a test.', sessions: ['pu-3a', 'pu-2b'] },
+      ],
+      finish: 'Not there yet? Repeat weeks 6-8. Most women need 8-16 weeks, and every slow negative counts.',
+    },
+    {
+      id: 'menopause', name: 'Strong through menopause', kicker: '8 weeks', perWeek: 3,
+      tagline: 'Heavy, brief strength work plus small doses of impact for bone, muscle and balance.',
+      who: 'For perimenopause, menopause and beyond. If you have osteoporosis, a past fracture or joint problems, check with your doctor and consider a coach for the heavy lifts.',
+      blocks: [
+        { from: 1, to: 2, title: 'Foundation', note: 'Learn the lifts and find your starting weights.', sessions: ['sm-1a', 'sm-1b'] },
+        { from: 3, to: 5, title: 'Build', note: 'Heavier sets of 5 and gentle impact.', sessions: ['sm-2a', 'sm-2b'] },
+        { from: 6, to: 8, title: 'Peak', note: 'Your strongest weeks, plus low jumps.', sessions: ['sm-3a', 'sm-3b'] },
+      ],
+      finish: 'Keep lifting heavy two to three times a week for life. Bone responds over months, so this is the start.',
+    },
+  ];
+
   // Everyday foods for talk-to-log when the AI coach is off. Values per unit, approximate (USDA averages).
   // b(id, aliases, unit label, grams per unit, kcal, protein, carbs, fat)
   const b = (id, names, unit, grams, kcal, protein, carbs, fat) => ({ id, names, unit, grams, kcal, protein, carbs, fat });
@@ -598,7 +852,9 @@
     { id: 'amazonfresh', name: 'Amazon Fresh', search: 'https://www.amazon.com/s?i=amazonfresh&k=' },
   ];
 
-  const api = { BASIC_FOODS, RESTAURANTS, STORES, PHASE_COPY, IMAGERY, PHASES, PHASE_ORDER, WORKOUTS, ROTATION, MEALS, FAVORITE_OPTIONS, AVOID_OPTIONS, MEMBERS, SEED_POSTS, AUTO_REPLIES, CYCLE_MODES, SYMPTOMS, MENO_SYMPTOMS, GROCERY };
+  WORKOUTS.push(...PROGRAM_WORKOUTS);
+
+  const api = { PROGRAMS, BASIC_FOODS, RESTAURANTS, STORES, PHASE_COPY, IMAGERY, PHASES, PHASE_ORDER, WORKOUTS, ROTATION, MEALS, FAVORITE_OPTIONS, AVOID_OPTIONS, MEMBERS, SEED_POSTS, AUTO_REPLIES, CYCLE_MODES, SYMPTOMS, MENO_SYMPTOMS, GROCERY };
   if (typeof window !== 'undefined') window.YOURS_DATA = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();
