@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const L = require('../public/logic.js');
+const D = require('../public/data.js');
 
 const T = L.today();
 const k = (n) => L.dateKey(L.addDays(T, n));
@@ -174,7 +175,7 @@ test('recipes total their ingredients and log per serving or by cooked weight', 
 });
 
 test('suggested meals carry estimated carbs and fat', () => {
-  const D = require('../public/data.js');
+
   const m = D.MEALS.follicular.lunch[0];
   assert.ok(m.carbs > 0 && m.fat > 0);
   assert.ok(Math.abs(m.protein * 4 + m.carbs * 4 + m.fat * 9 - m.kcal) <= 15);
@@ -228,7 +229,7 @@ test('grocery list combines ideas, recipes and own items by aisle', () => {
 });
 
 test('store links and restaurant bowl builder', () => {
-  const D = require('../public/data.js');
+
   assert.equal(L.storeLink(D.STORES[0], 'greek yogurt'), 'https://www.walmart.com/search?q=greek%20yogurt');
   const chip = D.RESTAURANTS.find((r) => r.id === 'chipotle');
   const sec = (id) => chip.build.sections.findIndex((x) => x.id === id);
@@ -236,4 +237,46 @@ test('store links and restaurant bowl builder', () => {
   assert.deepEqual(totals, { kcal: 550, protein: 44, carbs: 67, fat: 12.5 }); // bowl, chicken, white rice, black beans, tomato salsa, romaine
   assert.deepEqual(names, ['Chicken', 'White rice', 'Black beans', 'Fresh tomato salsa', 'Romaine lettuce']);
   assert.ok(sec('protein') > 0);
+});
+
+test('talk to log: parses everyday foods, amounts and the meal', () => {
+  const r = L.parseFoodText('I had two eggs and toast with half an avocado for breakfast', D.BASIC_FOODS);
+  assert.equal(r.slot, 'breakfast');
+  assert.deepEqual(r.items.map((i) => i.name), ['Eggs', 'Toast', 'Avocado']);
+  assert.equal(r.items[0].kcal, 144);
+  assert.equal(r.items[2].kcal, 114); // half an avocado is one serving
+  const g = L.parseFoodText('150 g chicken breast, 2 tbsp hummus and pizza', D.BASIC_FOODS);
+  assert.equal(g.items[0].portion, '150 g');
+  assert.equal(g.items[0].kcal, 249); // 150 g of a 113 g serving (servings rounded to 1.33)
+  assert.equal(g.items[1].kcal, 70); // 2 tbsp is one serving of hummus
+  assert.deepEqual(g.unknown, ['pizza']);
+});
+
+test('talk to log: usual meal is the most repeated set of foods', () => {
+  const now = new Date(2026, 5, 20);
+  const day = (i) => L.dateKey(L.addDays(now, -i));
+  const e = (name, label, kcal) => ({ id: 'x' + Math.random(), slot: 'breakfast', name, label, kcal, protein: 1, carbs: 1, fat: 1 });
+  const data = { foodLog: {
+    [day(1)]: [e('Bagel', '1 bagel', 280)],
+    [day(2)]: [e('Oats', '1/2 cup', 150), e('Banana', '1 medium', 105)],
+    [day(4)]: [e('Banana', '1 medium', 105), e('Oats', '1/2 cup', 150)],
+  } };
+  assert.ok(L.usualRequest('log my usual breakfast'));
+  assert.equal(L.usualRequest('two eggs'), null);
+  const usual = L.usualMeal(data, 'breakfast', now);
+  assert.deepEqual(usual.map((x) => x.name).sort(), ['Banana', 'Oats']);
+  assert.equal(usual[0].id, undefined);
+  assert.deepEqual(L.usualMeal(data, 'breakfast', now, { yesterday: true }).map((x) => x.name), ['Bagel']);
+  assert.equal(L.usualMeal(data, 'dinner', now), null);
+});
+
+test('plate estimates are cleaned and become loggable foods', () => {
+  const items = L.cleanEstimates([{ name: ' Salmon ', portion: '5 oz', grams: 142, kcal: 290, protein: 32, carbs: -4, fat: 17, confidence: 'sure' }, { name: '' }, null]);
+  assert.equal(items.length, 1);
+  assert.equal(items[0].name, 'Salmon');
+  assert.equal(items[0].carbs, 0);
+  assert.equal(items[0].confidence, 'medium');
+  const f = L.estimateFood(items[0], 'photo');
+  assert.equal(L.foodMacros(f, 1.5, 'servings').kcal, 435);
+  assert.equal(Math.round(L.foodMacros(f, 71, 'grams').kcal), 145);
 });

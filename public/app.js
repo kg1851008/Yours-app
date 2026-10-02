@@ -64,6 +64,7 @@
     search: '<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/>',
     flash: '<path d="M13 3 5 13h6l-1 8 8-10h-6z"/>',
     store: '<path d="M4 9h16l-1 11H5z"/><path d="M8 9V7a4 4 0 0 1 8 0v2"/>',
+    mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/>',
     fork: '<path d="M7 3v8a2 2 0 0 0 4 0V3M9 11v10M17 3c-2 0-3 2-3 5s1 4 3 4v9"/>',
     image: '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m4 18 5-5 4 4 3-3 4 4"/>',
   };
@@ -348,6 +349,15 @@
   async function sendChat(text) {
     text = text.trim();
     if (!text || S.typing) return;
+    // "I had two eggs and toast" / "log my usual breakfast" in chat goes straight to the food review sheet.
+    const logIntent = /^(?:(?:so\s+|ok\s+)?i\s+(?:just\s+)?(?:had|ate)\b|log\b|ate\b|had\b)/i.test(text) && !text.includes('?');
+    if (logIntent && (/^log\b/i.test(text) && S.ai || L.usualRequest(text) || L.parseFoodText(text, talkFoods()).items.length)) {
+      S.data.chat.push({ role: 'user', content: text, ts: Date.now() }, { role: 'coach', content: 'Got it. Check the portions and tap Log when it looks right.', actions: [], ts: Date.now() });
+      save();
+      S.foodTarget = null;
+      S.diaryDate = null;
+      return processTalk(text);
+    }
     S.data.chat.push({ role: 'user', content: text, ts: Date.now() });
     S.typing = true;
     save();
@@ -917,6 +927,141 @@
     else { S.modal = null; S.foodTarget = null; }
     render();
   }
+
+  // ---------- snap your plate / talk to log ----------
+  // Both end in the same review sheet: she checks each item, adjusts portions, and only then logs.
+  const estItem = (x, extra) => ({ id: uid(), on: true, scale: 1, edit: false, ...x, ...(extra || {}) });
+  function openEstimate(source, extra) {
+    const t = foodTarget();
+    S.modal = { type: 'estimate', source, slot: t.slot || slotNow(), items: [], note: '', loading: true, ...extra };
+    render();
+  }
+  function myFoodHints() {
+    const recent = (S.data.recentFoods || []).map((r) => { const mac = L.foodMacros(r.food, r.amount, r.mode); return { name: r.food.name, portion: foodLabel(r.food, r.amount, r.mode), ...mac }; });
+    const recipes = Object.values(S.data.recipes || {}).map((r) => { const f = L.recipeFood(r); return { name: r.name, portion: f.serving.label, ...f.perServing }; });
+    return recent.concat(recipes).slice(0, 20);
+  }
+  async function aiEstimate(payload) {
+    const r = await fetch('/api/coach', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'food', units: S.data.profile.units === 'metric' ? 'metric' : 'imperial', myFoods: myFoodHints(), ...payload }) });
+    if (!r.ok) throw new Error('estimate failed');
+    return r.json();
+  }
+
+  async function handlePlate(file) {
+    S.pickingFile = 0;
+    if (!file.type.startsWith('image/')) return toast('Choose a photo of your food');
+    let thumb;
+    try { thumb = await compressImage(file); } catch { return toast('Could not read that photo'); }
+    openEstimate('photo', { thumb });
+    if (!S.ai) { S.modal.loading = false; S.modal.noAi = true; return render(); }
+    try {
+      const j = await aiEstimate({ image: thumb });
+      if (!S.modal || S.modal.type !== 'estimate' || S.modal.thumb !== thumb) return;
+      S.modal.items = L.cleanEstimates(j.items).map((x) => estItem(x));
+      S.modal.note = j.note || '';
+      if (j.slot) S.modal.slot = j.slot;
+    } catch {
+      if (S.modal && S.modal.type === 'estimate') S.modal.error = 'Could not reach the coach. Check your connection, or describe it instead.';
+    }
+    if (S.modal && S.modal.type === 'estimate') { S.modal.loading = false; render(); }
+  }
+
+  // Her saved and recent foods count as known foods for the offline parser, ahead of the built-in list.
+  function talkFoods() {
+    const mine = (S.data.recentFoods || []).map((r) => ({ id: 'r', names: [r.food.name.toLowerCase()], unit: foodLabel(r.food, r.amount, r.mode), grams: (r.food.serving.grams || 100) * (r.mode === 'grams' ? r.amount / (r.food.serving.grams || 100) : r.amount), ...L.foodMacros(r.food, r.amount, r.mode) }));
+    return mine.concat(D.BASIC_FOODS);
+  }
+
+  async function processTalk(text) {
+    text = (text || '').trim().slice(0, 600);
+    if (!text) return;
+    const usual = L.usualRequest(text);
+    if (usual) {
+      const slot = usual.slot || (S.foodTarget && S.foodTarget.slot) || slotNow();
+      const entries = L.usualMeal(S.data, slot, parseKey(diaryKey()), usual);
+      openEstimate('usual', { said: text, slot, loading: false });
+      if (!entries) { S.modal.error = `No ${usual.yesterday ? `${SLOT_LABEL[slot].toLowerCase()} logged yesterday` : `usual ${SLOT_LABEL[slot].toLowerCase()} yet. Log it a couple of times and I will remember it`}.`; return render(); }
+      S.modal.items = entries.map((e) => estItem({ name: e.name, portion: e.label, grams: null, kcal: e.kcal, protein: e.protein, carbs: e.carbs, fat: e.fat, confidence: 'high' }, { entry: e }));
+      S.modal.note = usual.yesterday ? `Same as yesterday's ${SLOT_LABEL[slot].toLowerCase()}.` : `Your usual ${SLOT_LABEL[slot].toLowerCase()}, from your diary.`;
+      return render();
+    }
+    openEstimate('text', { said: text });
+    const local = L.parseFoodText(text, talkFoods());
+    if (local.slot) S.modal.slot = local.slot;
+    let done = false;
+    if (S.ai) {
+      try {
+        const j = await aiEstimate({ text });
+        if (!S.modal || S.modal.type !== 'estimate' || S.modal.said !== text) return;
+        const items = L.cleanEstimates(j.items);
+        if (items.length) { S.modal.items = items.map((x) => estItem(x)); S.modal.note = j.note || ''; if (j.slot) S.modal.slot = j.slot; done = true; }
+      } catch { /* fall back to the on-device parser */ }
+    }
+    if (!S.modal || S.modal.type !== 'estimate') return;
+    if (!done) {
+      S.modal.items = local.items.map((x) => estItem(x));
+      S.modal.note = local.unknown.length ? `I could not match: ${local.unknown.join(', ')}. Add ${local.unknown.length > 1 ? 'those' : 'it'} with search or quick add.` : 'Estimated from typical portions. Adjust anything that looks off.';
+      if (!local.items.length) S.modal.error = 'I could not pick out any foods there. Try something like "two eggs and toast" or "150 g chicken and a cup of rice".';
+    }
+    S.modal.loading = false;
+    render();
+  }
+
+  function logEstimate() {
+    const m = S.modal;
+    const picked = m.items.filter((x) => x.on);
+    if (!picked.length) return toast('Pick at least one item');
+    const k = diaryKey();
+    const list = (S.data.foodLog[k] = S.data.foodLog[k] || []);
+    let kcal = 0;
+    picked.forEach((x) => {
+      let entry;
+      if (x.entry && !x.edited) {
+        const e = x.entry;
+        const amount = Math.round(e.amount * x.scale * 100) / 100;
+        const mac = x.scale === 1 ? { kcal: e.kcal, protein: e.protein, carbs: e.carbs, fat: e.fat } : L.foodMacros(e.food, amount, e.mode);
+        entry = { ...e, amount, label: x.scale === 1 ? e.label : foodLabel(e.food, amount, e.mode), ...mac };
+      } else {
+        const food = L.estimateFood(x, m.source);
+        const mac = L.foodMacros(food, x.scale, 'servings');
+        entry = { name: food.name, brand: food.brand, barcode: null, food, amount: x.scale, mode: 'servings', label: foodLabel(food, x.scale, 'servings'), ...mac };
+        if (m.source === 'text') rememberFood(food, x.scale, 'servings');
+      }
+      kcal += entry.kcal;
+      list.push({ id: uid(), slot: m.slot, ...entry, ts: Date.now() });
+    });
+    S.modal = null;
+    S.foodTarget = null;
+    save();
+    render();
+    toast(`Logged ${plural(picked.length, 'item')} to ${SLOT_LABEL[m.slot]} · ${kcal} ${calU()}`);
+  }
+
+  const SpeechRec = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
+  function startDictation() {
+    if (!SpeechRec || S.dictation) return;
+    const rec = new SpeechRec();
+    rec.lang = navigator.language || 'en-US';
+    rec.interimResults = true;
+    rec.continuous = false;
+    S.dictation = rec;
+    S.modal.listening = true;
+    render();
+    rec.onresult = (e) => {
+      const txt = Array.from(e.results).map((r) => r[0].transcript).join(' ').trim();
+      if (S.modal && S.modal.type === 'talk') { S.modal.text = txt; const ta = root.querySelector('[data-talk-text]'); if (ta) ta.value = txt; }
+    };
+    rec.onerror = (e) => { if (e.error === 'not-allowed' || e.error === 'service-not-allowed') toast('Microphone access is off. You can type it instead.'); else if (e.error !== 'aborted') toast('I did not catch that. Try again or type it.'); };
+    rec.onend = () => {
+      S.dictation = null;
+      if (!S.modal || S.modal.type !== 'talk') return;
+      S.modal.listening = false;
+      if (S.modal.text && S.modal.text.trim()) processTalk(S.modal.text);
+      else render();
+    };
+    try { rec.start(); } catch { S.dictation = null; S.modal.listening = false; render(); }
+  }
+  function stopDictation() { if (S.dictation) { try { S.dictation.abort(); } catch { /* already stopped */ } S.dictation = null; } }
 
   // A suggested meal as a loggable food (portion-scaled, macros estimated).
   function suggestionFood(meal, portion) {
@@ -1522,7 +1667,8 @@
         <div class="big-number" style="font-size:56px;margin-top:6px">${Math.abs(remaining).toLocaleString()}<span class="eyebrow" style="font-size:11px;margin-left:6px">${calU()}</span></div>
         <div class="tiny" style="font-family:var(--mono);letter-spacing:.06em;margin-top:6px">${t.kcal.toLocaleString()} goal − ${m.kcal.toLocaleString()} food = ${remaining.toLocaleString()}</div>
         ${line('Protein', m.protein, t.protein, 'var(--accent)')}${line('Carbs', m.carbs, t.carbs, 'var(--follicular)')}${line('Fat', m.fat, t.fat, 'var(--luteal)')}
-        <div class="row" style="margin-top:16px"><button class="btn primary grow" data-action="open-scanner">${icon('barcode', 18)} Scan</button><button class="btn ghost" data-action="open-food-search" aria-label="Search foods">${icon('search', 18)}</button><button class="btn ghost" data-action="open-recipes" aria-label="My recipes">${icon('list', 18)}</button><button class="btn ghost" data-action="open-quick-add" aria-label="Quick add calories">${icon('plus', 18)}</button></div>
+        <div class="row" style="margin-top:16px"><label class="btn primary grow" style="cursor:pointer">${icon('camera', 18)} Snap plate<input type="file" accept="image/*" capture="environment" data-plate-photo hidden></label><button class="btn soft grow" data-action="open-talk">${icon('mic', 18)} Say it</button></div>
+        <div class="row" style="margin-top:8px"><button class="btn ghost grow" data-action="open-scanner">${icon('barcode', 18)} Scan</button><button class="btn ghost" data-action="open-food-search" aria-label="Search foods">${icon('search', 18)}</button><button class="btn ghost" data-action="open-recipes" aria-label="My recipes">${icon('list', 18)}</button><button class="btn ghost" data-action="open-quick-add" aria-label="Quick add calories">${icon('plus', 18)}</button></div>
       </div>
       ${scaleTip ? `<div class="banner" style="margin-top:12px;background:var(--green-soft)">${icon('trend', 20)}<div class="grow"><strong>Tip: a food scale.</strong> Not required, but weighing food, especially ingredients for recipes, gives the most accurate numbers.</div><button class="icon-btn" style="width:30px;height:30px" data-action="dismiss-tip" data-tip="scale" aria-label="Dismiss tip">${icon('x', 14)}</button></div>` : ''}
       ${slots.map(([sl, label]) => { const items = log.filter((f) => (f.slot === 'snack' ? 'snack' : f.slot) === sl); const sum = items.reduce((n, f) => n + f.kcal, 0); return `
@@ -1918,7 +2064,8 @@
       const recent = S.data.recentFoods || [];
       const tile = (action, ic, label) => `<button class="card" style="margin:0;text-align:left;padding:16px" data-action="${action}">${icon(ic, 22)}<div class="eyebrow" style="color:var(--text);margin-top:10px">${label}</div></button>`;
       return sheet(t.kind === 'recipe' ? 'Add ingredient' : `Add to ${SLOT_LABEL[t.slot].toLowerCase()}`, `
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${tile('open-scanner', 'barcode', 'Scan barcode')}${tile('open-food-search', 'search', 'Search foods')}${t.kind === 'recipe' ? '' : tile('open-restaurants', 'fork', 'Restaurants')}${t.kind === 'recipe' ? '' : tile('open-quick-add', 'plus', 'Quick add')}${tile('open-food-manual', 'list', 'Create a food')}</div>
+        ${t.kind === 'recipe' ? '' : `<label class="card" style="display:block;cursor:pointer;margin:0 0 10px;background:var(--green);color:var(--bg);border:none"><div class="row between"><div class="eyebrow" style="color:var(--bg);opacity:.7">New</div>${icon('camera', 22)}</div><div class="serif" style="font-size:26px;margin-top:4px">Snap your plate</div><div class="tiny" style="margin-top:6px;opacity:.75">Take a photo. The coach estimates each food and its macros, and you confirm.</div><input type="file" accept="image/*" capture="environment" data-plate-photo hidden></label>`}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${t.kind === 'recipe' ? '' : tile('open-talk', 'mic', 'Say it')}${tile('open-scanner', 'barcode', 'Scan barcode')}${tile('open-food-search', 'search', 'Search foods')}${t.kind === 'recipe' ? '' : tile('open-restaurants', 'fork', 'Restaurants')}${t.kind === 'recipe' ? '' : tile('open-quick-add', 'plus', 'Quick add')}${tile('open-food-manual', 'list', 'Create a food')}</div>
         ${t.kind !== 'recipe' && recipes.length ? `<div class="label" style="margin-top:20px">My recipes</div>${recipes.map((r) => { const f = L.recipeFood(r); return `<button class="list-item" style="width:100%;text-align:left" data-action="recipe-log" data-id="${r.id}"><div class="grow"><strong class="small">${esc(r.name)}</strong><div class="tiny muted">${esc(f.serving.label)}</div></div><span class="tiny" style="font-family:var(--mono);text-align:right">${Math.round(f.perServing.kcal)} ${calU()}<br>${Math.round(f.perServing.protein)} g P</span></button>`; }).join('')}` : ''}
         ${recent.length ? `<div class="label" style="margin-top:20px">Recent</div>${recent.slice(0, 8).map((r, i) => `<button class="list-item" style="width:100%;text-align:left" data-action="recent-food" data-i="${i}"><div class="grow"><strong class="small">${esc(r.food.name)}</strong><div class="tiny muted">${esc(foodLabel(r.food, r.amount, r.mode))}</div></div><span class="tiny" style="font-family:var(--mono)">${L.foodMacros(r.food, r.amount, r.mode).kcal} ${calU()}</span></button>`).join('')}` : ''}
         ${t.kind !== 'recipe' ? '<button class="btn ghost block" style="margin-top:18px" data-action="new-recipe">Build a recipe from ingredients</button>' : ''}`);
@@ -1954,6 +2101,43 @@
         ${m.loading ? '<div class="empty">Searching menus...</div>' : ''}${m.error ? '<p class="tiny error" style="margin-top:10px">Restaurant search is unavailable right now.</p>' : ''}
         ${(m.results || []).map((f, i) => `<button class="list-item" style="width:100%;text-align:left" data-action="restaurant-result" data-i="${i}"><div class="grow"><strong class="small">${esc(f.name)}</strong><div class="tiny muted">${esc(f.brand)} · ${esc(f.serving.label)}</div></div><span class="tiny" style="font-family:var(--mono);text-align:right">${Math.round(f.perServing.kcal)} ${calU()}<br>${Math.round(f.perServing.protein)} g P</span></button>`).join('')}
         ${!m.loading && !m.error && m.q && !(m.results || []).length ? '<div class="empty">No restaurant items found.</div>' : ''}`);
+    }
+    if (m.type === 'talk') {
+      const examples = ['Two eggs and toast', 'Greek yogurt with berries and honey', 'Log my usual breakfast', 'Same lunch as yesterday'];
+      return sheet('Say what you ate', `<p class="small muted" style="margin-bottom:12px">Say or type it the way you would tell a friend. Amounts help: "150 g chicken", "a cup of rice", "2 tbsp peanut butter". You check everything before it is logged.</p>
+        <form data-form="talk">
+          <textarea class="input" name="text" data-talk-text rows="3" maxlength="600" placeholder="I had two eggs and toast" aria-label="What did you eat?" style="resize:none">${esc(m.text || '')}</textarea>
+          <div class="row" style="margin-top:12px">${SpeechRec ? `<button type="button" class="btn ${m.listening ? 'primary' : 'outline'} grow" data-action="talk-mic">${icon('mic', 18)} ${m.listening ? 'Listening... tap to stop' : 'Speak'}</button>` : ''}<button class="btn primary grow" type="submit">Continue</button></div>
+        </form>
+        ${SpeechRec ? '' : '<p class="tiny muted" style="margin-top:8px">Tip: use your keyboard\'s microphone to dictate.</p>'}
+        <div class="label" style="margin-top:18px">Try</div><div class="chips">${examples.map((x) => `<button class="chip" data-action="talk-example" data-text="${esc(x)}">${esc(x)}</button>`).join('')}</div>`);
+    }
+    if (m.type === 'estimate') {
+      const on = m.items.filter((x) => x.on);
+      const tot = on.reduce((a, x) => ({ kcal: a.kcal + x.kcal * x.scale, protein: a.protein + x.protein * x.scale, carbs: a.carbs + x.carbs * x.scale, fat: a.fat + x.fat * x.scale }), { kcal: 0, protein: 0, carbs: 0, fat: 0 });
+      const title = m.source === 'photo' ? 'Your plate' : m.source === 'usual' ? 'Your usual' : 'What you ate';
+      const row = (x, i) => `<div class="list-item" style="padding:10px 0;align-items:flex-start;${x.on ? '' : 'opacity:.45'}">
+          <button class="check ${x.on ? 'on' : ''}" style="width:26px;height:26px;flex:none;margin-top:2px;border-radius:8px" data-action="est-toggle" data-i="${i}" aria-label="${x.on ? 'Leave out' : 'Include'} ${esc(x.name)}" aria-pressed="${x.on}">${x.on ? icon('check', 14) : ''}</button>
+          <div class="grow" style="min-width:0">
+            ${x.edit ? `<input class="input" style="padding:8px 10px" data-est-field="name" data-i="${i}" value="${esc(x.name)}" maxlength="60" aria-label="Food name"><input class="input" style="padding:8px 10px;margin-top:6px" data-est-field="portion" data-i="${i}" value="${esc(x.portion)}" maxlength="40" aria-label="Portion">
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:6px">${[['kcal', calU()], ['protein', 'P g'], ['carbs', 'C g'], ['fat', 'F g']].map(([f, l]) => `<label><span class="tiny muted">${l}</span><input class="input" style="padding:8px" type="number" inputmode="decimal" min="0" step="0.1" data-est-field="${f}" data-i="${i}" value="${x[f]}"></label>`).join('')}</div>
+            <button class="link small" style="margin-top:6px" data-action="est-edit" data-i="${i}">Done</button>`
+            : `<strong class="small">${esc(x.name)}</strong>${x.confidence === 'low' ? ' <span class="tag" style="font-size:9px">check this</span>' : ''}<div class="tiny muted">${esc(x.scale === 1 ? x.portion : `${x.scale} x ${x.portion}`)} · <button class="link tiny" data-action="est-edit" data-i="${i}">Edit</button></div>
+            <div class="row" style="gap:6px;margin-top:6px"><button class="icon-btn" style="width:28px;height:28px" data-action="est-scale" data-i="${i}" data-d="-0.25" aria-label="Less ${esc(x.name)}">−</button><span class="tiny" style="font-family:var(--mono);min-width:40px;text-align:center">x${x.scale}</span><button class="icon-btn" style="width:28px;height:28px" data-action="est-scale" data-i="${i}" data-d="0.25" aria-label="More ${esc(x.name)}">+</button></div>`}
+          </div>
+          <div class="tiny" style="font-family:var(--mono);text-align:right">${Math.round(x.kcal * x.scale)} ${calU()}<br>${Math.round(x.protein * x.scale)} g P<br>${Math.round(x.carbs * x.scale)} C · ${Math.round(x.fat * x.scale)} F</div></div>`;
+      return sheet(title, `${m.thumb ? `<img src="${m.thumb}" alt="Your plate" style="width:100%;max-height:220px;object-fit:cover;border-radius:16px;display:block">` : ''}
+        ${m.said ? `<p class="serif" style="font-size:20px;margin:0 0 6px">"${esc(m.said)}"</p>` : ''}
+        ${m.loading ? `<div class="empty">${m.source === 'photo' ? 'Reading your plate...' : 'Working it out...'}</div>` : ''}
+        ${m.noAi ? `<div class="banner" style="margin-top:12px">${icon('advisor', 18)}<div class="grow small">Plate photos use the live AI coach, which is not switched on here. Describe the meal instead and I will estimate it on this device.</div></div><button class="btn primary block" style="margin-top:12px" data-action="open-talk">${icon('mic', 18)} Describe it</button>` : ''}
+        ${m.error ? `<p class="small error" style="margin-top:12px">${esc(m.error)}</p><div class="row" style="margin-top:10px"><button class="btn ghost grow" data-action="open-talk">${icon('mic', 16)} ${m.source === 'photo' ? 'Describe it' : 'Try again'}</button><button class="btn ghost grow" data-action="open-food-search">${icon('search', 16)} Search</button></div>` : ''}
+        ${!m.loading && m.items.length ? `
+          <div class="label" style="margin-top:14px">Log to</div><div class="chips">${Object.entries(SLOT_LABEL).map(([k, l]) => `<button class="chip ${m.slot === k ? 'selected' : ''}" data-action="est-slot" data-slot="${k}">${l}</button>`).join('')}</div>
+          <div style="margin-top:8px">${m.items.map(row).join('')}</div>
+          <div class="stats" style="margin-top:14px;grid-template-columns:repeat(4,1fr)">${foodMacroTiles(tot)}</div>
+          ${m.note ? `<p class="tiny muted" style="margin-top:10px">${esc(m.note)}</p>` : ''}
+          ${m.source !== 'usual' ? `<p class="tiny muted" style="margin-top:6px">${m.source === 'photo' ? 'Photo estimates can be off by 20% or more, mostly on oils and sauces. ' : ''}Adjust anything that looks wrong before logging.</p>` : ''}
+          <button class="btn primary block" style="margin-top:16px" data-action="est-log" ${on.length ? '' : 'disabled'}>Log ${plural(on.length, 'item')}</button>` : ''}`);
     }
     if (m.type === 'quickAdd') {
       return sheet('Quick add', `<p class="small muted" style="margin-bottom:12px">For when you just know the numbers. Adds to ${SLOT_LABEL[foodTarget().slot].toLowerCase()}.</p>
@@ -2201,7 +2385,11 @@
       { id: uid(), slot: 'breakfast', name: bf.name, brand: bf.brand, barcode: null, food: bf, amount: 1, mode: 'servings', label: '1 portion', ...L.foodMacros(bf, 1, 'servings'), ts: Date.now() },
       { id: uid(), slot: 'snack', name: yog.name, brand: '', barcode: null, food: yog, amount: 1, mode: 'servings', label: yog.serving.label, ...L.foodMacros(yog, 1, 'servings'), ts: Date.now() },
     ];
-    d.recentFoods = [{ food: yog, amount: 1, mode: 'servings' }];
+    // Her usual breakfast on most of the last week, so "log my usual breakfast" has something to find.
+    const basic = (id) => { const f = D.BASIC_FOODS.find((x) => x.id === id); return { barcode: null, name: f.names[0].replace(/^./, (c) => c.toUpperCase()), brand: '', image: null, custom: true, serving: { label: f.unit, grams: f.grams }, perServing: { kcal: f.kcal, protein: f.protein, carbs: f.carbs, fat: f.fat }, per100: null }; };
+    const usual = [yog, basic('berries'), basic('granola')];
+    [1, 2, 3, 5, 6].forEach((i) => { d.foodLog[dateKey(addDays(t, -i))] = usual.map((f) => ({ id: uid(), slot: 'breakfast', name: f.name, brand: '', barcode: null, food: f, amount: 1, mode: 'servings', label: f.serving.label, ...L.foodMacros(f, 1, 'servings'), ts: Date.now() })); });
+    d.recentFoods = usual.map((f) => ({ food: f, amount: 1, mode: 'servings' }));
     d.recipes = { demo1: { id: 'demo1', name: 'Turkey sweet potato chili', servings: 4, totalGrams: 1800, updated: Date.now(), ingredients: [
       { id: 'i1', name: 'Lean ground turkey 93/7', label: '454 g', kcal: 680, protein: 86, carbs: 0, fat: 36 },
       { id: 'i2', name: 'Sweet potato', label: '400 g', kcal: 344, protein: 6, carbs: 80, fat: 0 },
@@ -2322,7 +2510,7 @@
 
     tab: (el) => { goTab(el.dataset.tab); render(); if (S.tab === 'advisor' && S.advisorView === 'coach') scrollChat(); },
     'open-settings': () => { S.modal = { type: 'settings' }; render(); },
-    'close-modal': () => { if (S.modal && ['addFood', 'food', 'foodSearch', 'foodManual', 'quickAdd', 'scanner', 'restaurants', 'restaurant', 'restaurantBuild', 'restaurantSearch'].includes(S.modal.type)) return closeFoodFlow(); if (S.modal && S.modal.type === 'recipe') { S.recipeDraft = null; S.foodTarget = null; } stopScanner(); S.modal = null; render(); },
+    'close-modal': () => { stopDictation(); if (S.modal && ['addFood', 'food', 'foodSearch', 'foodManual', 'quickAdd', 'scanner', 'talk', 'estimate', 'restaurants', 'restaurant', 'restaurantBuild', 'restaurantSearch'].includes(S.modal.type)) return closeFoodFlow(); if (S.modal && S.modal.type === 'recipe') { S.recipeDraft = null; S.foodTarget = null; } stopScanner(); S.modal = null; render(); },
     overlay: (el, ev) => { if (ev.target === el) actions['close-modal'](); },
     water: (el) => { addWater(Number(el.dataset.ml)); render(); },
     'log-steps': () => { S.modal = { type: 'steps' }; render(); },
@@ -2473,6 +2661,14 @@
     },
     'diary-day': (el) => { const d = addDays(parseKey(diaryKey()), Number(el.dataset.d)); if (d > today()) return; S.diaryDate = dateKey(d) === todayKey() ? null : dateKey(d); render(); },
     'dismiss-tip': (el) => { S.data.tips = S.data.tips || {}; S.data.tips[el.dataset.tip] = true; save(); render(); },
+    'open-talk': () => { stopScanner(); stopDictation(); if (S.modal && S.modal.type === 'estimate') S.foodTarget = { kind: 'log', slot: S.modal.slot }; else if (S.foodTarget && S.foodTarget.kind !== 'log') S.foodTarget = null; S.modal = { type: 'talk', text: '' }; render(); },
+    'talk-example': (el) => { stopDictation(); processTalk(el.dataset.text); },
+    'talk-mic': () => { if (S.dictation) { S.dictation.stop(); return; } startDictation(); },
+    'est-toggle': (el) => { const x = S.modal.items[el.dataset.i]; x.on = !x.on; render(); },
+    'est-scale': (el) => { const x = S.modal.items[el.dataset.i]; x.scale = clamp(Math.round((x.scale + Number(el.dataset.d)) * 100) / 100, 0.25, 10); render(); },
+    'est-edit': (el) => { const x = S.modal.items[el.dataset.i]; x.edit = !x.edit; render(); },
+    'est-slot': (el) => { S.modal.slot = el.dataset.slot; render(); },
+    'est-log': () => logEstimate(),
     'open-food-search': () => { stopScanner(); S.modal = { type: 'foodSearch', q: '', results: [] }; render(); },
     'open-food-manual': () => { stopScanner(); S.modal = { type: 'foodManual' }; render(); },
     'recent-food': (el) => { stopScanner(); const r = S.data.recentFoods[el.dataset.i]; if (r) openFood(r.food, r.amount, r.mode); },
@@ -2579,6 +2775,16 @@
   // Live inputs that should not trigger a full re-render.
   document.addEventListener('input', (ev) => {
     const el = ev.target;
+    if (el.matches('[data-talk-text]') && S.modal && S.modal.type === 'talk') { S.modal.text = el.value; return; }
+    if (el.dataset.estField && S.modal && S.modal.type === 'estimate') {
+      const x = S.modal.items[el.dataset.i];
+      const f = el.dataset.estField;
+      if (!x) return;
+      x[f] = f === 'name' || f === 'portion' ? el.value : Math.max(0, Number(el.value) || 0);
+      x.edited = true;
+      x.confidence = 'high';
+      return;
+    }
     if (el.dataset.bind && S.data) {
       const p = S.data.profile;
       const k = el.dataset.bind;
@@ -2617,6 +2823,8 @@
     const el = ev.target;
     if (el.dataset.bindUi === 'pose') { S.pose = el.value; return; }
     if (el.matches('[data-scan-photo]') && el.files && el.files[0]) { scanPhoto(el.files[0]); return; }
+    if (el.matches('[data-plate-photo]') && el.files && el.files[0]) { handlePlate(el.files[0]); el.value = ''; return; }
+    if (el.dataset.estField && S.modal && S.modal.type === 'estimate') { render(); return; }
     if (el.dataset.ciPhoto && el.files && el.files[0] && S.modal && S.modal.type === 'ciPhotos') {
       const pose = el.dataset.ciPhoto;
       try {
@@ -2681,6 +2889,7 @@
       stopScanner();
       return lookupBarcode(code);
     }
+    if (type === 'talk') { stopDictation(); return processTalk(form.text.value); }
     if (type === 'food-search') { const q = form.q.value.trim(); if (q.length >= 2) searchFoods(q); return; }
     if (type === 'restaurant-filter') { S.modal.q = form.q.value.trim(); return render(); }
     if (type === 'restaurant-online') { const q = form.q.value.trim(); if (q.length >= 2) searchRestaurantsOnline(q); return; }

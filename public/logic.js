@@ -587,6 +587,131 @@
     return out;
   }
 
+  // ---------- talk to log / plate estimates ----------
+  const NUM_WORDS = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, twelve: 12, half: 0.5, couple: 2, few: 3, some: 1, single: 1, double: 2 };
+  const SLOT_WORDS = { breakfast: 'breakfast', brekkie: 'breakfast', lunch: 'lunch', dinner: 'dinner', supper: 'dinner', snack: 'snack', snacks: 'snack' };
+  const UNIT_RE = /^(g|grams?|oz|ounces?|cups?|tbsps?|tablespoons?|tsps?|teaspoons?|slices?|scoops?|pieces?|pcs|servings?|bowls?|handfuls?|cans?|strips?|glass(?:es)?)\b\s*(?:of\s+)?/;
+
+  function slotIn(text) {
+    const m = /\b(breakfast|brekkie|lunch|dinner|supper|snacks?)\b/.exec(text);
+    return m ? SLOT_WORDS[m[1]] : null;
+  }
+
+  // "log my usual breakfast", "same lunch as yesterday" -> { slot, yesterday }
+  function usualRequest(text) {
+    const t = String(text || '').toLowerCase();
+    if (!/\b(usual|normal|regular|same|typical)\b/.test(t)) return null;
+    return { slot: slotIn(t), yesterday: /\byesterday\b/.test(t) };
+  }
+
+  // Her usual meal for a slot: the most often repeated set of foods in the last 3 weeks (ties go to the most recent),
+  // or yesterday's when asked. Returns diary entries without ids, or null.
+  function usualMeal(data, slot, now, opts) {
+    now = now || today();
+    const log = data.foodLog || {};
+    const pick = (k) => (log[k] || []).filter((e) => e.slot === slot);
+    if (opts && opts.yesterday) {
+      const y = pick(dateKey(addDays(now, -1)));
+      return y.length ? y.map(strip) : null;
+    }
+    const seen = {};
+    for (let i = 1; i <= 21; i++) {
+      const items = pick(dateKey(addDays(now, -i)));
+      if (!items.length) continue;
+      const sig = items.map((e) => e.name.toLowerCase() + '|' + e.label).sort().join('+');
+      if (!seen[sig]) seen[sig] = { count: 0, last: i, items };
+      seen[sig].count++;
+    }
+    const best = Object.values(seen).sort((a, b) => b.count - a.count || a.last - b.last)[0];
+    return best ? best.items.map(strip) : null;
+    function strip(e) { const c = { ...e }; delete c.id; delete c.ts; return c; }
+  }
+
+  function parseQty(s) {
+    let qty = null;
+    let m = /^(\d+(?:\.\d+)?)\s*\/\s*(\d+)\s*/.exec(s);
+    if (m) { qty = +m[1] / +m[2]; s = s.slice(m[0].length); }
+    else if ((m = /^(\d+(?:\.\d+)?)\s*(½|¼|¾)?\s*/.exec(s))) { qty = +m[1] + ({ '½': 0.5, '¼': 0.25, '¾': 0.75 }[m[2]] || 0); s = s.slice(m[0].length); }
+    else if ((m = /^(½|¼|¾)\s*/.exec(s))) { qty = { '½': 0.5, '¼': 0.25, '¾': 0.75 }[m[1]]; s = s.slice(m[0].length); }
+    else {
+      m = /^(a\s+couple|a\s+few|a\s+half|half\s+an?|[a-z]+)\b\s*(?:of\s+)?/.exec(s);
+      if (m) {
+        const w = m[1].replace(/\s+/g, ' ');
+        const v = w === 'a couple' ? 2 : w === 'a few' ? 3 : /half/.test(w) ? 0.5 : NUM_WORDS[w];
+        if (v != null) { qty = v; s = s.slice(m[0].length); }
+      }
+    }
+    return { qty, rest: s };
+  }
+
+  // Free text ("two eggs and toast with butter") -> matched everyday foods. Offline and approximate.
+  function parseFoodText(text, foods) {
+    let t = String(text || '').toLowerCase().replace(/[.!?]+$/g, '').trim();
+    const slot = slotIn(t);
+    t = t.replace(/\b(for|at|with)\s+(my\s+)?(breakfast|brekkie|lunch|dinner|supper|snacks?)\b/g, ' ')
+      .replace(/^(breakfast|brekkie|lunch|dinner|supper|snacks?)\s*[:\-]?\s*/, '')
+      .replace(/^(?:(?:so\s+)?(?:today\s+)?i\s+(?:just\s+)?(?:had|ate|have|eaten|grabbed|made)|log(?:ged)?|add|ate|had)\s+/, '')
+      .replace(/\b(this morning|today|tonight|earlier|just now|please)\b/g, ' ');
+    const parts = t.split(/\s*(?:,|;|&|\+|\band then\b|\bthen\b|\band\b|\bwith\b|\bplus\b|\bon\b)\s*/).map((x) => x.trim()).filter(Boolean);
+    const items = [];
+    const unknown = [];
+    parts.forEach((raw) => {
+      let { qty, rest } = parseQty(raw);
+      let unit = null;
+      const um = UNIT_RE.exec(rest);
+      if (um) { unit = um[1].replace(/(glass|inch)es$/, '$1').replace(/([^s])s$/, '$1').replace(/^gram$/, 'g').replace(/^ounce$/, 'oz').replace(/^tablespoon$/, 'tbsp').replace(/^teaspoon$/, 'tsp'); rest = rest.slice(um[0].length); }
+      if (qty == null && unit !== 'g' && unit !== 'oz') { const again = parseQty(rest); if (again.qty != null) { qty = again.qty; rest = again.rest; } }
+      const name = rest.replace(/^(of|my|some|the)\s+/, '').trim();
+      if (!name) return;
+      let best = null;
+      foods.forEach((f) => f.names.forEach((a) => {
+        if (new RegExp(`(^|\\s)${a.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\s|$)`).test(name) && (!best || a.length > best.alias.length)) best = { food: f, alias: a };
+      }));
+      if (!best) { unknown.push(raw); return; }
+      const f = best.food;
+      // The food's own unit, e.g. "2 tbsp" -> 2 tbsp; "1/2 avocado" -> half of one.
+      const fu = /^(\d+\/\d+|\d+)\s+(cups?|tbsp|slices?|scoops?)\b/.exec(f.unit);
+      const fuN = fu ? (fu[1].includes('/') ? +fu[1].split('/')[0] / +fu[1].split('/')[1] : +fu[1]) : 1;
+      const fuWord = fu ? fu[2].replace(/s$/, '') : null;
+      const q = qty == null ? 1 : qty;
+      let servings = q;
+      if (unit === 'g') servings = q / f.grams;
+      else if (unit === 'oz') servings = (q * 28.35) / f.grams;
+      else if (unit && unit === fuWord) servings = q / fuN;
+      else if (unit === 'tsp' && fuWord === 'tbsp') servings = q / 3 / fuN;
+      else if (!unit && qty != null && /^1\/2 /.test(f.unit)) servings = q * 2; // "an avocado" is two halves
+      servings = Math.round(servings * 100) / 100;
+      if (!(servings > 0)) { unknown.push(raw); return; }
+      const frac = (v) => ({ 0.25: '1/4', 0.5: '1/2', 0.75: '3/4' }[v] || String(v));
+      const label = unit && unit !== 'serving' ? `${frac(q)} ${unit}${q > 1 && !['g', 'oz', 'tbsp', 'tsp'].includes(unit) ? (unit === 'glass' ? 'es' : 's') : ''}` : servings === 1 ? f.unit : `${frac(servings)} x ${f.unit}`;
+      const r1 = (v) => Math.round(v * servings * 10) / 10;
+      const shown = ['protein', 'oil', 'nuts', 'pb'].includes(best.alias) ? f.names[0] : best.alias;
+      items.push({ name: shown.charAt(0).toUpperCase() + shown.slice(1), portion: label, grams: Math.round(f.grams * servings), kcal: Math.round(f.kcal * servings), protein: r1(f.protein), carbs: r1(f.carbs), fat: r1(f.fat), confidence: 'medium' });
+    });
+    return { slot, items, unknown };
+  }
+
+  // Clean AI estimates before showing them: sane ranges, no blanks.
+  function cleanEstimates(items) {
+    const num = (v, max) => { const x = Number(v); return Number.isFinite(x) ? Math.min(max, Math.max(0, x)) : 0; };
+    return (Array.isArray(items) ? items : []).filter((i) => i && typeof i.name === 'string' && i.name.trim()).slice(0, 15).map((i) => ({
+      name: i.name.trim().slice(0, 60),
+      portion: String(i.portion || '1 portion').slice(0, 40),
+      grams: Math.round(num(i.grams, 3000)) || null,
+      kcal: Math.round(num(i.kcal, 3000)),
+      protein: Math.round(num(i.protein, 300) * 10) / 10,
+      carbs: Math.round(num(i.carbs, 500) * 10) / 10,
+      fat: Math.round(num(i.fat, 300) * 10) / 10,
+      confidence: ['high', 'medium', 'low'].includes(i.confidence) ? i.confidence : 'medium',
+    }));
+  }
+
+  // An estimate as a loggable food: one serving is the estimated portion.
+  function estimateFood(item, source) {
+    const per100 = item.grams ? { kcal: (item.kcal / item.grams) * 100, protein: (item.protein / item.grams) * 100, carbs: (item.carbs / item.grams) * 100, fat: (item.fat / item.grams) * 100 } : null;
+    return { barcode: null, name: item.name, brand: source === 'photo' ? 'Plate photo estimate' : 'Estimate', image: null, custom: true, estimated: true, serving: { label: item.portion, grams: item.grams || null }, perServing: { kcal: item.kcal, protein: item.protein, carbs: item.carbs, fat: item.fat }, per100 };
+  }
+
   // Check-in day: her chosen weekday (0 = Sunday). Due on that day or the day after, once a week.
   const checkinDay = (data) => (Number.isInteger(data.checkinDay) ? data.checkinDay : 0);
   function weeklyDue(data, now) {
@@ -607,7 +732,7 @@
     GOALS, LEVELS, ACTIVITY, goalOf, activityOf, STEADY_MODES, MENO_MODES, menoInsights, checkinDay, checkinTomorrow,
     learnCycle, addPeriod, cycleInfo, targets, readiness, readinessLabel, patterns,
     workoutById, plannedWorkout, workoutFor, adjustSets, parseReps, e1rm, suggestLoad, detectPRs, strengthByPhase, exerciseHistory,
-    mealOptions, mealFor, proteinFor, aisleFor, storeLink, buildTotals, macrosFor, parseOFF, foodMacros, validBarcode, recipeTotals, recipeFood, groceryList, streak, weeklyStats, weeklyAdjust, applyAdjustments, weeklyDue,
+    mealOptions, mealFor, proteinFor, aisleFor, storeLink, buildTotals, macrosFor, parseOFF, foodMacros, validBarcode, recipeTotals, recipeFood, groceryList, parseFoodText, usualRequest, usualMeal, cleanEstimates, estimateFood, streak, weeklyStats, weeklyAdjust, applyAdjustments, weeklyDue,
   };
   if (typeof window !== 'undefined') window.YOURS_LOGIC = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

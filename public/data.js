@@ -532,6 +532,60 @@
     },
   ];
 
+  // Everyday foods for talk-to-log when the AI coach is off. Values per unit, approximate (USDA averages).
+  // b(id, aliases, unit label, grams per unit, kcal, protein, carbs, fat)
+  const b = (id, names, unit, grams, kcal, protein, carbs, fat) => ({ id, names, unit, grams, kcal, protein, carbs, fat });
+  const BASIC_FOODS = [
+    b('egg', ['egg', 'eggs', 'boiled egg', 'boiled eggs', 'fried egg', 'fried eggs', 'scrambled egg', 'scrambled eggs'], '1 large egg', 50, 72, 6.3, 0.4, 4.8),
+    b('egg-white', ['egg white', 'egg whites'], '1 egg white', 33, 17, 3.6, 0.2, 0.1),
+    b('toast', ['toast', 'slice of toast', 'slices of toast', 'bread', 'slice of bread', 'slices of bread'], '1 slice', 32, 80, 3, 14, 1),
+    b('sourdough', ['sourdough', 'sourdough toast'], '1 slice', 50, 130, 5, 25, 1),
+    b('bagel', ['bagel', 'bagels'], '1 bagel', 105, 280, 11, 55, 1.7),
+    b('english-muffin', ['english muffin', 'english muffins'], '1 muffin', 57, 130, 5, 25, 1),
+    b('tortilla', ['tortilla', 'tortillas', 'wrap', 'wraps'], '1 tortilla (8 in)', 49, 140, 4, 24, 3.5),
+    b('oats', ['oats', 'oatmeal', 'porridge', 'overnight oats'], '1/2 cup dry', 40, 150, 5, 27, 3),
+    b('granola', ['granola'], '1/2 cup', 60, 270, 6, 38, 11),
+    b('cereal', ['cereal'], '1 cup', 30, 115, 2.5, 25, 1),
+    b('greek-yogurt', ['greek yogurt', 'greek yoghurt', 'yogurt', 'yoghurt'], '1 cup (170 g)', 170, 100, 17, 6, 0.7),
+    b('cottage-cheese', ['cottage cheese'], '1/2 cup', 113, 90, 12, 5, 2.5),
+    b('milk', ['milk', 'glass of milk'], '1 cup', 244, 122, 8, 12, 4.8),
+    b('oat-milk', ['oat milk', 'oatmilk'], '1 cup', 240, 120, 3, 16, 5),
+    b('almond-milk', ['almond milk'], '1 cup', 240, 40, 1, 2, 3),
+    b('cheese', ['cheese', 'slice of cheese', 'cheddar'], '1 slice (1 oz)', 28, 113, 7, 0.4, 9.3),
+    b('butter', ['butter'], '1 tbsp', 14, 102, 0.1, 0, 11.5),
+    b('olive-oil', ['olive oil', 'oil'], '1 tbsp', 14, 119, 0, 0, 13.5),
+    b('peanut-butter', ['peanut butter', 'pb', 'almond butter'], '1 tbsp', 16, 95, 3.5, 3.5, 8),
+    b('avocado', ['avocado', 'avocados', 'avo'], '1/2 avocado', 68, 114, 1.3, 6, 10.5),
+    b('banana', ['banana', 'bananas'], '1 medium', 118, 105, 1.3, 27, 0.4),
+    b('apple', ['apple', 'apples'], '1 medium', 182, 95, 0.5, 25, 0.3),
+    b('orange', ['orange', 'oranges'], '1 medium', 131, 62, 1.2, 15, 0.2),
+    b('berries', ['berries', 'blueberries', 'strawberries', 'raspberries'], '1 cup', 148, 70, 1, 17, 0.5),
+    b('chicken', ['chicken', 'chicken breast', 'grilled chicken'], '4 oz cooked', 113, 187, 35, 0, 4),
+    b('turkey', ['ground turkey', 'turkey'], '4 oz cooked', 113, 230, 31, 0, 11),
+    b('beef', ['ground beef', 'beef', 'steak'], '4 oz cooked', 113, 280, 30, 0, 17),
+    b('salmon', ['salmon'], '4 oz cooked', 113, 233, 25, 0, 14),
+    b('tuna', ['tuna', 'can of tuna'], '1 can (5 oz)', 142, 120, 27, 0, 1),
+    b('shrimp', ['shrimp', 'prawns'], '4 oz cooked', 113, 112, 27, 0, 1),
+    b('tofu', ['tofu'], '1/2 block (7 oz)', 200, 180, 20, 4, 10),
+    b('bacon', ['bacon', 'slice of bacon', 'slices of bacon', 'strips of bacon'], '1 slice', 8, 43, 3, 0.1, 3.3),
+    b('rice', ['rice', 'white rice', 'brown rice'], '1 cup cooked', 158, 205, 4.3, 45, 0.4),
+    b('quinoa', ['quinoa'], '1 cup cooked', 185, 222, 8, 39, 3.6),
+    b('pasta', ['pasta', 'spaghetti', 'noodles'], '1 cup cooked', 140, 220, 8, 43, 1.3),
+    b('potato', ['potato', 'potatoes', 'baked potato'], '1 medium', 173, 160, 4.3, 37, 0.2),
+    b('sweet-potato', ['sweet potato', 'sweet potatoes'], '1 medium', 130, 112, 2, 26, 0.1),
+    b('broccoli', ['broccoli'], '1 cup', 91, 31, 2.5, 6, 0.3),
+    b('salad', ['salad', 'side salad', 'greens', 'spinach'], '2 cups', 60, 15, 1.5, 2.5, 0.2),
+    b('protein-shake', ['protein shake', 'protein shakes', 'shake', 'scoop of protein', 'scoops of protein', 'protein powder', 'whey', 'protein'], '1 scoop', 32, 120, 24, 3, 1.5),
+    b('protein-bar', ['protein bar', 'protein bars'], '1 bar', 60, 200, 20, 22, 7),
+    b('almonds', ['almonds', 'nuts', 'handful of almonds', 'handful of nuts'], '1 oz (23 almonds)', 28, 164, 6, 6, 14),
+    b('hummus', ['hummus'], '2 tbsp', 30, 70, 2, 4, 5),
+    b('honey', ['honey'], '1 tbsp', 21, 64, 0, 17, 0),
+    b('coffee', ['coffee', 'black coffee', 'espresso', 'americano'], '1 cup', 240, 2, 0.3, 0, 0),
+    b('latte', ['latte', 'cappuccino', 'flat white'], '1 grande (2% milk)', 470, 190, 13, 19, 7),
+    b('dark-chocolate', ['dark chocolate', 'chocolate'], '1 oz', 28, 170, 2, 13, 12),
+    b('rice-cake', ['rice cake', 'rice cakes'], '1 cake', 9, 35, 0.7, 7.3, 0.3),
+  ];
+
   // Grocery stores: each link opens that store's own product search for an item.
   const STORES = [
     { id: 'walmart', name: 'Walmart', search: 'https://www.walmart.com/search?q=' },
@@ -544,7 +598,7 @@
     { id: 'amazonfresh', name: 'Amazon Fresh', search: 'https://www.amazon.com/s?i=amazonfresh&k=' },
   ];
 
-  const api = { RESTAURANTS, STORES, PHASE_COPY, IMAGERY, PHASES, PHASE_ORDER, WORKOUTS, ROTATION, MEALS, FAVORITE_OPTIONS, AVOID_OPTIONS, MEMBERS, SEED_POSTS, AUTO_REPLIES, CYCLE_MODES, SYMPTOMS, MENO_SYMPTOMS, GROCERY };
+  const api = { BASIC_FOODS, RESTAURANTS, STORES, PHASE_COPY, IMAGERY, PHASES, PHASE_ORDER, WORKOUTS, ROTATION, MEALS, FAVORITE_OPTIONS, AVOID_OPTIONS, MEMBERS, SEED_POSTS, AUTO_REPLIES, CYCLE_MODES, SYMPTOMS, MENO_SYMPTOMS, GROCERY };
   if (typeof window !== 'undefined') window.YOURS_DATA = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

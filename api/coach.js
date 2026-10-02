@@ -1,6 +1,7 @@
 // YOURS AI coach endpoint (Vercel serverless function; also mounted by server.js locally).
 // GET  -> { ai: boolean } so the app knows whether the live coach is available.
 // POST -> { mode: "chat" | "progress", context, messages?, images? } -> { text, verdict? }
+// POST -> { mode: "food", image? | text, units, myFoods? } -> { items: [...], slot, note }  (plate photo or talk-to-log)
 // Photos are only held in memory for the duration of the request and are never stored.
 
 const Anthropic = require('@anthropic-ai/sdk');
@@ -52,6 +53,77 @@ Format:
 First line exactly: VERDICT: on_track | progressing | adjust   (pick one)
 Then a short headline sentence.
 Then sections titled "What is working", "Focus next", and "Next 2 weeks" with 2-4 bullets each.`;
+
+const FOOD_SYSTEM = `You estimate food and macros for the food diary in YOURS, a fitness app for women. You receive either a photo of a plate or meal, or her own words describing what she ate.
+
+Rules:
+- List each distinct food as its own item (for example grilled chicken, rice, broccoli, sauce). Combine only things that cannot be separated, like a sandwich or a burrito, and name them as one dish.
+- Estimate portions realistically. For photos use visual cues: a dinner plate is about 10-11 inches across, a fork is about 7 inches, a palm of meat is about 4 oz. For words, use her stated amounts; when none is given assume one normal adult portion.
+- Include likely cooking fats, dressings and sauces as separate items when they are visible or implied (glossy vegetables, fried food, "with dressing"), with low confidence when you are guessing.
+- Values are for the portion shown or described, not per 100 g. kcal is energy in kilocalories (food calories). Use typical USDA-style values; for branded or restaurant items use their published values when you know them.
+- portion is a short human-readable amount in her units: imperial means oz, cups, tbsp, slices or pieces; metric means g or ml. grams is your best estimate of the portion weight in grams.
+- confidence: high when the food and amount are clear, medium for a reasonable estimate, low for hidden or uncertain items.
+- If she refers to one of her saved foods (given as myFoods), reuse its name and values scaled to the amount she says.
+- slot: the meal she mentions (breakfast, lunch, dinner, snack), otherwise "none".
+- note: one short sentence, for example what to double-check ("Oil is a guess - adjust if it was cooked dry"). If the photo is not food or is too unclear, return no items and say so in note.
+- Never comment on her body or whether she should have eaten something.`;
+
+const FOOD_SCHEMA = {
+  type: 'object',
+  properties: {
+    items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          portion: { type: 'string' },
+          grams: { type: 'number' },
+          kcal: { type: 'number' },
+          protein: { type: 'number' },
+          carbs: { type: 'number' },
+          fat: { type: 'number' },
+          confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+        },
+        required: ['name', 'portion', 'grams', 'kcal', 'protein', 'carbs', 'fat', 'confidence'],
+        additionalProperties: false,
+      },
+    },
+    slot: { type: 'string', enum: ['breakfast', 'lunch', 'dinner', 'snack', 'none'] },
+    note: { type: 'string' },
+  },
+  required: ['items', 'slot', 'note'],
+  additionalProperties: false,
+};
+
+function cleanFoodHints(foods) {
+  if (!Array.isArray(foods)) return [];
+  return foods.slice(0, 20).filter((f) => f && typeof f.name === 'string').map((f) => ({
+    name: f.name.slice(0, 60),
+    portion: String(f.portion || '').slice(0, 40),
+    kcal: Number(f.kcal) || 0,
+    protein: Number(f.protein) || 0,
+    carbs: Number(f.carbs) || 0,
+    fat: Number(f.fat) || 0,
+  }));
+}
+
+function cleanFoodItems(items) {
+  const num = (v, max) => {
+    const x = Number(v);
+    return Number.isFinite(x) ? Math.min(max, Math.max(0, x)) : 0;
+  };
+  return (Array.isArray(items) ? items : []).slice(0, 15).filter((i) => i && typeof i.name === 'string' && i.name.trim()).map((i) => ({
+    name: i.name.trim().slice(0, 60),
+    portion: String(i.portion || '1 portion').slice(0, 40),
+    grams: Math.round(num(i.grams, 3000)),
+    kcal: Math.round(num(i.kcal, 3000)),
+    protein: Math.round(num(i.protein, 300) * 10) / 10,
+    carbs: Math.round(num(i.carbs, 500) * 10) / 10,
+    fat: Math.round(num(i.fat, 300) * 10) / 10,
+    confidence: ['high', 'medium', 'low'].includes(i.confidence) ? i.confidence : 'medium',
+  }));
+}
 
 let client;
 function getClient() {
@@ -117,7 +189,11 @@ async function readBody(req) {
   return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
 }
 
-module.exports = async function handler(req, res) {
+module.exports = handler;
+module.exports.cleanFoodItems = cleanFoodItems;
+module.exports.FOOD_SCHEMA = FOOD_SCHEMA;
+
+async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
 
   if (req.method === 'GET') {
@@ -141,6 +217,42 @@ module.exports = async function handler(req, res) {
   const context = JSON.stringify(body.context || {}).slice(0, 12000);
 
   try {
+    if (body.mode === 'food') {
+      const image = body.image ? parseImage(body.image) : null;
+      if (body.image && !image) return res.status(400).json({ error: 'Unsupported or oversized image' });
+      const said = typeof body.text === 'string' ? body.text.trim().slice(0, 600) : '';
+      if (!image && !said) return res.status(400).json({ error: 'Send a photo or a description' });
+      const units = body.units === 'metric' ? 'metric' : 'imperial';
+      const hints = cleanFoodHints(body.myFoods);
+      const intro = `Units: ${units}.${hints.length ? `\nmyFoods: ${JSON.stringify(hints)}` : ''}`;
+      const response = await createMessage({
+        model: MODEL,
+        max_tokens: 3000,
+        output_config: { effort: image ? 'medium' : 'low', format: { type: 'json_schema', schema: FOOD_SCHEMA } },
+        system: FOOD_SYSTEM,
+        messages: [
+          {
+            role: 'user',
+            content: image
+              ? [image, { type: 'text', text: `${intro}\n\nEstimate what is on this plate.${said ? ` She adds: "${said}"` : ''}` }]
+              : `${intro}\n\nWhat she said: "${said}"`,
+          },
+        ],
+      });
+      if (response.stop_reason === 'refusal') return res.status(200).json({ items: [], slot: null, note: 'I could not estimate that one. Try another photo or describe it.' });
+      let parsed;
+      try {
+        parsed = JSON.parse(response.content.filter((b) => b.type === 'text').map((b) => b.text).join(''));
+      } catch {
+        return res.status(502).json({ error: 'Could not read the estimate' });
+      }
+      return res.status(200).json({
+        items: cleanFoodItems(parsed.items),
+        slot: parsed.slot && parsed.slot !== 'none' ? parsed.slot : null,
+        note: typeof parsed.note === 'string' ? parsed.note.slice(0, 300) : '',
+      });
+    }
+
     if (body.mode === 'progress') {
       const images = (Array.isArray(body.images) ? body.images : []).slice(0, MAX_IMAGES).map(parseImage);
       if (images.some((i) => !i)) return res.status(400).json({ error: 'Unsupported or oversized image' });
@@ -190,4 +302,4 @@ module.exports = async function handler(req, res) {
     console.error('coach error', status, err && err.message);
     return res.status(status === 429 ? 429 : 502).json({ error: 'Coach unavailable' });
   }
-};
+}
