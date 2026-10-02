@@ -179,7 +179,23 @@
     return true;
   }
 
-  const exported = { create, hasAccess, pickNewer, mapFeed, mapThreads, friendlyError, ID, UID };
+  // Has this password appeared in a data breach? Uses Have I Been Pwned's k-anonymity range API: only the first
+  // 5 characters of the password's SHA-1 hash leave the device, so the service never learns the password.
+  // Returns the number of breaches it was seen in, or null if the check could not run (never blocks sign-up).
+  async function passwordLeaks(password, fetchImpl) {
+    try {
+      const f = fetchImpl || fetch;
+      const buf = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(password));
+      const hash = Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+      const r = await f(`https://api.pwnedpasswords.com/range/${hash.slice(0, 5)}`, { headers: { 'Add-Padding': 'true' } });
+      if (!r.ok) return null;
+      const suffix = hash.slice(5);
+      const line = (await r.text()).split('\n').find((l) => l.split(':')[0].trim() === suffix);
+      return line ? parseInt(line.split(':')[1], 10) || 0 : 0;
+    } catch { return null; }
+  }
+
+  const exported = { create, hasAccess, passwordLeaks, pickNewer, mapFeed, mapThreads, friendlyError, ID, UID };
   if (typeof window !== 'undefined') window.YOURS_CLOUD = exported;
   if (typeof module !== 'undefined' && module.exports) module.exports = exported;
 })();

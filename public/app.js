@@ -1409,8 +1409,8 @@
 
   function signupForm(context) {
     return `<form data-form="signup" data-context="${context}">
-      <label class="field"><span class="label">First name</span><input class="input" name="name" autocomplete="given-name" required maxlength="40"></label>
-      <label class="field"><span class="label">Email</span><input class="input" type="email" name="email" autocomplete="email" required></label>
+      <label class="field"><span class="label">First name</span><input class="input" name="name" autocomplete="given-name" required maxlength="40" value="${esc((S.authForm || {}).name || '')}"></label>
+      <label class="field"><span class="label">Email</span><input class="input" type="email" name="email" autocomplete="email" required value="${esc((S.authForm || {}).email || '')}"></label>
       <label class="field"><span class="label">Password</span><input class="input" type="password" name="password" autocomplete="new-password" minlength="${cloud ? 8 : 6}" required placeholder="At least ${cloud ? 8 : 6} characters"></label>
       ${S.authError ? `<p class="error" style="margin-top:12px">${esc(S.authError)}</p>` : ''}
       <button class="btn primary block" style="margin-top:18px" type="submit">Save my plan</button>
@@ -2677,6 +2677,7 @@
     const name = form.name.value.trim();
     const email = form.email.value.trim().toLowerCase();
     const password = form.password.value;
+    S.authForm = { name, email }; // kept if there is an error, so she does not retype them
     if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { S.authError = 'Enter your name and a valid email.'; return render(); }
     if (password.length < (cloud ? 8 : 6)) { S.authError = `Use at least ${cloud ? 8 : 6} characters for your password.`; return render(); }
     if (cloud) return cloudSignup(name, email, password);
@@ -2699,6 +2700,7 @@
 
   async function cloudSignup(name, email, password) {
     S.authBusy = true; render();
+    if (await window.YOURS_CLOUD.passwordLeaks(password) > 0) { S.authBusy = false; S.authError = 'A password like this has appeared in a data breach, so it is easy for others to guess. Please choose a different one.'; return render(); }
     try {
       const r = await cloud.signUp(email, password, name);
       rememberCloudUser(email, name);
@@ -2756,6 +2758,7 @@
 
   async function login(form) {
     const email = form.email.value.trim().toLowerCase();
+    S.prefillEmail = email;
     if (cloud) return cloudLogin(email, form.password.value);
     const u = users()[email];
     if (!u || (await hashSecret(form.password.value, u.salt)) !== u.hash) { S.authError = 'That email and password do not match.'; return render(); }
@@ -3427,6 +3430,7 @@
     if (type === 'new-password') {
       const pw = form.password.value;
       if (pw.length < 8) return toast('Use at least 8 characters');
+      if (await window.YOURS_CLOUD.passwordLeaks(pw) > 0) return toast('A password like this has appeared in a data breach, so it is easy for others to guess. Please choose a different one.');
       try { await cloud.updatePassword(pw); S.modal = null; render(); return toast('Password updated'); } catch (e) { return toast(window.YOURS_CLOUD.friendlyError(e)); }
     }
     if (type === 'backup-setup' || type === 'backup-unlock') {
