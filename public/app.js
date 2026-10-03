@@ -1974,6 +1974,69 @@
         <button class="btn primary block" style="margin-top:14px" data-action="program-start" ${ready ? '' : 'disabled'}>${ready ? 'Start today' : pr.clearance && !m.cleared ? 'Confirm clearance to start' : `Pick ${pr.perWeek - m.days.length > 0 ? pr.perWeek - m.days.length + ' more' : 'only ' + pr.perWeek} day${Math.abs(pr.perWeek - m.days.length) === 1 ? '' : 's'}`}</button>`}`;
   }
 
+  // ---------- workout logger: supersets, rest timer, plates ----------
+  // A superset pairs an exercise with the next one: A1 then A2, rest after A2.
+  function supersetTag(a, ei) {
+    const ex = a.exercises[ei];
+    const prev = a.exercises[ei - 1];
+    if (!ex.superset && !(prev && prev.superset)) return '';
+    let letter = 0;
+    for (let i = 0; i <= ei; i++) if (a.exercises[i].superset && !(i && a.exercises[i - 1].superset)) letter++;
+    return `${String.fromCharCode(64 + letter)}${prev && prev.superset ? 2 : 1}`;
+  }
+  const fmtRest = (sec) => (sec >= 60 ? `${Math.round((sec / 60) * 10) / 10} min`.replace('.0 ', ' ') : `${sec}s`);
+  const fmtClock = (sec) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+  const restLeft = () => (S.rest ? Math.max(0, Math.ceil((S.rest.endsAt - Date.now()) / 1000)) : 0);
+  let restTimer = null;
+  let audioCtx = null;
+  function startRest(seconds, label) {
+    if (!seconds) return;
+    try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); } catch { audioCtx = null; } // unlocked by this tap
+    S.rest = { endsAt: Date.now() + seconds * 1000, label: label || '' };
+    clearInterval(restTimer);
+    restTimer = setInterval(tickRest, 500);
+  }
+  function stopRest() { clearInterval(restTimer); restTimer = null; S.rest = null; }
+  function tickRest() {
+    if (!S.rest) return stopRest();
+    const left = restLeft();
+    const el = document.getElementById('rest-time');
+    if (el) el.textContent = fmtClock(left);
+    if (left > 0) return;
+    stopRest();
+    try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch { /* not supported */ }
+    try {
+      if (audioCtx) { const o = audioCtx.createOscillator(); const g = audioCtx.createGain(); o.frequency.value = 880; g.gain.setValueAtTime(0.15, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4); o.connect(g).connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + 0.4); }
+    } catch { /* sound unavailable */ }
+    toast('Rest done. Next set.');
+    if (S.modal && S.modal.type === 'active') render();
+  }
+  // After a set: in a superset, go straight to the partner; otherwise rest.
+  function afterSet(a, ei, si) {
+    const ex = a.exercises[ei];
+    const partnerNext = ex.superset && a.exercises[ei + 1];
+    const partnerPrev = ei > 0 && a.exercises[ei - 1].superset ? a.exercises[ei - 1] : null;
+    if (partnerNext) { stopRest(); toast(`Now ${partnerNext.name}`); return; }
+    const rest = Math.max(ex.rest || 0, partnerPrev ? partnerPrev.rest || 0 : 0);
+    const first = partnerPrev || ex;
+    const nextUp = first.sets.some((x) => !x.done) ? first.name : (a.exercises.slice(ei + 1).find((x) => x.sets.some((y) => !y.done)) || {}).name;
+    if (rest && nextUp) startRest(rest, nextUp);
+  }
+  function platesPanel(a, ex, ei) {
+    const unit = a.unit === 'kg' ? 'kg' : 'lb';
+    const next = ex.sets.find((x) => !x.done) || ex.sets[ex.sets.length - 1];
+    const total = Number(next && next.weight) || (ex.suggestion ? ex.suggestion.weight : 0);
+    if (!ex.platesOpen) return `<button class="link small" style="margin-top:8px;margin-right:14px" data-action="plates-toggle" data-ei="${ei}">Plate math</button>`;
+    const bar = ex.bar || L.defaultBar(ex.name, unit);
+    const r = total ? L.platesFor(total, unit, bar) : null;
+    const plate = (p) => `<span class="plate" style="height:${Math.round(22 + (p / L.BARS[unit][0]) * 26)}px">${p}</span>`;
+    return `<div class="plates-box">
+      <div class="row between"><span class="eyebrow" style="color:var(--text)">${total ? `${total} ${unit}` : 'Enter a weight'}</span><button class="link small" data-action="plates-toggle" data-ei="${ei}">Hide</button></div>
+      <div class="chips" style="margin-top:8px">${L.BARS[unit].map((b) => `<button class="chip ${bar === b ? 'selected' : ''}" data-action="plates-bar" data-ei="${ei}" data-bar="${b}">${b} ${unit} bar</button>`).join('')}</div>
+      ${r ? (r.belowBar ? `<p class="small muted" style="margin-top:8px">That is less than the bar (${bar} ${unit}).</p>` : `<p class="small" style="margin-top:8px">Each side: <strong>${r.perSide.length ? r.perSide.join(' + ') : 'no plates'}</strong></p><div class="plates-row" aria-hidden="true">${r.perSide.map(plate).join('')}<span class="plate-bar"></span></div>${r.leftover ? `<p class="tiny muted">${r.leftover} ${unit} can't be made with standard plates.</p>` : ''}`) : ''}
+    </div>`;
+  }
+
   function startWorkout(id) {
     const wk = workoutById(id);
     const c = cyc();
@@ -1983,7 +2046,8 @@
       exercises: wk.exercises.map((ex) => {
         const s = L.suggestLoad(ex.name, ex.reps, S.data.workouts, { phase: c.phase, readiness: readinessToday(), unit: u });
         const weighted = !!L.parseReps(ex.reps) && !BODYWEIGHT.test(ex.name);
-        return { name: ex.name, reps: ex.reps, weighted, suggestion: s && !s.first ? s : null, sets: Array.from({ length: adjustSets(ex) }, () => ({ weight: s && !s.first ? String(s.weight) : '', reps: '', target: s ? s.reps : '', done: false })) };
+        const lastNote = (S.data.workouts.slice().reverse().map((w) => (w.detail || []).find((d) => d.name === ex.name && d.note)).find(Boolean) || {}).note || '';
+        return { name: ex.name, reps: ex.reps, rest: L.parseRest(ex.rest), note: '', lastNote, weighted, suggestion: s && !s.first ? s : null, sets: Array.from({ length: adjustSets(ex) }, () => ({ weight: s && !s.first ? String(s.weight) : '', reps: '', target: s ? s.reps : '', done: false })) };
       }),
     };
     save();
@@ -2000,22 +2064,27 @@
       <div class="sheet-head"><button class="icon-btn" data-action="close-modal" aria-label="Minimise">${icon('back', 20)}</button><div class="center"><div class="eyebrow">In progress</div><strong>${esc(a.name)}</strong></div><button class="link" data-action="discard-workout">Discard</button></div>
       <div class="progress-bar"><div style="width:${(doneSets / total) * 100}%"></div></div>
       <p class="small muted center" style="margin-top:8px">${doneSets} of ${total} sets</p>
-      ${a.exercises.map((ex, ei) => `<div class="card" style="margin-top:12px"><div class="row between"><strong>${esc(ex.name)}</strong><span class="small muted">Target ${esc(ex.reps)}</span></div>
+      ${a.exercises.map((ex, ei) => { const tag = supersetTag(a, ei); return `<div class="card" style="margin-top:${ei && a.exercises[ei - 1].superset ? 4 : 12}px;${tag ? 'border-left:3px solid var(--accent)' : ''}"><div class="row between"><strong>${tag ? `<span class="tag accent" style="margin-right:6px">${tag}</span>` : ''}${esc(ex.name)}</strong><span class="small muted">Target ${esc(ex.reps)}${ex.rest ? ` · rest ${fmtRest(ex.rest)}` : ''}</span></div>
         ${ex.suggestion ? `<div class="why" style="margin-top:8px"><strong>${fmtLoad(ex.suggestion.weight, ex.suggestion.unit)} x ${ex.suggestion.reps}</strong> · ${esc(ex.suggestion.reason)}</div>` : ''}
         <div class="set-row tiny muted" style="margin-top:10px"><span>Set</span><span class="center">${ex.weighted ? a.unit : '-'}</span><span class="center">Reps</span><span></span></div>
         ${ex.sets.map((s, si) => `<div class="set-row"><span class="ex-num">${si + 1}</span><input class="input" type="number" inputmode="decimal" placeholder="-" value="${esc(s.weight)}" data-set="${ei}.${si}.weight" aria-label="Weight set ${si + 1}"><input class="input" type="number" inputmode="numeric" placeholder="${esc(s.target || '-')}" value="${esc(s.reps)}" data-set="${ei}.${si}.reps" aria-label="Reps set ${si + 1}"><button class="check ${s.done ? 'on' : ''}" data-action="toggle-set" data-ei="${ei}" data-si="${si}" aria-label="Mark set done">${icon('check', 18, 2.4)}</button></div>`).join('')}
-      </div>`).join('')}
-      <button class="btn primary block" style="margin-top:20px" data-action="finish-workout" ${doneSets ? '' : 'disabled'}>Finish workout</button>
+        ${ex.weighted && L.isBarbell(ex.name) ? platesPanel(a, ex, ei) : ''}
+        ${ex.lastNote ? `<p class="tiny muted" style="margin-top:8px">Last time: ${esc(ex.lastNote)}</p>` : ''}
+        ${ex.noteOpen || ex.note ? `<textarea class="input" style="margin-top:8px;height:64px;padding:10px 14px;resize:none" data-note="${ei}" maxlength="300" placeholder="Note for next time, e.g. felt easy, go up 5 lb" aria-label="Note for ${esc(ex.name)}">${esc(ex.note || '')}</textarea>` : `<button class="link small" style="margin-top:8px" data-action="note-open" data-ei="${ei}">Add note</button>`}
+      </div>${ei < a.exercises.length - 1 && !(ei && a.exercises[ei - 1].superset) ? `<div class="center" style="margin-top:6px"><button class="link tiny" data-action="superset-toggle" data-ei="${ei}">${ex.superset ? 'Unlink superset' : 'Superset with next'}</button></div>` : ''}`; }).join('')}
+      <button class="btn primary block" style="margin-top:20px;margin-bottom:${S.rest ? 90 : 0}px" data-action="finish-workout" ${doneSets ? '' : 'disabled'}>Finish workout</button>
+      ${S.rest ? `<div class="rest-bar" role="timer" aria-live="off"><div class="grow"><div class="eyebrow" style="color:inherit;opacity:.7">Rest${S.rest.label ? ` · next: ${esc(S.rest.label)}` : ''}</div><div id="rest-time" class="rest-time">${fmtClock(restLeft())}</div></div><button class="btn outline xs" data-action="rest-add" data-d="-15" aria-label="15 seconds less">−15</button><button class="btn outline xs" data-action="rest-add" data-d="15" aria-label="15 seconds more">+15</button><button class="btn cream xs" data-action="rest-skip">Skip</button></div>` : ''}
     </div></div>`;
   }
 
   function finishWorkout() {
+    stopRest();
     const a = S.data.activeWorkout;
     const sets = a.exercises.reduce((n, e) => n + e.sets.filter((s) => s.done).length, 0);
     const minutes = clamp(Math.round((Date.now() - a.startedAt) / 60000), 5, 240);
     const record = {
       id: uid(), date: todayKey(), templateId: a.templateId, name: a.name, minutes, sets, unit: a.unit, phase: a.phase,
-      detail: a.exercises.map((e) => ({ name: e.name, sets: e.sets.filter((s) => s.done).map((s) => ({ weight: Number(s.weight) || 0, reps: Number(s.reps) || 0 })) })).filter((e) => e.sets.length),
+      detail: a.exercises.map((e) => ({ name: e.name, ...(e.note && e.note.trim() ? { note: e.note.trim().slice(0, 300) } : {}), sets: e.sets.filter((s) => s.done).map((s) => ({ weight: Number(s.weight) || 0, reps: Number(s.reps) || 0 })) })).filter((e) => e.sets.length),
     };
     const prs = L.detectPRs(record, S.data.workouts).map((p) => ({ ...p, date: record.date, workoutId: record.id, phase: record.phase }));
     const volume = record.detail.reduce((n, e) => n + e.sets.reduce((m, s) => m + s.weight * s.reps, 0), 0);
@@ -3162,13 +3231,21 @@
     },
     'resume-workout': () => { S.modal = { type: 'active' }; render(); },
     'toggle-set': (el) => {
-      const s = S.data.activeWorkout.exercises[el.dataset.ei].sets[el.dataset.si];
+      const a = S.data.activeWorkout;
+      const s = a.exercises[el.dataset.ei].sets[el.dataset.si];
       s.done = !s.done;
       if (s.done && !s.reps && s.target) s.reps = String(s.target);
+      if (s.done) afterSet(a, Number(el.dataset.ei), Number(el.dataset.si)); else stopRest();
       save(); render();
     },
+    'rest-add': (el) => { if (!S.rest) return; S.rest.endsAt = Math.max(Date.now() + 1000, S.rest.endsAt + Number(el.dataset.d) * 1000); tickRest(); },
+    'rest-skip': () => { stopRest(); render(); },
+    'superset-toggle': (el) => { const ex = S.data.activeWorkout.exercises[el.dataset.ei]; ex.superset = !ex.superset; save(); render(); },
+    'note-open': (el) => { S.data.activeWorkout.exercises[el.dataset.ei].noteOpen = true; render(); const t = root.querySelector(`[data-note="${el.dataset.ei}"]`); if (t) t.focus(); },
+    'plates-toggle': (el) => { const ex = S.data.activeWorkout.exercises[el.dataset.ei]; ex.platesOpen = !ex.platesOpen; render(); },
+    'plates-bar': (el) => { S.data.activeWorkout.exercises[el.dataset.ei].bar = Number(el.dataset.bar); save(); render(); },
     'finish-workout': () => finishWorkout(),
-    'discard-workout': () => { if (!confirm('Discard this workout?')) return; S.data.activeWorkout = null; S.modal = null; save(); render(); },
+    'discard-workout': () => { if (!confirm('Discard this workout?')) return; stopRest(); S.data.activeWorkout = null; S.modal = null; save(); render(); },
     'swap-today': () => { S.modal = { type: 'swap' }; render(); },
     'set-today': (el) => { S.data.overrides[todayKey()] = el.dataset.id; S.modal = null; save(); render(); toast(`Today is now ${workoutById(el.dataset.id).name}`); },
     'reset-today': () => { delete S.data.overrides[todayKey()]; S.modal = null; save(); render(); },
@@ -3443,6 +3520,7 @@
       const box = document.getElementById('food-macros');
       if (box) box.innerHTML = foodMacroTiles(L.foodMacros(S.modal.food, S.modal.amount, 'grams'));
     }
+    if (el.dataset.note != null && S.data && S.data.activeWorkout) { const ex = S.data.activeWorkout.exercises[el.dataset.note]; if (ex) { ex.note = el.value.slice(0, 300); save(); } return; }
     if (el.dataset.set && S.data.activeWorkout) {
       const [ei, si, field] = el.dataset.set.split('.');
       S.data.activeWorkout.exercises[ei].sets[si][field] = el.value;
