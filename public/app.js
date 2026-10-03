@@ -1664,6 +1664,7 @@
       ${header(`${greet}${name ? `, ${esc(name)}` : ''}`, fmtDate(today()))}
       ${st.count >= 2 ? `<button class="tag accent" style="margin:-8px 0 16px;height:30px;gap:6px" data-action="share-streak">${icon('flame', 15)} ${st.count}-day streak${st.todayDone ? '' : ' · keep it alive today'}</button>` : ''}
       ${resumeBanner()}${guestBanner()}${checkinDayBanner()}
+      ${installCard()}
       ${studio(c.phase, `
         ${corners(c.phase === 'menopause' ? 'Life stage' : c.steady ? 'Steady mode' : `Day ${c.day} / ${c.len}${c.estimate ? ' · est.' : ''}`, c.steady ? 'Readiness' : c.late ? 'Period late' : `${esc(phaseName(c.next))} in ${plural(c.daysToNext, 'day')}`, '', '')}
         <div class="p-body">
@@ -1827,6 +1828,59 @@
       <div class="row" style="margin-top:12px;flex-wrap:wrap">${['terms', 'waiver', 'health'].filter((d) => d !== doc).map((d) => `<button class="btn ghost sm grow" data-action="open-legal" data-doc="${d}">${{ terms: 'Terms of Service', waiver: 'Health &amp; Safety Waiver', health: 'Health data policy' }[d]}</button>`).join('')}<button class="btn ghost sm grow" data-action="open-privacy">Privacy</button></div>`;
   }
 
+  // ---------- add to Home Screen ----------
+  const isStandalone = () => !!(window.navigator.standalone || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches));
+  function installPlatform() {
+    const ua = navigator.userAgent || '';
+    if (isStandalone()) return 'installed';
+    const ios = /iphone|ipad|ipod/i.test(ua) || (/macintosh/i.test(ua) && navigator.maxTouchPoints > 1);
+    if (ios) return /CriOS|FxiOS|EdgiOS|FBAN|FBAV|Instagram|TikTok|Snapchat|Pinterest|LinkedInApp|GSA\//i.test(ua) ? 'ios-other' : 'ios-safari';
+    if (/android/i.test(ua)) return /FBAN|FBAV|Instagram|TikTok|Snapchat|Pinterest/i.test(ua) ? 'android-inapp' : 'android';
+    return 'desktop';
+  }
+  // Little pictures of the buttons she will tap, drawn to match the phone's own icons.
+  const IOS_SHARE = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3M8 7l4-4 4 4"/><path d="M8 11H6a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-2"/></svg>';
+  const IOS_ADD = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><path d="M12 8v8M8 12h8"/></svg>';
+  const DOTS = '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>';
+  const DOTS_H = '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>';
+  function installSteps(platform) {
+    const step = (n, html, pic) => `<li class="install-step"><span class="install-n">${n}</span><span class="grow">${html}</span>${pic ? `<span class="install-pic">${pic}</span>` : ''}</li>`;
+    if (platform === 'ios-safari') return `<ol class="install-steps">
+        ${step(1, 'Tap the <strong>Share</strong> button. It is in the bar at the bottom of Safari (or tap <strong>•••</strong> first, then Share).', IOS_SHARE)}
+        ${step(2, 'Scroll down and tap <strong>Add to Home Screen</strong>.', IOS_ADD)}
+        ${step(3, 'Tap <strong>Add</strong> in the top corner.', '')}
+        ${step(4, 'Open YOURS from the new icon on your Home Screen. It opens full screen, like an app.', '<img src="/icons/icon-192.png" alt="" width="34" height="34" style="border-radius:9px">')}
+      </ol>`;
+    if (platform === 'ios-other') return `<div class="banner" style="margin:0 0 14px">${icon('advisor', 18)}<div class="grow small">You're in another app's browser. On iPhone, YOURS can only be added to your Home Screen from <strong>Safari</strong>.</div></div>
+      <ol class="install-steps">
+        ${step(1, 'Copy the YOURS link.', '')}
+        ${step(2, 'Open <strong>Safari</strong> and paste the link into the address bar. (Or tap <strong>•••</strong> and choose <strong>Open in Safari / Open in browser</strong>.)', DOTS_H)}
+        ${step(3, 'In Safari, tap <strong>Share</strong>, then <strong>Add to Home Screen</strong>, then <strong>Add</strong>.', IOS_SHARE)}
+      </ol>
+      <button class="btn primary block" style="margin-top:14px" data-action="install-copy">Copy the YOURS link</button>`;
+    if (platform === 'android-inapp') return `<ol class="install-steps">
+        ${step(1, 'Tap <strong>⋮</strong> or <strong>•••</strong> at the top and choose <strong>Open in Chrome</strong> (or Open in browser).', DOTS)}
+        ${step(2, 'In Chrome, tap <strong>⋮</strong>, then <strong>Add to Home screen</strong> or <strong>Install app</strong>.', DOTS)}
+      </ol>
+      <button class="btn ghost block" style="margin-top:14px" data-action="install-copy">Copy the YOURS link</button>`;
+    if (platform === 'android') return `${S.installPrompt ? '<button class="btn primary block" style="margin-bottom:16px" data-action="install">Install YOURS</button><p class="tiny muted center" style="margin:-6px 0 14px">Or do it yourself:</p>' : ''}<ol class="install-steps">
+        ${step(1, 'In Chrome, tap the <strong>⋮</strong> menu in the top corner.', DOTS)}
+        ${step(2, 'Tap <strong>Add to Home screen</strong> or <strong>Install app</strong>.', IOS_ADD)}
+        ${step(3, 'Tap <strong>Install</strong> (or Add). YOURS appears with your other apps.', '<img src="/icons/icon-192.png" alt="" width="34" height="34" style="border-radius:9px">')}
+      </ol>`;
+    return `${S.installPrompt ? '<button class="btn primary block" style="margin-bottom:16px" data-action="install">Install YOURS on this computer</button>' : ''}<p class="small">YOURS is made for your phone. Open <strong>${esc(location.host)}</strong> on your phone and come back to this screen for the steps. On a computer, Chrome and Edge show an install icon at the right of the address bar.</p>
+      <button class="btn ghost block" style="margin-top:14px" data-action="install-copy">Copy the YOURS link</button>`;
+  }
+  function installCard() {
+    const platform = installPlatform();
+    if (platform === 'installed' || platform === 'desktop' || (S.data.tips || {}).install) return '';
+    return `<div class="card install-card" style="margin-bottom:12px"><div class="row" style="gap:14px;align-items:flex-start">
+      <img src="/icons/icon-192.png" alt="" width="48" height="48" style="border-radius:12px;flex:none">
+      <div class="grow"><strong>Get the YOURS app</strong><p class="small muted" style="margin-top:4px">Add it to your Home Screen: full screen, one tap to open${/^ios/.test(platform) ? ', and reminders on iPhone' : ', and reminders'}. Free, no app store needed.</p>
+      <div class="row" style="margin-top:10px">${platform === 'android' && S.installPrompt ? '<button class="btn primary sm" data-action="install">Install</button>' : '<button class="btn primary sm" data-action="open-install">Show me how</button>'}</div></div>
+      <button class="icon-btn" style="width:30px;height:30px;flex:none" data-action="dismiss-tip" data-tip="install" aria-label="Dismiss">${icon('x', 14)}</button></div></div>`;
+  }
+
   // ---------- reminders (web push) and emails ----------
   const REMINDER_KINDS = [['workout', "Today's workout", 17], ['checkin', 'Check-in day', 9], ['weigh', 'Morning weigh-in', 7], ['meals', 'Log your food', 20]];
   const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
@@ -1866,7 +1920,7 @@
     return `<div class="card flat small"><div class="label">Reminders</div>
       ${on ? `<p class="muted">Only when there's something to do: no workout reminder on rest days or once you've trained. Lock-screen text never mentions your cycle or weight.</p>${rows}
         <div class="row" style="margin-top:12px"><button class="btn ghost sm grow" data-action="reminders-test">Send a test</button><button class="btn ghost sm grow" data-action="reminders-off">Turn off</button></div>`
-        : `<p class="muted">Gentle nudges for your workout, check-in day, weigh-in and food log, at times you choose.${iosNeedsInstall() ? ' On iPhone, first add YOURS to your Home Screen (Share, then Add to Home Screen) and open it from there.' : ''}</p><button class="btn primary sm block" style="margin-top:10px" data-action="reminders-on">Turn on reminders</button>`}
+        : `<p class="muted">Gentle nudges for your workout, check-in day, weigh-in and food log, at times you choose.${iosNeedsInstall() ? ' On iPhone, first add YOURS to your Home Screen and open it from there.' : ''}</p>${iosNeedsInstall() ? '<button class="btn primary sm block" style="margin-top:10px" data-action="open-install">Show me how to add it</button>' : '<button class="btn primary sm block" style="margin-top:10px" data-action="reminders-on">Turn on reminders</button>'}`}
       <div class="row between" style="margin-top:14px"><span class="small">Weekly summary email</span><button class="chip ${S.emailWeekly === false ? '' : 'selected'}" data-action="toggle-weekly-email">${S.emailWeekly === false ? 'Off' : 'On'}</button></div>
     </div>`;
   }
@@ -2718,6 +2772,11 @@
       return sheet(esc(wk.name), `${m.from ? `<button class="link small" style="margin-bottom:8px" data-action="modal-back">Back to program</button>` : ''}<div class="eyebrow">${esc(wk.focus)} · ${wk.minutes} min · ${esc(wk.intensity)}</div><p class="small" style="margin-top:8px">${esc(wk.summary)}</p><div class="divider"></div>${exerciseList(wk, true)}
         <div class="row" style="margin-top:16px"><button class="btn primary grow" data-action="start-workout" data-id="${wk.id}">Start now</button>${isToday ? '' : `<button class="btn ghost" data-action="set-today" data-id="${wk.id}">Make today's</button>`}</div>`);
     }
+    if (m.type === 'install') {
+      const platform = installPlatform();
+      if (platform === 'installed') return sheet('You have the app', '<p class="small">YOURS is already on your Home Screen. You are using it right now.</p>');
+      return sheet('Add YOURS to your Home Screen', `<p class="small muted" style="margin-bottom:14px">${/^ios/.test(platform) ? 'Takes 10 seconds. You get YOURS full screen with its own icon, and reminders work.' : 'Takes 10 seconds. You get YOURS full screen with its own icon.'}</p>${installSteps(platform)}`);
+    }
     if (m.type === 'legal') return sheet(m.doc === 'waiver' ? 'Health &amp; Safety Waiver' : m.doc === 'health' ? 'Consumer Health Data Privacy Policy' : 'Terms of Service', legalSheet(m.doc));
     if (m.type === 'privacy') {
       const h = (t) => `<div class="label" style="margin-top:18px">${t}</div>`;
@@ -2805,7 +2864,7 @@
           <div class="row between" style="margin-top:14px"><span class="small">Had a baby in the last year</span><button class="chip ${S.data.profile.postpartum ? 'selected' : ''}" data-action="toggle-postpartum">${S.data.profile.postpartum ? 'Yes' : 'No'}</button></div></div>
         <div class="card flat"><div class="label">Units</div><div class="segment">${[['imperial', 'lb · ft'], ['metric', 'kg · cm']].map(([v, l]) => `<button class="${(p.units === 'metric' ? 'metric' : 'imperial') === v ? 'active' : ''}" data-action="set-units" data-value="${v}">${l}</button>`).join('')}</div><p class="tiny muted" style="margin-top:8px">Past workouts keep the unit they were logged in. Suggested weights convert automatically.</p></div>
         <div class="card flat"><div class="label">Appearance</div><div class="segment">${['system', 'light', 'dark'].map((x) => `<button class="${theme === x ? 'active' : ''}" data-action="theme" data-value="${x}">${x[0].toUpperCase() + x.slice(1)}</button>`).join('')}</div></div>
-        ${S.installPrompt ? '<button class="btn primary block" style="margin-top:12px" data-action="install">Install YOURS on this device</button>' : ios ? '<div class="card flat small"><div class="label">Install on iPhone</div><p class="muted">Tap the Share button in Safari, then Add to Home Screen.</p></div>' : ''}
+        ${installPlatform() !== 'installed' ? '<div class="card flat small"><div class="label">Get the app</div><p class="muted">Add YOURS to your Home Screen for full screen, one-tap access and reminders.</p><button class="btn ghost sm block" style="margin-top:10px" data-action="open-install">Show me how</button></div>' : ''}
         <div class="card flat small"><div class="label">Coach</div><p class="muted">${S.ai ? 'Live AI coach is connected.' : 'Running the on-device coach. Set ANTHROPIC_API_KEY on the server to enable the live AI coach and photo reviews.'}</p></div>
         ${billingOn() && isCloud() ? `<div class="card flat small"><div class="label">Membership</div><p class="muted">${esc(membershipLine())}</p>${S.sub && S.sub.status && !['none', 'comp'].includes(S.sub.status) ? '<button class="btn ghost sm block" style="margin-top:10px" data-action="billing-portal">Manage membership</button>' : ''}<p class="tiny muted" style="margin-top:8px">Cancel, switch plans or update your card on Stripe's secure page.</p></div>` : ''}
         ${isCloud() ? `<div class="card flat small"><div class="label">Account sync</div><p class="muted">${S.syncState === 'offline' ? 'Offline. Changes are saved on this device and sync when you are back online.' : S.syncState === 'saving' ? 'Saving...' : `Synced across your devices${S.syncedAt ? ` · ${timeAgo(S.syncedAt)}` : ''}.`}</p><button class="btn ghost sm block" style="margin-top:10px" data-action="sync-now">Sync now</button>${(S.data.blocked || []).length ? `<button class="link small" style="margin-top:10px" data-action="unblock-all">Show ${plural(S.data.blocked.length, 'hidden member')} again</button>` : ''}</div>` : cloud && !isGuest() ? '<div class="card flat small"><div class="label">Account sync</div><p class="muted">This account lives on this device only. Sign out and sign in again with the same email and password to move it to your YOURS account and sync across devices.</p></div>' : ''}
@@ -3516,6 +3575,8 @@
 
     theme: (el) => { applyTheme(el.dataset.value); render(); },
     'set-units': (el) => { S.data.profile.units = el.dataset.value; save(); render(); toast(`Weights now in ${unit() === 'lb' ? 'pounds' : 'kilograms'}`); },
+    'open-install': () => { S.modal = { type: 'install' }; render(); },
+    'install-copy': async () => { try { await navigator.clipboard.writeText(location.origin); toast('Link copied. Paste it into Safari.'); } catch { prompt('Copy this link:', location.origin); } },
     install: async () => { const p = S.installPrompt; if (!p) return; p.prompt(); try { await p.userChoice; } catch { /* ignore */ } S.installPrompt = null; render(); },
     'export-data': () => exportData(),
     'edit-plan': () => { S.data.editing = true; S.data.onboarded = false; S.data.obStep = 0; S.modal = null; save(); render(); window.scrollTo(0, 0); },
@@ -3819,7 +3880,8 @@
   setInterval(() => { if (Date.now() - lastActivity > 5 * 60000 && S.vaultUnlocked) { lockVault(); render(); } }, 30000);
 
   // ---------- installable app ----------
-  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); S.installPrompt = e; });
+  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); S.installPrompt = e; if (S.session) render(); });
+  window.addEventListener('appinstalled', () => { S.installPrompt = null; if (S.modal && S.modal.type === 'install') S.modal = null; toast('YOURS is on your Home Screen'); if (S.session) render(); });
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
     window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => { /* offline support unavailable */ }));
   }
