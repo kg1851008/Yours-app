@@ -633,6 +633,37 @@
     return out;
   }
 
+  // ---------- workout logger helpers ----------
+  // "90s" -> 90, "2 min" -> 120, "2-3 min" -> 120 (the lower bound), "-" -> 0.
+  function parseRest(rest) {
+    const t = String(rest || '').toLowerCase();
+    const m = /(\d+(?:\.\d+)?)\s*(?:-\s*\d+(?:\.\d+)?\s*)?(s|sec|secs|seconds|m|min|mins|minutes)\b/.exec(t);
+    if (!m) return 0;
+    const n = Number(m[1]);
+    return Math.round(/^m/.test(m[2]) ? n * 60 : n);
+  }
+  // Barbell lifts get a plate calculator; dumbbells, machines, cables and bodyweight do not.
+  function isBarbell(name) {
+    const n = String(name || '').toLowerCase();
+    if (/dumbbell|kettlebell|cable|machine|band|goblet|smith|landmine|single-leg|bodyweight/.test(n)) return false;
+    return /barbell|back squat|front squat|deadlift|bench press|hip thrust|overhead press|push press|trap bar|good morning|barbell row|pendlay/.test(n);
+  }
+  const PLATES = { lb: [45, 35, 25, 10, 5, 2.5], kg: [25, 20, 15, 10, 5, 2.5, 1.25] };
+  const BARS = { lb: [45, 35, 60], kg: [20, 15, 25] };
+  const defaultBar = (name, unit) => (/trap bar/i.test(name || '') ? (unit === 'kg' ? 25 : 60) : unit === 'kg' ? 20 : 45);
+  // Plates to load on EACH side for a total weight. Leftover is what standard plates cannot make.
+  function platesFor(total, unit, bar) {
+    unit = unit === 'kg' ? 'kg' : 'lb';
+    const b = Number(bar) || defaultBar('', unit);
+    let side = (Number(total) - b) / 2;
+    if (!(side > 0)) return { bar: b, perSide: [], leftover: 0, belowBar: Number(total) < b };
+    const perSide = [];
+    for (const p of PLATES[unit]) {
+      while (side + 1e-9 >= p) { perSide.push(p); side = Math.round((side - p) * 1000) / 1000; }
+    }
+    return { bar: b, perSide, leftover: Math.round(side * 2 * 100) / 100, belowBar: false };
+  }
+
   // ---------- talk to log / plate estimates ----------
   const NUM_WORDS = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, twelve: 12, half: 0.5, couple: 2, few: 3, some: 1, single: 1, double: 2 };
   const SLOT_WORDS = { breakfast: 'breakfast', brekkie: 'breakfast', lunch: 'lunch', dinner: 'dinner', supper: 'dinner', snack: 'snack', snacks: 'snack' };
@@ -778,7 +809,7 @@
     GOALS, LEVELS, ACTIVITY, goalOf, activityOf, STEADY_MODES, MENO_MODES, menoInsights, checkinDay, checkinTomorrow,
     learnCycle, addPeriod, cycleInfo, targets, readiness, readinessLabel, patterns,
     workoutById, plannedWorkout, workoutFor, programById, programDay, programProgress, adjustSets, parseReps, e1rm, suggestLoad, detectPRs, strengthByPhase, exerciseHistory,
-    mealOptions, mealFor, proteinFor, aisleFor, storeLink, buildTotals, macrosFor, parseOFF, foodMacros, validBarcode, recipeTotals, recipeFood, groceryList, parseFoodText, usualRequest, usualMeal, cleanEstimates, estimateFood, streak, weeklyStats, weeklyAdjust, applyAdjustments, weeklyDue,
+    mealOptions, mealFor, proteinFor, aisleFor, storeLink, buildTotals, macrosFor, parseOFF, foodMacros, validBarcode, recipeTotals, recipeFood, groceryList, parseFoodText, usualRequest, usualMeal, cleanEstimates, estimateFood, parseRest, isBarbell, platesFor, defaultBar, BARS, streak, weeklyStats, weeklyAdjust, applyAdjustments, weeklyDue,
   };
   if (typeof window !== 'undefined') window.YOURS_LOGIC = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

@@ -463,3 +463,13 @@ a.link { text-decoration: none; overflow-wrap: anywhere; }
 /* Keyboard focus: a clear ring for keyboard and switch users only (not on tap). */
 :focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; }
 .input:focus-visible, .textarea:focus-visible, .select:focus-visible, .composer textarea:focus-visible { outline: none; }
+
+/* Workout logger: rest timer and plate math */
+.rest-bar { position: sticky; bottom: 12px; display: flex; align-items: center; gap: 8px; margin-top: 12px; padding: 12px 14px; border-radius: 20px; background: var(--green); color: var(--bg); box-shadow: 0 10px 30px rgba(0,0,0,.18); z-index: 2; }
+.rest-time { font-family: var(--display, inherit); font-size: 30px; line-height: 1; font-variant-numeric: tabular-nums; }
+.rest-bar .btn.outline { border-color: currentColor; color: inherit; }
+.plates-box { margin-top: 10px; padding: 12px; border-radius: 16px; background: var(--surface-2); }
+.plates-row { display: flex; align-items: center; gap: 3px; margin-top: 8px; }
+.plate { display: inline-flex; align-items: center; justify-content: center; min-width: 26px; padding: 0 3px; border-radius: 4px; background: var(--green); color: var(--bg); font-family: var(--mono); font-size: 10px; }
+.plate-bar { flex: 1; height: 8px; border-radius: 4px; background: var(--muted); opacity: .5; }
+.rest-bar .btn.cream { background: var(--bg); color: var(--text); }

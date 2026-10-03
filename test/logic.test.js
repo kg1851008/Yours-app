@@ -311,3 +311,23 @@ test('postpartum program uses a daily reset on off days', () => {
   assert.equal(L.workoutFor(data, L.addDays(start, 1)).id, 'pp-daily');
   assert.equal(L.programDay(data, L.addDays(start, 49)).block.title, 'Strengthen');
 });
+
+test('workout logger: rest times, barbell detection and plate math', () => {
+  assert.equal(L.parseRest('90s'), 90);
+  assert.equal(L.parseRest('2 min'), 120);
+  assert.equal(L.parseRest('2-3 min'), 120);
+  assert.equal(L.parseRest('45s / side'), 45);
+  assert.equal(L.parseRest('-'), 0);
+  assert.equal(L.isBarbell('Barbell hip thrust'), true);
+  assert.equal(L.isBarbell('Back squat'), true);
+  assert.equal(L.isBarbell('Dumbbell Romanian deadlift'), false);
+  assert.equal(L.isBarbell('Goblet squat'), false);
+  assert.deepEqual(L.platesFor(135, 'lb', 45).perSide, [45]);
+  assert.deepEqual(L.platesFor(185, 'lb', 45).perSide, [45, 25]);
+  assert.deepEqual(L.platesFor(100, 'kg', 20).perSide, [25, 15]);
+  const odd = L.platesFor(137, 'lb', 45);
+  assert.deepEqual(odd.perSide, [45]);
+  assert.equal(odd.leftover, 2);
+  assert.equal(L.platesFor(40, 'lb', 45).belowBar, true);
+  assert.equal(L.defaultBar('Trap bar deadlift', 'lb'), 60);
+});
