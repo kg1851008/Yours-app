@@ -57,9 +57,11 @@ test('leaked-password check only sends a 5-character hash prefix and finds breac
 
 test('legal documents have a version and cover the key protections', () => {
   const LEGAL = require('../public/legal.js');
-  assert.match(LEGAL.VERSION, /^\d{4}-\d{2}-\d{2}$/);
+  assert.match(LEGAL.VERSION, /^\d{4}-\d{2}-\d{2}[a-z]?$/);
+  const health = LEGAL.HEALTH.map((x) => x.join(' ')).join(' ').toLowerCase();
+  for (const phrase of ['what health data we collect', 'never sell', 'withdraw your consent', 'law enforcement', '45 days', 'breach']) assert.ok(health.includes(phrase), phrase);
   const waiver = LEGAL.WAIVER.map((x) => x.join(' ')).join(' ');
   const terms = LEGAL.TERMS.map((x) => x.join(' ')).join(' ');
   for (const phrase of ['not medical advice', 'contraception', 'Assumption of risk', 'Release of liability']) assert.ok(waiver.toLowerCase().includes(phrase.toLowerCase()), phrase);
-  for (const phrase of ['18 years old', 'Limitation of liability', 'cancel']) assert.ok(terms.toLowerCase().includes(phrase.toLowerCase()), phrase);
+  for (const phrase of ['18 years old', 'Limitation of liability', 'cancel', 'United States', 'class action', 'opt out', 'Copyright']) assert.ok(terms.toLowerCase().includes(phrase.toLowerCase()), phrase);
 });

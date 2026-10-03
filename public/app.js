@@ -1385,7 +1385,8 @@
         <button class="btn primary block" data-action="start">Get started</button>
         <button class="btn ghost block" data-action="go-login">I have an account</button>
         ${billingOn() ? '' : '<button class="btn soft block" data-action="demo">Try the demo</button>'}
-        <p class="tiny center" style="margin-top:14px">We never sell your data. <button class="link tiny" data-action="open-privacy">Privacy</button> · <button class="link tiny" data-action="open-legal" data-doc="terms">Terms</button></p>
+        ${regionBlocked() ? '<p class="tiny center" style="margin-top:14px"><strong>YOURS is only available in the United States right now. We hope to come to you soon.</strong></p>' : ''}
+        <p class="tiny center" style="margin-top:14px">We never sell your data. <button class="link tiny" data-action="open-privacy">Privacy</button> · <button class="link tiny" data-action="open-legal" data-doc="terms">Terms</button> · <button class="link tiny" data-action="open-legal" data-doc="health">Health data policy</button></p>
         <div class="p-row" style="margin-top:12px;opacity:.7"><span>Cycle</span><span>Vol. 01</span></div>
       </div>
     </div>`;
@@ -1414,6 +1415,7 @@
       <label class="field"><span class="label">Email</span><input class="input" type="email" name="email" autocomplete="email" required value="${esc((S.authForm || {}).email || '')}"></label>
       <label class="field"><span class="label">Password</span><input class="input" type="password" name="password" autocomplete="new-password" minlength="${cloud ? 8 : 6}" required placeholder="At least ${cloud ? 8 : 6} characters" value="${esc((S.authForm || {}).password || '')}"></label>
       <label class="row" style="gap:10px;align-items:flex-start;margin-top:16px;cursor:pointer"><input type="checkbox" name="agree" required ${(S.authForm || {}).agree ? 'checked' : ''} style="width:20px;height:20px;margin-top:2px;flex:none;accent-color:var(--green)"><span class="small">I am 18 or older and agree to the <button type="button" class="link small" data-action="open-legal" data-doc="terms">Terms of Service</button> and <button type="button" class="link small" data-action="open-legal" data-doc="waiver">Health &amp; Safety Waiver</button>, including that YOURS is not medical advice.</span></label>
+      <label class="row" style="gap:10px;align-items:flex-start;margin-top:10px;cursor:pointer"><input type="checkbox" name="health" required ${(S.authForm || {}).health ? 'checked' : ''} style="width:20px;height:20px;margin-top:2px;flex:none;accent-color:var(--green)"><span class="small">I consent to YOURS collecting and using my health data (cycle, symptoms, weight, food, photos) to build my plan, as described in the <button type="button" class="link small" data-action="open-legal" data-doc="health">Consumer Health Data Privacy Policy</button>.</span></label>
       ${S.authError ? `<p class="error" style="margin-top:12px">${esc(S.authError)}</p>` : ''}
       <button class="btn primary block" style="margin-top:18px" type="submit">Save my plan</button>
       <p class="tiny muted center" style="margin-top:10px">We never sell or share your data. <button type="button" class="link tiny" data-action="open-privacy">Privacy</button></p>
@@ -1732,8 +1734,8 @@
     if (BODYWEIGHT.test(ex.name)) return '';
     const s = L.suggestLoad(ex.name, ex.reps, S.data.workouts, { phase: cyc().phase, readiness: readinessToday(), unit: unit() });
     if (!s) return '';
-    if (s.first) return '<div class="tiny" style="margin-top:4px;color:var(--accent)">First time: pick a weight with 2-3 reps left in the tank</div>';
-    return `<div class="tiny" style="margin-top:4px"><strong style="color:var(--accent)">Today: ${fmtLoad(s.weight, s.unit)} x ${s.reps}</strong> <span class="muted">· last ${fmtLoad(s.last.weight, s.unit)} x ${s.last.reps}</span></div>`;
+    if (s.first) return '<div class="tiny" style="margin-top:4px;color:var(--accent-ink)">First time: pick a weight with 2-3 reps left in the tank</div>';
+    return `<div class="tiny" style="margin-top:4px"><strong style="color:var(--accent-ink)">Today: ${fmtLoad(s.weight, s.unit)} x ${s.reps}</strong> <span class="muted">· last ${fmtLoad(s.last.weight, s.unit)} x ${s.last.reps}</span></div>`;
   }
 
   function exerciseList(wk, withLoads) {
@@ -1788,10 +1790,10 @@
   async function recordConsentIfNeeded() {
     const t = S.data && S.data.terms;
     if (!isCloud() || !t || t.version !== LEGAL.VERSION || t.recorded) return;
-    try { await cloud.recordConsent(t.version, 'terms,waiver,age18'); t.recorded = true; save(); } catch { /* retried at next sign-in */ }
+    try { await cloud.recordConsent(t.version, 'terms,waiver,age18,health_data,arbitration'); t.recorded = true; save(); } catch { /* retried at next sign-in */ }
   }
   function acceptTerms() {
-    S.data.terms = { version: LEGAL.VERSION, at: Date.now(), recorded: false };
+    S.data.terms = { version: LEGAL.VERSION, at: Date.now(), health: true, recorded: false };
     save();
     recordConsentIfNeeded();
   }
@@ -1807,19 +1809,22 @@
         <li class="small"><span>Exercise and diet changes carry risks of injury. You take part voluntarily, accept those risks, and release YOURS from liability as far as the law allows.</span></li>
         <li class="small"><span>Cycle predictions are estimates. <strong>Never use them as contraception.</strong></span></li>
         <li class="small"><span>Food, macro and AI coach estimates can be wrong. Stop and get help if anything hurts or feels wrong.</span></li>
-        <li class="small"><span>You are 18 or older, and memberships renew automatically until you cancel.</span></li>
+        <li class="small"><span>You are 18 or older and in the United States, and memberships renew automatically until you cancel.</span></li>
+        <li class="small"><span>Disputes are settled by individual arbitration, not class actions. You can opt out within 30 days.</span></li>
       </ul>
       <div class="row" style="margin-top:14px"><button class="btn ghost sm grow" data-action="open-legal" data-doc="waiver">Read the waiver</button><button class="btn ghost sm grow" data-action="open-legal" data-doc="terms">Read the terms</button></div>
+      <button class="btn ghost sm block" style="margin-top:8px" data-action="open-legal" data-doc="health">Consumer Health Data Privacy Policy</button>
       <button class="list-item" style="width:100%;text-align:left;margin-top:16px" data-action="agree-toggle" aria-pressed="${!!S.agreeChecked}"><span class="check ${S.agreeChecked ? 'on' : ''}" style="width:24px;height:24px;border-radius:7px;flex:none">${S.agreeChecked ? icon('check', 12) : ''}</span><span class="small grow">I am 18 or older and I agree to the Terms of Service and the Health &amp; Safety Waiver.</span></button>
-      <button class="btn primary block" style="margin-top:16px" data-action="agree-continue" ${S.agreeChecked ? '' : 'disabled'}>I agree, continue</button>
+      <button class="list-item" style="width:100%;text-align:left" data-action="health-toggle" aria-pressed="${!!S.healthChecked}"><span class="check ${S.healthChecked ? 'on' : ''}" style="width:24px;height:24px;border-radius:7px;flex:none">${S.healthChecked ? icon('check', 12) : ''}</span><span class="small grow">I consent to YOURS collecting and using my health data (cycle, symptoms, weight, food, photos) to build my plan, as described in the Consumer Health Data Privacy Policy.</span></button>
+      <button class="btn primary block" style="margin-top:16px" data-action="agree-continue" ${S.agreeChecked && S.healthChecked ? '' : 'disabled'}>I agree, continue</button>
       <p class="center small" style="margin-top:14px"><button class="link" data-action="logout">${isGuest() ? 'Start over' : 'Sign out'}</button></p>
     </div>`;
   }
   function legalSheet(doc) {
-    const items = doc === 'waiver' ? LEGAL.WAIVER : LEGAL.TERMS;
+    const items = doc === 'waiver' ? LEGAL.WAIVER : doc === 'health' ? LEGAL.HEALTH : LEGAL.TERMS;
     return `${items.map(([h, t]) => `<div class="label" style="margin-top:16px">${esc(h)}</div><p class="small" style="margin-top:4px">${esc(t)}</p>`).join('')}
       <p class="tiny muted" style="margin-top:18px">Version ${esc(LEGAL.VERSION)}.${S.data && S.data.terms ? ` You agreed on ${fmtDate(new Date(S.data.terms.at), { month: 'long', day: 'numeric', year: 'numeric' })}.` : ''}</p>
-      <div class="row" style="margin-top:12px">${doc === 'waiver' ? '<button class="btn ghost sm grow" data-action="open-legal" data-doc="terms">Terms of Service</button>' : '<button class="btn ghost sm grow" data-action="open-legal" data-doc="waiver">Health &amp; Safety Waiver</button>'}<button class="btn ghost sm grow" data-action="open-privacy">Privacy</button></div>`;
+      <div class="row" style="margin-top:12px;flex-wrap:wrap">${['terms', 'waiver', 'health'].filter((d) => d !== doc).map((d) => `<button class="btn ghost sm grow" data-action="open-legal" data-doc="${d}">${{ terms: 'Terms of Service', waiver: 'Health &amp; Safety Waiver', health: 'Health data policy' }[d]}</button>`).join('')}<button class="btn ghost sm grow" data-action="open-privacy">Privacy</button></div>`;
   }
 
   // ---------- contact ----------
@@ -1828,6 +1833,7 @@
 
   // ---------- membership (Stripe via /api/billing; status mirrored in Supabase) ----------
   const billingOn = () => !!(S.billing && S.billing.enabled && cloud);
+  const regionBlocked = () => !!(S.billing && S.billing.region && S.billing.region.allowed === false);
   const trialDays = () => (S.billing && S.billing.trialDays) || 7;
   // Paid access needs a cloud account with an active, trialing or recently past-due membership.
   const memberHasAccess = () => isCloud() && window.YOURS_CLOUD.hasAccess(S.sub);
@@ -1904,7 +1910,8 @@
       ${option('yearly', 'Yearly', y, save > 0 ? `Save ${save}%` : '')}
       ${option('monthly', 'Monthly', m, '')}
       ${S.billingError ? `<p class="error" style="margin-top:12px">${esc(S.billingError)}</p>` : ''}
-      <button class="btn primary block" style="margin-top:18px" data-action="pay-start" ${S.billingBusy ? 'disabled' : ''}>${S.billingBusy === 'confirming' ? 'Confirming your membership...' : S.billingBusy ? 'Opening secure checkout...' : trial ? `Start my ${trialDays()}-day free trial` : 'Continue'}</button>
+      ${regionBlocked() ? '<p class="small" style="margin-top:16px">YOURS is only available in the United States right now. We hope to come to you soon.</p>' : ''}
+      <button class="btn primary block" style="margin-top:18px" data-action="pay-start" ${S.billingBusy || regionBlocked() ? 'disabled' : ''}>${S.billingBusy === 'confirming' ? 'Confirming your membership...' : S.billingBusy ? 'Opening secure checkout...' : trial ? `Start my ${trialDays()}-day free trial` : 'Continue'}</button>
       <p class="tiny muted center" style="margin-top:10px">${trial ? `Free until ${charge}. Then ${money(priceFor(plan))} ${plan === 'yearly' ? 'a year' : 'a month'}, renewing automatically. Cancel anytime before ${charge} in Profile and you won't be charged. Secure payment by Stripe.` : `${money(priceFor(plan))} ${plan === 'yearly' ? 'a year' : 'a month'}, renewing automatically. Cancel anytime in Profile. Secure payment by Stripe.`}</p>
       <p class="tiny muted center" style="margin-top:8px">We never sell your data. <button class="link tiny" data-action="open-privacy">Privacy</button> · Questions? ${mailLink('Membership question', 'Email us')}</p>
       <p class="center small" style="margin-top:14px"><button class="link" data-action="billing-recheck">I already subscribed</button>${S.sub && S.sub.status && S.sub.status !== 'none' ? ' · <button class="link" data-action="billing-portal">Manage billing</button>' : ''}</p>
@@ -2598,7 +2605,7 @@
       return sheet(esc(wk.name), `${m.from ? `<button class="link small" style="margin-bottom:8px" data-action="modal-back">Back to program</button>` : ''}<div class="eyebrow">${esc(wk.focus)} · ${wk.minutes} min · ${esc(wk.intensity)}</div><p class="small" style="margin-top:8px">${esc(wk.summary)}</p><div class="divider"></div>${exerciseList(wk, true)}
         <div class="row" style="margin-top:16px"><button class="btn primary grow" data-action="start-workout" data-id="${wk.id}">Start now</button>${isToday ? '' : `<button class="btn ghost" data-action="set-today" data-id="${wk.id}">Make today's</button>`}</div>`);
     }
-    if (m.type === 'legal') return sheet(m.doc === 'waiver' ? 'Health &amp; Safety Waiver' : 'Terms of Service', legalSheet(m.doc));
+    if (m.type === 'legal') return sheet(m.doc === 'waiver' ? 'Health &amp; Safety Waiver' : m.doc === 'health' ? 'Consumer Health Data Privacy Policy' : 'Terms of Service', legalSheet(m.doc));
     if (m.type === 'privacy') {
       const h = (t) => `<div class="label" style="margin-top:18px">${t}</div>`;
       const li = (items) => `<ul class="phase-list" style="margin-top:6px">${items.map((x) => `<li class="small"><span>${x}</span></li>`).join('')}</ul>`;
@@ -2612,6 +2619,11 @@
         ${h('Services that help run YOURS')}
         <p class="tiny muted" style="margin-top:4px">They process data only to provide their part of the app, not for their own purposes.</p>
         ${li(['<strong>Supabase</strong>: accounts and storage.', '<strong>Vercel</strong>: hosts the app.', '<strong>Stripe</strong>: payments.', '<strong>Anthropic (Claude)</strong>: AI coach answers, food estimates and photo reviews, only when you use them. Photos are sent only when you tap Analyze or snap a plate, and are not stored or used to train AI models.', '<strong>Open Food Facts</strong>: the barcode number when you scan.', '<strong>Nutritionix</strong>: what you type when you search restaurant menus.', '<strong>Have I Been Pwned</strong>: a 5-character fragment of a scrambled version of a new password, to check it has not been leaked. Never the password itself.'])}
+        ${h('Legal requests')}
+        <p class="small" style="margin-top:6px">We only disclose data when legally required, such as by a valid court order. We push back on overly broad requests and tell you about any request for your data unless the law forbids it. We keep as little as we need: your period and health data is never used for advertising, and progress photos stay on your phone unless you back them up encrypted.</p>
+        ${h('How long we keep it')}
+        <p class="small" style="margin-top:6px">As long as you have an account. Deleting your account deletes your data. If a breach ever affects your data, we will tell you as the law requires.</p>
+        <button class="btn ghost sm block" style="margin-top:12px" data-action="open-legal" data-doc="health">Consumer Health Data Privacy Policy</button>
         ${h('Your choices')}
         ${li(['Export everything as a file from Profile.', 'Delete your account from Profile. It removes your data, posts, messages and photo backup, and cancels your membership.', 'Hide or report anyone in the community.'])}
         ${h('Questions')}
@@ -2685,7 +2697,7 @@
         ${billingOn() && isCloud() ? `<div class="card flat small"><div class="label">Membership</div><p class="muted">${esc(membershipLine())}</p>${S.sub && S.sub.status && !['none', 'comp'].includes(S.sub.status) ? '<button class="btn ghost sm block" style="margin-top:10px" data-action="billing-portal">Manage membership</button>' : ''}<p class="tiny muted" style="margin-top:8px">Cancel, switch plans or update your card on Stripe's secure page.</p></div>` : ''}
         ${isCloud() ? `<div class="card flat small"><div class="label">Account sync</div><p class="muted">${S.syncState === 'offline' ? 'Offline. Changes are saved on this device and sync when you are back online.' : S.syncState === 'saving' ? 'Saving...' : `Synced across your devices${S.syncedAt ? ` · ${timeAgo(S.syncedAt)}` : ''}.`}</p><button class="btn ghost sm block" style="margin-top:10px" data-action="sync-now">Sync now</button>${(S.data.blocked || []).length ? `<button class="link small" style="margin-top:10px" data-action="unblock-all">Show ${plural(S.data.blocked.length, 'hidden member')} again</button>` : ''}</div>` : cloud && !isGuest() ? '<div class="card flat small"><div class="label">Account sync</div><p class="muted">This account lives on this device only. Sign out and sign in again with the same email and password to move it to your YOURS account and sync across devices.</p></div>' : ''}
         <div class="card flat small"><div class="label">Help & contact</div><p class="muted">Questions, feedback or a problem with your membership? We read every email.</p><p style="margin-top:8px">${mailLink('YOURS help')}</p></div>
-        <div class="card flat small"><div class="label">Your data</div><p><strong>We never sell your data</strong> or share it with advertisers. No ads, no tracking.</p><p class="muted" style="margin-top:6px">${isCloud() ? 'Your plan and history are stored in your private YOURS account and on this device. Progress photos stay on this device unless you turn on encrypted backup. Nothing is used to train AI models.' : 'Everything is stored on this device. Nothing is used to train AI models.'}</p><button class="btn ghost sm block" style="margin-top:10px" data-action="export-data">${icon('download', 16)} Export my data</button><button class="link small" style="margin-top:10px" data-action="open-privacy">Read our privacy promise</button> · <button class="link small" data-action="open-legal" data-doc="terms">Terms</button> · <button class="link small" data-action="open-legal" data-doc="waiver">Waiver</button></div>
+        <div class="card flat small"><div class="label">Your data</div><p><strong>We never sell your data</strong> or share it with advertisers. No ads, no tracking.</p><p class="muted" style="margin-top:6px">${isCloud() ? 'Your plan and history are stored in your private YOURS account and on this device. Progress photos stay on this device unless you turn on encrypted backup. Nothing is used to train AI models.' : 'Everything is stored on this device. Nothing is used to train AI models.'}</p><button class="btn ghost sm block" style="margin-top:10px" data-action="export-data">${icon('download', 16)} Export my data</button><button class="link small" style="margin-top:10px" data-action="open-privacy">Read our privacy promise</button> · <button class="link small" data-action="open-legal" data-doc="terms">Terms</button> · <button class="link small" data-action="open-legal" data-doc="waiver">Waiver</button> · <button class="link small" data-action="open-legal" data-doc="health">Health data policy</button></div>
         <button class="btn ghost block" style="margin-top:12px" data-action="logout">${isGuest() ? 'Start over' : 'Sign out'}</button>
         <button class="btn block" style="margin-top:8px;color:var(--danger)" data-action="delete-data">Delete my data</button>`);
     }
@@ -2751,8 +2763,10 @@
     const password = form.password.value;
     S.authForm = { ...(S.authForm || {}), name, email }; // kept if there is an error, so she does not retype them
     if (form.agree && !form.agree.checked) { S.authError = 'Please agree to the Terms and Health & Safety Waiver to continue.'; return render(); }
-    if (S.data && form.agree) S.data.terms = { version: LEGAL.VERSION, at: Date.now(), recorded: false };
+    if (form.health && !form.health.checked) { S.authError = 'Please consent to YOURS using your health data. YOURS needs it to build your plan.'; return render(); }
+    if (S.data && form.agree) S.data.terms = { version: LEGAL.VERSION, at: Date.now(), health: true, recorded: false };
     if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { S.authError = 'Enter your name and a valid email.'; return render(); }
+    if (regionBlocked()) { S.authError = 'YOURS is only available in the United States right now. We hope to come to you soon.'; return render(); }
     if (password.length < (cloud ? 8 : 6)) { S.authError = `Use at least ${cloud ? 8 : 6} characters for your password.`; return render(); }
     if (cloud) return cloudSignup(name, email, password);
     const all = users();
@@ -3031,7 +3045,8 @@
     demo: () => demo(),
     'open-legal': (el) => { S.modal = { type: 'legal', doc: el.dataset.doc }; render(); const sh = root.querySelector('.sheet'); if (sh) sh.scrollTop = 0; },
     'agree-toggle': () => { S.agreeChecked = !S.agreeChecked; render(); },
-    'agree-continue': () => { if (!S.agreeChecked) return; acceptTerms(); S.agreeChecked = false; S.tab = 'home'; render(); window.scrollTo(0, 0); },
+    'health-toggle': () => { S.healthChecked = !S.healthChecked; render(); },
+    'agree-continue': () => { if (!S.agreeChecked || !S.healthChecked) return; acceptTerms(); S.agreeChecked = false; S.healthChecked = false; S.tab = 'home'; render(); window.scrollTo(0, 0); },
     'open-privacy': () => { S.modal = { type: 'privacy' }; render(); },
     'pay-plan': (el) => { S.payPlan = el.dataset.plan; S.billingError = ''; render(); },
     'pay-start': async () => {
@@ -3438,7 +3453,7 @@
 
   document.addEventListener('change', async (ev) => {
     const el = ev.target;
-    if (el.form && el.form.dataset.form === 'signup' && el.name === 'agree') { S.authForm = { ...(S.authForm || {}), agree: el.checked }; return; }
+    if (el.form && el.form.dataset.form === 'signup' && (el.name === 'agree' || el.name === 'health')) { S.authForm = { ...(S.authForm || {}), [el.name]: el.checked }; return; }
     if (el.dataset.bindUi === 'pose') { S.pose = el.value; return; }
     if (el.matches('[data-scan-photo]') && el.files && el.files[0]) { scanPhoto(el.files[0]); return; }
     if (el.matches('[data-plate-photo]') && el.files && el.files[0]) { handlePlate(el.files[0]); el.value = ''; return; }

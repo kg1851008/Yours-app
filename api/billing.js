@@ -28,9 +28,10 @@ function originOf(req) {
 module.exports = async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method === 'GET') {
-    if (!B.billingConfigured()) return res.status(200).json({ enabled: false });
-    try { return res.status(200).json({ enabled: true, trialDays: B.TRIAL_DAYS, prices: await prices() }); }
-    catch (e) { console.error('billing prices', e && e.message); return res.status(200).json({ enabled: true, trialDays: B.TRIAL_DAYS, prices: null }); }
+    const where = B.region(req);
+    if (!B.billingConfigured()) return res.status(200).json({ enabled: false, region: where });
+    try { return res.status(200).json({ enabled: true, trialDays: B.TRIAL_DAYS, prices: await prices(), region: where }); }
+    catch (e) { console.error('billing prices', e && e.message); return res.status(200).json({ enabled: true, trialDays: B.TRIAL_DAYS, prices: null, region: where }); }
   }
   if (req.method !== 'POST') { res.setHeader('Allow', 'GET, POST'); return res.status(405).json({ error: 'Method not allowed' }); }
   if (!B.billingConfigured()) return res.status(503).json({ error: 'Payments are not set up yet' });
@@ -67,6 +68,7 @@ module.exports = async function handler(req, res) {
       if (live.data.some((x) => ['trialing', 'active', 'past_due', 'unpaid'].includes(x.status))) return res.status(409).json({ error: 'You already have a membership. Tap "I already subscribed".' });
     }
 
+    if (!B.region(req).allowed) return res.status(451).json({ error: 'YOURS memberships are only available in the United States right now.' });
     const plan = body.plan === 'yearly' ? 'yearly' : 'monthly';
     if (!row || !row.customer_id) {
       const customer = await s.customers.create({ email: user.email, metadata: { user_id: user.id } });

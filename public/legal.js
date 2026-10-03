@@ -1,9 +1,9 @@
-// YOURS legal documents: Health & Safety Waiver and Terms of Service.
+// YOURS legal documents: Health & Safety Waiver, Terms of Service and Consumer Health Data Privacy Policy.
 // Bump VERSION whenever the text changes in a meaningful way: everyone is asked to agree again,
 // and each acceptance is recorded with this version in the Supabase `consents` table.
 // This is a starting draft for YOURS, not legal advice; have a lawyer review it before launch.
 (function () {
-  const VERSION = '2026-10-03';
+  const VERSION = '2026-10-03b';
   const CONTACT = 'yoursfitapp@gmail.com';
 
   const WAIVER = [
@@ -16,20 +16,37 @@
   ];
 
   const TERMS = [
-    ['Who can use YOURS', 'You must be at least 18 years old. You are responsible for your account and for keeping your password private.'],
+    ['Who can use YOURS', 'You must be at least 18 years old. YOURS is currently offered only in the United States, and memberships can only be bought there. You are responsible for your account and for keeping your password private.'],
     ['Health & Safety Waiver', 'Your use of YOURS is also subject to the Health & Safety Waiver, which forms part of these terms.'],
     ['Membership and billing', 'Some features need a paid membership. New members may get a free trial; your payment method is charged automatically when the trial ends, and then every month or year, until you cancel. You can cancel anytime in Profile → Manage membership; you keep access until the end of the period you paid for. Payments are processed by Stripe. Except where required by law, payments are non-refundable. We may change prices with advance notice.'],
     ['Community', 'Be kind and respectful. Do not post anything harmful, hateful, sexual, illegal, misleading, body shaming, or promoting unsafe weight loss, and do not sell or advertise. You are responsible for what you post. We may remove content or suspend accounts that break these rules. Advice from other members is not professional advice.'],
     ['Your content and data', 'You own what you log and post. You give YOURS permission to store and display it to provide the app (for example, showing your posts to other members). See the Privacy page for how your data is handled. We never sell your data.'],
     ['The service', 'YOURS is provided "as is" and "as available", without warranties of any kind, to the extent permitted by law. We do not promise any particular result. Features may change, and the service may sometimes be unavailable.'],
     ['Limitation of liability', 'To the fullest extent permitted by law, YOURS and its owner are not liable for any indirect, incidental, special or consequential damages, and our total liability for any claim is limited to the amount you paid YOURS in the 12 months before the claim.'],
+    ['Copyright complaints', `If you believe something posted in YOURS infringes your copyright, email ${CONTACT} with your contact details, the work, where it appears in YOURS, and a statement that you believe in good faith the use is not authorized and that your notice is accurate. We will remove infringing content and may suspend repeat infringers.`],
     ['Indemnity', 'You agree to cover any claims, costs or damages that arise from your breaking these terms or misusing YOURS.'],
     ['Ending your account', 'You can delete your account anytime in Profile. We may suspend or end accounts that break these terms.'],
+    ['Disputes: arbitration and class action waiver', `Please contact us first at ${CONTACT}; most concerns can be solved quickly. If we cannot resolve a dispute within 60 days, you and YOURS agree to resolve it through final, binding individual arbitration under the Federal Arbitration Act, administered by the American Arbitration Association under its Consumer Arbitration Rules, instead of in court. Either of us may instead bring an individual claim in small claims court. You and YOURS each waive the right to a jury trial and to take part in a class action, class arbitration or representative action. You can opt out of this arbitration agreement by emailing ${CONTACT} within 30 days of first agreeing to these terms. If this section is found unenforceable, the rest of these terms still apply.`],
+    ['Governing law', 'These terms are governed by the laws of the United States and of the state in which the YOURS business is organized, without regard to conflict of law rules, except where the law of your state of residence requires otherwise.'],
     ['Changes', 'We may update these terms. If we make important changes, we will ask you to agree again in the app.'],
     ['Contact', `Questions about these terms: ${CONTACT}.`],
   ];
 
-  const api = { VERSION, CONTACT, WAIVER, TERMS };
+  // Consumer health data notice (written for laws like Washington's My Health My Data Act, Nevada SB 370 and
+  // Connecticut's consumer health data rules). Health data consent is collected separately from the terms.
+  const HEALTH = [
+    ['What health data we collect', 'Information about your health that you choose to give YOURS: menstrual cycle and period dates, cycle type and life stage (for example pregnancy history you share, postpartum, perimenopause or menopause), symptoms, daily energy, sleep, mood and soreness, bleeding, body weight, height, age, fitness level, food and nutrition logs, steps, workouts, progress photos, and anything health-related you tell the coach.'],
+    ['Where it comes from', 'Directly from you, as you enter it into YOURS. We do not buy health data or collect it from other sources, and YOURS does not use your precise location.'],
+    ['Why we use it', 'Only to provide YOURS to you: building and adjusting your training, nutrition and step plan, predicting cycle phases, coach replies, weekly reviews, progress reviews you ask for, and keeping your account working. We do not use it for advertising, and we never sell it.'],
+    ['Who we share it with', 'Only service providers that run YOURS for us, under contract, to provide their part of the app: Supabase (account storage), Vercel (hosting), and Anthropic (AI coach replies, food estimates and photo reviews, only when you use them). Stripe processes payments but receives no health data. We share your community posts only with other members, as you choose. We do not share health data with advertisers, data brokers or anyone else.'],
+    ['Law enforcement and legal requests', 'We will only disclose your data if legally required, for example by a valid court order. We will push back on requests that are overly broad, and we will tell you about any request for your data unless the law forbids us. We keep as little as we need: progress photos stay on your phone unless you turn on encrypted backup, which we cannot read.'],
+    ['How long we keep it', 'For as long as you have an account. When you delete your account, your health data is deleted from our systems, apart from any copy we are legally required to keep. Backups are removed on our providers\' normal schedules.'],
+    ['Your rights', `You can see and export your data (Profile → Export my data), delete your account and all its data (Profile → Delete my data), and withdraw your consent at any time by deleting your account or emailing ${CONTACT}. You can also email us to ask what health data we hold, who we shared it with, or to correct or delete it. We will respond within 45 days. If we decline your request, you can appeal by replying to our answer, and we will respond to your appeal within 45 days; if you are not satisfied, you can contact your state Attorney General.`],
+    ['Security and breaches', 'Your data is encrypted in transit, protected by strict access rules, and progress photos are encrypted on your device. If a breach ever affects your health data, we will notify you and the relevant authorities as the law requires.'],
+    ['Contact', `Privacy and health data questions: ${CONTACT}.`],
+  ];
+
+  const api = { VERSION, CONTACT, WAIVER, TERMS, HEALTH };
   if (typeof window !== 'undefined') window.YOURS_LEGAL = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

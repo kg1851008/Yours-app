@@ -166,3 +166,20 @@ test('the AI coach only serves signed-in members with access', async () => {
   assert.equal((await B.memberGate({ headers: { authorization: 'Bearer tok6' } })).status, 402);
   assert.equal(await B.memberGate({ headers: { authorization: 'Bearer tok7' } }), null);
 });
+
+test('memberships are US-only: checkout is refused from other countries', async () => {
+  assert.deepEqual(B.region({ headers: { 'x-vercel-ip-country': 'us' } }), { country: 'US', allowed: true });
+  assert.equal(B.region({ headers: { 'x-vercel-ip-country': 'GB' } }).allowed, false);
+  assert.equal(B.region({ headers: {} }).allowed, true); // local development has no country
+  const rows = [];
+  global.fetch = fakeSupabase(rows, { tok8: { id: 'u8', email: 'g@h.co' } });
+  let created = 0;
+  B.stripe = () => ({ customers: { create: async () => { created++; return { id: 'cus_8' }; } }, checkout: { sessions: { create: async () => { created++; return { url: 'x' }; } } }, subscriptions: { list: async () => ({ data: [] }) } });
+  const r = res();
+  await billing({ method: 'POST', headers: { authorization: 'Bearer tok8', 'x-vercel-ip-country': 'FR' }, body: { action: 'checkout' } }, r);
+  assert.equal(r.statusCode, 451);
+  assert.equal(created, 0);
+  const g = res();
+  await billing({ method: 'GET', headers: { 'x-vercel-ip-country': 'FR' } }, g);
+  assert.equal(g.body.region.allowed, false);
+});
