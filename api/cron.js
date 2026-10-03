@@ -126,7 +126,7 @@ async function handler(req, res) {
   if (!SECRET) return res.status(503).json({ error: 'SUPABASE_SECRET_KEY is not set' });
   try {
     const stats = await run(new Date());
-    return res.status(200).json({ ok: true, push: pushConfigured(), email: E.emailConfigured(), ...stats });
+    return res.status(200).json({ ok: true, pushEnabled: pushConfigured(), emailEnabled: E.emailConfigured(), sent: stats });
   } catch (e) {
     console.error('cron error', e && e.message);
     return res.status(500).json({ error: 'Cron failed' });
