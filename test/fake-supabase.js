@@ -6,7 +6,7 @@ const crypto = require('node:crypto');
 
 function createBackend(opts) {
   const confirmEmail = !!(opts && opts.confirmEmail);
-  const db = { users: [], profiles: [], user_data: [], posts: [], comments: [], likes: [], messages: [], reports: [], subscriptions: [], files: {} };
+  const db = { users: [], profiles: [], user_data: [], posts: [], comments: [], likes: [], messages: [], reports: [], subscriptions: [], consents: [], files: {} };
   const tokens = {};
   const now = () => new Date(Date.now() + (db.tick = (db.tick || 0) + 1)).toISOString();
   const err = (message) => ({ data: null, error: { message } });
@@ -67,6 +67,7 @@ function createBackend(opts) {
       if (q.table === 'posts' || q.table === 'comments') { v.id = crypto.randomUUID(); v.user_id = u.id; v.author_name = (db.profiles.find((p) => p.id === u.id) || {}).name || 'Member'; v.created_at = now(); }
       if (q.table === 'messages') { v.id = crypto.randomUUID(); v.from_id = u.id; v.created_at = now(); }
       if (q.table === 'reports') { v.reporter_id = u.id; }
+      if (q.table === 'consents') { v.user_id = u.id; v.accepted_at = now(); }
       if (q.table === 'user_data') { if (v.user_id !== u.id) return err('row-level security'); const i = t.findIndex((r) => r.user_id === u.id); if (i > -1) t[i] = v; else t.push(v); return { data: null, error: null }; }
       if (q.table === 'likes') { v.user_id = u.id; if (t.some((r) => r.post_id === v.post_id && r.user_id === u.id)) return { data: null, error: null }; }
       t.push(v);

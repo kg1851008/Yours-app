@@ -94,6 +94,10 @@
       async pushData(data, updated) {
         must(await sb.from('user_data').upsert({ user_id: user.id, data, updated }, { onConflict: 'user_id' }));
       },
+      // Proof of agreement: the server stamps the time and the member; members can only add rows.
+      async recordConsent(version, documents) {
+        must(await sb.from('consents').insert({ terms_version: version, documents, user_agent: typeof navigator !== 'undefined' ? String(navigator.userAgent).slice(0, 400) : null }));
+      },
       async accessToken() { const d = must(await sb.auth.getSession()); return d && d.session ? d.session.access_token : null; },
       async subscription() {
         const rows = must(await sb.from('subscriptions').select('status, plan, trial_used, trial_end, current_period_end, cancel_at_period_end').eq('user_id', user.id).limit(1));
