@@ -15,6 +15,9 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.all('/api/coach', coach);
 app.get('/api/food', food);
 app.all('/api/billing', billing);
+app.all('/api/cron', require('./api/cron'));
+app.all('/api/push-test', require('./api/push-test'));
+app.all('/api/email-unsubscribe', require('./api/email-unsubscribe'));
 
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));

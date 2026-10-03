@@ -17,6 +17,9 @@
 - **Terms, waiver and health data consent.** Sign-up needs two ticked boxes: (1) 18 or older and agreement to the Terms of Service and Health & Safety Waiver, and (2) a separate consent to collect and use health data, per the Consumer Health Data Privacy Policy (written for laws like Washington's My Health My Data Act). Anyone already using the app sees a one-time "Before you start" screen with both. Each agreement is recorded in the Supabase `consents` table with the server's time and the terms version; changing `VERSION` in `public/legal.js` asks everyone to agree again. The Terms include US-only availability, a copyright complaint process, and individual arbitration with a class action waiver and a 30-day opt-out. The health data policy covers what is collected and why, who processes it, legal and law enforcement requests, retention, rights (access, deletion, withdrawing consent, 45-day responses and appeals) and breaches; it is linked from the welcome screen, sign-up, Privacy and Profile. This is a starting draft, not legal advice: have a lawyer review it, add the business name and state, and confirm the arbitration terms.
 - **US only.** Memberships can only be bought from the United States: `api/billing.js` checks the visitor's country (Vercel's `x-vercel-ip-country` header) and refuses checkout elsewhere, and the app tells non-US visitors plainly. Set `ALLOWED_COUNTRIES` (for example `US,CA`) to expand.
 - **Accessible.** Every screen passes an automated WCAG 2.1 AA audit (axe-core) in light and dark mode: text colours meet contrast minimums (`--muted`, and `--accent-ink` for peach text), and keyboard users get a visible focus ring.
+- **Workout logger tools.** A rest timer that starts when a set is ticked (with +15/-15, skip, and a buzz and beep at zero), plate math for barbell lifts (plates per side, choice of bar), supersets (A1/A2, rest after the pair), and notes per exercise that show as "Last time" next session.
+- **Reminders (push notifications).** In Profile → Reminders she turns on nudges for today's workout, check-in day, the morning weigh-in and logging food, each at a time she picks, in her own time zone. They only fire when there is something to do (no workout reminder on rest days or once she has trained), and the text never mentions her cycle or weight. On iPhone, YOURS must be added to the Home Screen first. "Send a test" checks the setup. Tapping a reminder opens the right screen.
+- **Emails.** A welcome email after she confirms her account, and a weekly summary on Monday at 8am her time (workouts, steps, check-ins, streak, PRs; never weight or cycle details), with one-click unsubscribe and a toggle in Profile. Sent through Resend.
 - Light and dark mode, mobile-first layout, no emojis.
 
 ### Coaching intelligence
@@ -88,6 +91,15 @@ A 7-day free trial, then a monthly or yearly membership. Anyone can build their 
    - optional `APP_URL` (your live address, if it changes from yours-app-tau.vercel.app)
 
 Test with Stripe's test card 4242 4242 4242 4242, then switch Stripe to live mode and replace the keys, price IDs and webhook secret with the live ones.
+
+## Reminders and emails: setup
+
+An hourly job (`api/cron.js`) decides who gets which reminder or email. Supabase runs it every hour (pg_cron and pg_net, see the end of `supabase/schema.sql`), so no paid Vercel plan is needed. Every send is logged in `sent_log`, so nothing goes out twice.
+
+Vercel environment variables:
+- `CRON_SECRET`: a long random string; the same value is stored in Supabase Vault as `yours_cron_secret`.
+- `VAPID_PRIVATE_KEY`: the private half of the push key pair (the public half is `vapidPublicKey` in `public/config.js`).
+- `RESEND_API_KEY` and `EMAIL_FROM` (for example `YOURS <hello@yourdomain.com>`): from resend.com, with your domain verified there. Without them, no emails are sent; reminders still work.
 
 ## How data is stored on the device
 
