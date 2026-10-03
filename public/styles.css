@@ -473,3 +473,10 @@ a.link { text-decoration: none; overflow-wrap: anywhere; }
 .plate { display: inline-flex; align-items: center; justify-content: center; min-width: 26px; padding: 0 3px; border-radius: 4px; background: var(--green); color: var(--bg); font-family: var(--mono); font-size: 10px; }
 .plate-bar { flex: 1; height: 8px; border-radius: 4px; background: var(--muted); opacity: .5; }
 .rest-bar .btn.cream { background: var(--bg); color: var(--text); }
+
+/* Add to Home Screen guide */
+.install-steps { list-style: none; counter-reset: none; }
+.install-step { display: flex; gap: 14px; align-items: center; padding: 14px 0; border-top: 1px solid var(--line); font-size: 15px; line-height: 1.4; }
+.install-step:first-child { border-top: none; }
+.install-n { width: 30px; height: 30px; border-radius: 50%; background: var(--green); color: var(--bg); display: inline-flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 13px; flex: none; }
+.install-pic { width: 44px; height: 44px; border-radius: 12px; background: var(--surface-2); display: inline-flex; align-items: center; justify-content: center; color: #0A84FF; flex: none; }
