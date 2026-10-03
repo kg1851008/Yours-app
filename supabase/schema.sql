@@ -214,3 +214,31 @@ create table if not exists public.subscriptions (
 alter table public.subscriptions enable row level security;
 drop policy if exists "subscriptions read own" on public.subscriptions;
 create policy "subscriptions read own" on public.subscriptions for select to authenticated using (user_id = (select auth.uid()));
+
+-- Proof of agreement to the Terms of Service and Health & Safety Waiver (see public/legal.js).
+-- The server stamps who and when; members can add and read their own rows, never change or delete them.
+create table if not exists public.consents (
+  id bigint generated always as identity primary key,
+  user_id uuid not null references auth.users (id) on delete cascade default auth.uid(),
+  terms_version text not null check (char_length(terms_version) <= 40),
+  documents text not null default 'terms,waiver,age18' check (char_length(documents) <= 100),
+  user_agent text check (char_length(user_agent) <= 400),
+  accepted_at timestamptz not null default now()
+);
+create index if not exists consents_user_idx on public.consents (user_id, accepted_at desc);
+alter table public.consents enable row level security;
+drop policy if exists "consents insert own" on public.consents;
+create policy "consents insert own" on public.consents for insert to authenticated with check (user_id = (select auth.uid()));
+drop policy if exists "consents read own" on public.consents;
+create policy "consents read own" on public.consents for select to authenticated using (user_id = (select auth.uid()));
+create or replace function public.stamp_consent() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  new.user_id := auth.uid();
+  new.accepted_at := now();
+  return new;
+end;
+$$;
+drop trigger if exists consents_stamp on public.consents;
+create trigger consents_stamp before insert on public.consents for each row execute function public.stamp_consent();
+revoke all on function public.stamp_consent() from public, anon, authenticated;

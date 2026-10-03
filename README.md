@@ -14,6 +14,7 @@
 - **Community:** a feed for wins, questions and tips, with likes and comments, plus direct messages, shared with every member when the cloud is on.
 - **Opening splash:** the YOURS logo full screen on cream, then a fade into the app. Shown once per visit (not on refresh), shortened for reduce-motion users.
 - **Privacy promise and contact.** "We never sell your data" on the welcome screen, sign-up, the membership screen and Profile, linking to a plain-English privacy page. Support email (yoursfitapp@gmail.com, set as `SUPPORT_EMAIL` in `public/app.js`) on the privacy page, the membership screen and Profile → Help & contact.
+- **Terms and Health & Safety Waiver.** Sign-up needs a ticked box: 18 or older, and agreement to the Terms of Service and Health & Safety Waiver (`public/legal.js`). Anyone already using the app (guests, the demo, existing accounts) sees a one-time "Before you start" screen and must agree to continue. Each agreement is recorded in the Supabase `consents` table with the server's time and the terms version; changing `VERSION` in `public/legal.js` asks everyone to agree again. The text is a starting draft, not legal advice: have a lawyer review it.
 - Light and dark mode, mobile-first layout, no emojis.
 
 ### Coaching intelligence

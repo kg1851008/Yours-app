@@ -1385,7 +1385,7 @@
         <button class="btn primary block" data-action="start">Get started</button>
         <button class="btn ghost block" data-action="go-login">I have an account</button>
         ${billingOn() ? '' : '<button class="btn soft block" data-action="demo">Try the demo</button>'}
-        <p class="tiny center" style="margin-top:14px">We never sell your data. <button class="link tiny" data-action="open-privacy">Privacy</button></p>
+        <p class="tiny center" style="margin-top:14px">We never sell your data. <button class="link tiny" data-action="open-privacy">Privacy</button> · <button class="link tiny" data-action="open-legal" data-doc="terms">Terms</button></p>
         <div class="p-row" style="margin-top:12px;opacity:.7"><span>Cycle</span><span>Vol. 01</span></div>
       </div>
     </div>`;
@@ -1412,7 +1412,8 @@
     return `<form data-form="signup" data-context="${context}">
       <label class="field"><span class="label">First name</span><input class="input" name="name" autocomplete="given-name" required maxlength="40" value="${esc((S.authForm || {}).name || '')}"></label>
       <label class="field"><span class="label">Email</span><input class="input" type="email" name="email" autocomplete="email" required value="${esc((S.authForm || {}).email || '')}"></label>
-      <label class="field"><span class="label">Password</span><input class="input" type="password" name="password" autocomplete="new-password" minlength="${cloud ? 8 : 6}" required placeholder="At least ${cloud ? 8 : 6} characters"></label>
+      <label class="field"><span class="label">Password</span><input class="input" type="password" name="password" autocomplete="new-password" minlength="${cloud ? 8 : 6}" required placeholder="At least ${cloud ? 8 : 6} characters" value="${esc((S.authForm || {}).password || '')}"></label>
+      <label class="row" style="gap:10px;align-items:flex-start;margin-top:16px;cursor:pointer"><input type="checkbox" name="agree" required ${(S.authForm || {}).agree ? 'checked' : ''} style="width:20px;height:20px;margin-top:2px;flex:none;accent-color:var(--green)"><span class="small">I am 18 or older and agree to the <button type="button" class="link small" data-action="open-legal" data-doc="terms">Terms of Service</button> and <button type="button" class="link small" data-action="open-legal" data-doc="waiver">Health &amp; Safety Waiver</button>, including that YOURS is not medical advice.</span></label>
       ${S.authError ? `<p class="error" style="margin-top:12px">${esc(S.authError)}</p>` : ''}
       <button class="btn primary block" style="margin-top:18px" type="submit">Save my plan</button>
       <p class="tiny muted center" style="margin-top:10px">We never sell or share your data. <button type="button" class="link tiny" data-action="open-privacy">Privacy</button></p>
@@ -1779,6 +1780,46 @@
       <div class="chips">${D.PHASE_ORDER.concat(['menopause']).map((p) => `<button class="chip ${lib === p ? 'selected' : ''}" data-action="lib-phase" data-phase="${p}"><span class="dot" style="background:var(--${p})"></span>${phaseName(p)}</button>`).join('')}</div>
       <div class="h-scroll" style="margin-top:14px">${D.WORKOUTS.filter((w) => w.phase === lib).map((w) => `<button class="poster mini" data-action="view-workout" data-id="${w.id}">${backdrop(lib)}<div class="p-row"><span>${w.minutes} min</span><span>${esc(w.intensity)}</span></div><div class="p-body"><div class="p-title">${esc(w.name)}</div><div class="p-cap" style="letter-spacing:.2em">${esc(w.focus)}</div></div></button>`).join('')}</div>
     </div>`;
+  }
+
+  // ---------- terms, waiver and proof of agreement ----------
+  const LEGAL = window.YOURS_LEGAL;
+  const termsOk = () => !!(S.data && S.data.terms && S.data.terms.version === LEGAL.VERSION);
+  async function recordConsentIfNeeded() {
+    const t = S.data && S.data.terms;
+    if (!isCloud() || !t || t.version !== LEGAL.VERSION || t.recorded) return;
+    try { await cloud.recordConsent(t.version, 'terms,waiver,age18'); t.recorded = true; save(); } catch { /* retried at next sign-in */ }
+  }
+  function acceptTerms() {
+    S.data.terms = { version: LEGAL.VERSION, at: Date.now(), recorded: false };
+    save();
+    recordConsentIfNeeded();
+  }
+  function viewAgreement() {
+    const updated = S.data.terms && S.data.terms.version !== LEGAL.VERSION;
+    return `<div class="screen no-nav">
+      <div class="top"><div class="wordmark sm">yours.</div></div>
+      <div class="eyebrow" style="margin-top:22px">${updated ? 'We updated our terms' : 'One last thing'}</div>
+      <h1 style="margin-top:6px">Before you start</h1>
+      <p class="muted" style="margin-top:8px">Please read and agree to these so you can train safely with YOURS.</p>
+      <ul class="phase-list" style="margin-top:16px">
+        <li class="small"><span>YOURS is general fitness information, <strong>not medical advice</strong>. Check with your doctor before starting, especially if you are pregnant, postpartum, in menopause, or have a health condition or injury.</span></li>
+        <li class="small"><span>Exercise and diet changes carry risks of injury. You take part voluntarily, accept those risks, and release YOURS from liability as far as the law allows.</span></li>
+        <li class="small"><span>Cycle predictions are estimates. <strong>Never use them as contraception.</strong></span></li>
+        <li class="small"><span>Food, macro and AI coach estimates can be wrong. Stop and get help if anything hurts or feels wrong.</span></li>
+        <li class="small"><span>You are 18 or older, and memberships renew automatically until you cancel.</span></li>
+      </ul>
+      <div class="row" style="margin-top:14px"><button class="btn ghost sm grow" data-action="open-legal" data-doc="waiver">Read the waiver</button><button class="btn ghost sm grow" data-action="open-legal" data-doc="terms">Read the terms</button></div>
+      <button class="list-item" style="width:100%;text-align:left;margin-top:16px" data-action="agree-toggle" aria-pressed="${!!S.agreeChecked}"><span class="check ${S.agreeChecked ? 'on' : ''}" style="width:24px;height:24px;border-radius:7px;flex:none">${S.agreeChecked ? icon('check', 12) : ''}</span><span class="small grow">I am 18 or older and I agree to the Terms of Service and the Health &amp; Safety Waiver.</span></button>
+      <button class="btn primary block" style="margin-top:16px" data-action="agree-continue" ${S.agreeChecked ? '' : 'disabled'}>I agree, continue</button>
+      <p class="center small" style="margin-top:14px"><button class="link" data-action="logout">${isGuest() ? 'Start over' : 'Sign out'}</button></p>
+    </div>`;
+  }
+  function legalSheet(doc) {
+    const items = doc === 'waiver' ? LEGAL.WAIVER : LEGAL.TERMS;
+    return `${items.map(([h, t]) => `<div class="label" style="margin-top:16px">${esc(h)}</div><p class="small" style="margin-top:4px">${esc(t)}</p>`).join('')}
+      <p class="tiny muted" style="margin-top:18px">Version ${esc(LEGAL.VERSION)}.${S.data && S.data.terms ? ` You agreed on ${fmtDate(new Date(S.data.terms.at), { month: 'long', day: 'numeric', year: 'numeric' })}.` : ''}</p>
+      <div class="row" style="margin-top:12px">${doc === 'waiver' ? '<button class="btn ghost sm grow" data-action="open-legal" data-doc="terms">Terms of Service</button>' : '<button class="btn ghost sm grow" data-action="open-legal" data-doc="waiver">Health &amp; Safety Waiver</button>'}<button class="btn ghost sm grow" data-action="open-privacy">Privacy</button></div>`;
   }
 
   // ---------- contact ----------
@@ -2557,9 +2598,10 @@
       return sheet(esc(wk.name), `${m.from ? `<button class="link small" style="margin-bottom:8px" data-action="modal-back">Back to program</button>` : ''}<div class="eyebrow">${esc(wk.focus)} · ${wk.minutes} min · ${esc(wk.intensity)}</div><p class="small" style="margin-top:8px">${esc(wk.summary)}</p><div class="divider"></div>${exerciseList(wk, true)}
         <div class="row" style="margin-top:16px"><button class="btn primary grow" data-action="start-workout" data-id="${wk.id}">Start now</button>${isToday ? '' : `<button class="btn ghost" data-action="set-today" data-id="${wk.id}">Make today's</button>`}</div>`);
     }
+    if (m.type === 'legal') return sheet(m.doc === 'waiver' ? 'Health &amp; Safety Waiver' : 'Terms of Service', legalSheet(m.doc));
     if (m.type === 'privacy') {
       const h = (t) => `<div class="label" style="margin-top:18px">${t}</div>`;
-      const li = (items) => `<ul class="phase-list" style="margin-top:6px">${items.map((x) => `<li class="small">${x}</li>`).join('')}</ul>`;
+      const li = (items) => `<ul class="phase-list" style="margin-top:6px">${items.map((x) => `<li class="small"><span>${x}</span></li>`).join('')}</ul>`;
       return sheet('Your data is yours', `
         <div class="card" style="margin:0;background:var(--green);color:var(--bg);border:none"><div class="serif" style="font-size:24px;line-height:1.15">We never sell your data.</div>
           <p class="small" style="margin-top:8px;opacity:.85">We don't share it with advertisers or data brokers. There are no ads and no tracking or analytics in YOURS. Your cycle, health and body data is never used for advertising.</p></div>
@@ -2574,6 +2616,7 @@
         ${li(['Export everything as a file from Profile.', 'Delete your account from Profile. It removes your data, posts, messages and photo backup, and cancels your membership.', 'Hide or report anyone in the community.'])}
         ${h('Questions')}
         <p class="small" style="margin-top:6px">Email us at ${mailLink('Privacy question')}. You can also ask us to delete your data this way.</p>
+        <div class="row" style="margin-top:16px"><button class="btn ghost sm grow" data-action="open-legal" data-doc="terms">Terms of Service</button><button class="btn ghost sm grow" data-action="open-legal" data-doc="waiver">Health &amp; Safety Waiver</button></div>
         <p class="tiny muted" style="margin-top:16px">Last updated October 2026.</p>`);
     }
     if (m.type === 'confirmEmail') {
@@ -2642,7 +2685,7 @@
         ${billingOn() && isCloud() ? `<div class="card flat small"><div class="label">Membership</div><p class="muted">${esc(membershipLine())}</p>${S.sub && S.sub.status && !['none', 'comp'].includes(S.sub.status) ? '<button class="btn ghost sm block" style="margin-top:10px" data-action="billing-portal">Manage membership</button>' : ''}<p class="tiny muted" style="margin-top:8px">Cancel, switch plans or update your card on Stripe's secure page.</p></div>` : ''}
         ${isCloud() ? `<div class="card flat small"><div class="label">Account sync</div><p class="muted">${S.syncState === 'offline' ? 'Offline. Changes are saved on this device and sync when you are back online.' : S.syncState === 'saving' ? 'Saving...' : `Synced across your devices${S.syncedAt ? ` · ${timeAgo(S.syncedAt)}` : ''}.`}</p><button class="btn ghost sm block" style="margin-top:10px" data-action="sync-now">Sync now</button>${(S.data.blocked || []).length ? `<button class="link small" style="margin-top:10px" data-action="unblock-all">Show ${plural(S.data.blocked.length, 'hidden member')} again</button>` : ''}</div>` : cloud && !isGuest() ? '<div class="card flat small"><div class="label">Account sync</div><p class="muted">This account lives on this device only. Sign out and sign in again with the same email and password to move it to your YOURS account and sync across devices.</p></div>' : ''}
         <div class="card flat small"><div class="label">Help & contact</div><p class="muted">Questions, feedback or a problem with your membership? We read every email.</p><p style="margin-top:8px">${mailLink('YOURS help')}</p></div>
-        <div class="card flat small"><div class="label">Your data</div><p><strong>We never sell your data</strong> or share it with advertisers. No ads, no tracking.</p><p class="muted" style="margin-top:6px">${isCloud() ? 'Your plan and history are stored in your private YOURS account and on this device. Progress photos stay on this device unless you turn on encrypted backup. Nothing is used to train AI models.' : 'Everything is stored on this device. Nothing is used to train AI models.'}</p><button class="btn ghost sm block" style="margin-top:10px" data-action="export-data">${icon('download', 16)} Export my data</button><button class="link small" style="margin-top:10px" data-action="open-privacy">Read our privacy promise</button></div>
+        <div class="card flat small"><div class="label">Your data</div><p><strong>We never sell your data</strong> or share it with advertisers. No ads, no tracking.</p><p class="muted" style="margin-top:6px">${isCloud() ? 'Your plan and history are stored in your private YOURS account and on this device. Progress photos stay on this device unless you turn on encrypted backup. Nothing is used to train AI models.' : 'Everything is stored on this device. Nothing is used to train AI models.'}</p><button class="btn ghost sm block" style="margin-top:10px" data-action="export-data">${icon('download', 16)} Export my data</button><button class="link small" style="margin-top:10px" data-action="open-privacy">Read our privacy promise</button> · <button class="link small" data-action="open-legal" data-doc="terms">Terms</button> · <button class="link small" data-action="open-legal" data-doc="waiver">Waiver</button></div>
         <button class="btn ghost block" style="margin-top:12px" data-action="logout">${isGuest() ? 'Start over' : 'Sign out'}</button>
         <button class="btn block" style="margin-top:8px;color:var(--danger)" data-action="delete-data">Delete my data</button>`);
     }
@@ -2660,6 +2703,7 @@
     if (!S.session) html = S.screen === 'login' ? viewLogin() : viewWelcome();
     else if (!S.data.onboarded) html = viewOnboarding();
     else if (!S.data.planSeen) html = viewReveal();
+    else if (!termsOk()) html = viewAgreement();
     else if (billingOn() && !memberHasAccess()) html = viewPaywall();
     else {
       const views = { home: viewHome, workouts: viewWorkouts, meals: viewMeals, advisor: viewAdvisor, community: viewCommunity };
@@ -2681,6 +2725,7 @@
   // ---------- session handling ----------
   async function startSession(session) {
     S.session = session;
+    S.authForm = null; // forget what was typed into the sign-up form, including the password
     store.set('yours.session', session);
     loadData();
     S.vaultUnlocked = false;
@@ -2691,7 +2736,7 @@
     S.backupKey = null; S.backupNames = null;
     stopCloudCommunity();
     await loadPhotos();
-    if (session.cloud) { await syncPull(); await refreshSub(); startCloudCommunity(); }
+    if (session.cloud) { await syncPull(); await refreshSub(); recordConsentIfNeeded(); startCloudCommunity(); }
   }
   // Keep a local name entry for cloud accounts so the app can greet her offline.
   function rememberCloudUser(email, name) {
@@ -2704,7 +2749,9 @@
     const name = form.name.value.trim();
     const email = form.email.value.trim().toLowerCase();
     const password = form.password.value;
-    S.authForm = { name, email }; // kept if there is an error, so she does not retype them
+    S.authForm = { ...(S.authForm || {}), name, email }; // kept if there is an error, so she does not retype them
+    if (form.agree && !form.agree.checked) { S.authError = 'Please agree to the Terms and Health & Safety Waiver to continue.'; return render(); }
+    if (S.data && form.agree) S.data.terms = { version: LEGAL.VERSION, at: Date.now(), recorded: false };
     if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { S.authError = 'Enter your name and a valid email.'; return render(); }
     if (password.length < (cloud ? 8 : 6)) { S.authError = `Use at least ${cloud ? 8 : 6} characters for your password.`; return render(); }
     if (cloud) return cloudSignup(name, email, password);
@@ -2735,7 +2782,7 @@
       if (S.data && isGuest()) { S.data.planSeen = true; S.data._updated = Date.now(); store.set(`yours.data.${email}`, S.data); }
       S.authError = '';
       S.authBusy = false;
-      if (r.needsConfirm) { S.modal = { type: 'confirmEmail', email }; return render(); }
+      if (r.needsConfirm) { S.authForm = null; S.modal = { type: 'confirmEmail', email }; return render(); }
       store.del('yours.data.guest');
       S.modal = null;
       await startSession({ kind: 'user', email, cloud: true });
@@ -2982,6 +3029,9 @@
     },
     'go-welcome': () => { S.screen = 'welcome'; S.authError = ''; render(); },
     demo: () => demo(),
+    'open-legal': (el) => { S.modal = { type: 'legal', doc: el.dataset.doc }; render(); const sh = root.querySelector('.sheet'); if (sh) sh.scrollTop = 0; },
+    'agree-toggle': () => { S.agreeChecked = !S.agreeChecked; render(); },
+    'agree-continue': () => { if (!S.agreeChecked) return; acceptTerms(); S.agreeChecked = false; S.tab = 'home'; render(); window.scrollTo(0, 0); },
     'open-privacy': () => { S.modal = { type: 'privacy' }; render(); },
     'pay-plan': (el) => { S.payPlan = el.dataset.plan; S.billingError = ''; render(); },
     'pay-start': async () => {
@@ -3341,6 +3391,7 @@
   // Live inputs that should not trigger a full re-render.
   document.addEventListener('input', (ev) => {
     const el = ev.target;
+    if (el.form && el.form.dataset.form === 'signup' && ['name', 'email', 'password'].includes(el.name)) { S.authForm = { ...(S.authForm || {}), [el.name]: el.value }; }
     if (el.matches('[data-talk-text]') && S.modal && S.modal.type === 'talk') { S.modal.text = el.value; return; }
     if (el.dataset.estField && S.modal && S.modal.type === 'estimate') {
       const x = S.modal.items[el.dataset.i];
@@ -3387,6 +3438,7 @@
 
   document.addEventListener('change', async (ev) => {
     const el = ev.target;
+    if (el.form && el.form.dataset.form === 'signup' && el.name === 'agree') { S.authForm = { ...(S.authForm || {}), agree: el.checked }; return; }
     if (el.dataset.bindUi === 'pose') { S.pose = el.value; return; }
     if (el.matches('[data-scan-photo]') && el.files && el.files[0]) { scanPhoto(el.files[0]); return; }
     if (el.matches('[data-plate-photo]') && el.files && el.files[0]) { handlePlate(el.files[0]); el.value = ''; return; }

@@ -1,6 +1,6 @@
 // YOURS service worker: offline app shell. The AI endpoint is never cached.
-const CACHE = 'yours-v22';
-const SHELL = ['/', '/index.html', '/styles.css', '/config.js', '/cloud.js', '/data.js', '/logic.js', '/app.js', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png', '/img/logo.png', '/fonts/fonts.css', '/fonts/anton.woff2', '/fonts/archivo-expanded-black.woff2', '/fonts/dm-mono-400.woff2', '/fonts/dm-mono-500.woff2', '/fonts/instrument-serif.woff2', '/fonts/instrument-serif-italic.woff2', '/fonts/inter.woff2', '/fonts/script.woff2'];
+const CACHE = 'yours-v23';
+const SHELL = ['/', '/index.html', '/styles.css', '/config.js', '/cloud.js', '/legal.js', '/data.js', '/logic.js', '/app.js', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png', '/img/logo.png', '/fonts/fonts.css', '/fonts/anton.woff2', '/fonts/archivo-expanded-black.woff2', '/fonts/dm-mono-400.woff2', '/fonts/dm-mono-500.woff2', '/fonts/instrument-serif.woff2', '/fonts/instrument-serif-italic.woff2', '/fonts/inter.woff2', '/fonts/script.woff2'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
