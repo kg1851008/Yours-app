@@ -242,3 +242,53 @@ $$;
 drop trigger if exists consents_stamp on public.consents;
 create trigger consents_stamp before insert on public.consents for each row execute function public.stamp_consent();
 revoke all on function public.stamp_consent() from public, anon, authenticated;
+
+-- Reminders (web push), email preferences, and a log so nothing is sent twice (see api/cron.js).
+create table if not exists public.push_subscriptions (
+  id bigint generated always as identity primary key,
+  user_id uuid not null references auth.users (id) on delete cascade default auth.uid(),
+  endpoint text not null unique check (char_length(endpoint) <= 1000),
+  p256dh text not null check (char_length(p256dh) <= 200),
+  auth text not null check (char_length(auth) <= 100),
+  created_at timestamptz not null default now()
+);
+create index if not exists push_subscriptions_user_idx on public.push_subscriptions (user_id);
+alter table public.push_subscriptions enable row level security;
+drop policy if exists "push own select" on public.push_subscriptions;
+create policy "push own select" on public.push_subscriptions for select to authenticated using (user_id = (select auth.uid()));
+drop policy if exists "push own insert" on public.push_subscriptions;
+create policy "push own insert" on public.push_subscriptions for insert to authenticated with check (user_id = (select auth.uid()));
+drop policy if exists "push own update" on public.push_subscriptions;
+create policy "push own update" on public.push_subscriptions for update to authenticated using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+drop policy if exists "push own delete" on public.push_subscriptions;
+create policy "push own delete" on public.push_subscriptions for delete to authenticated using (user_id = (select auth.uid()));
+
+create table if not exists public.email_prefs (
+  user_id uuid primary key references auth.users (id) on delete cascade default auth.uid(),
+  weekly boolean not null default true,
+  updated_at timestamptz not null default now()
+);
+alter table public.email_prefs enable row level security;
+drop policy if exists "email prefs own select" on public.email_prefs;
+create policy "email prefs own select" on public.email_prefs for select to authenticated using (user_id = (select auth.uid()));
+drop policy if exists "email prefs own insert" on public.email_prefs;
+create policy "email prefs own insert" on public.email_prefs for insert to authenticated with check (user_id = (select auth.uid()));
+drop policy if exists "email prefs own update" on public.email_prefs;
+create policy "email prefs own update" on public.email_prefs for update to authenticated using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+
+create table if not exists public.sent_log (
+  user_id uuid not null references auth.users (id) on delete cascade,
+  kind text not null,
+  period text not null,
+  sent_at timestamptz not null default now(),
+  primary key (user_id, kind, period)
+);
+alter table public.sent_log enable row level security; -- server only: no policies
+
+-- Hourly schedule: Supabase calls /api/cron with the secret kept in Vault (name 'yours_cron_secret').
+-- create extension if not exists pg_cron; create extension if not exists pg_net;
+-- select vault.create_secret('<CRON_SECRET>', 'yours_cron_secret');
+-- select cron.schedule('yours-hourly', '2 * * * *', $$ select net.http_post(
+--   url := 'https://yours-app-tau.vercel.app/api/cron',
+--   headers := jsonb_build_object('Content-Type', 'application/json', 'x-cron-secret', (select decrypted_secret from vault.decrypted_secrets where name = 'yours_cron_secret')),
+--   body := '{}'::jsonb, timeout_milliseconds := 30000) $$);

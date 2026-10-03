@@ -98,6 +98,14 @@
       async recordConsent(version, documents) {
         must(await sb.from('consents').insert({ terms_version: version, documents, user_agent: typeof navigator !== 'undefined' ? String(navigator.userAgent).slice(0, 400) : null }));
       },
+      // Reminders: this device's push subscription, and the weekly email preference.
+      async savePush(sub) {
+        const j = sub.toJSON ? sub.toJSON() : sub;
+        must(await sb.from('push_subscriptions').upsert({ endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth }, { onConflict: 'endpoint' }));
+      },
+      async removePush(endpoint) { must(await sb.from('push_subscriptions').delete().eq('endpoint', endpoint)); },
+      async emailPrefs() { const rows = must(await sb.from('email_prefs').select('weekly').eq('user_id', user.id).limit(1)); return rows && rows[0] ? rows[0] : { weekly: true }; },
+      async setWeeklyEmail(on) { must(await sb.from('email_prefs').upsert({ user_id: user.id, weekly: !!on, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })); },
       async accessToken() { const d = must(await sb.auth.getSession()); return d && d.session ? d.session.access_token : null; },
       async subscription() {
         const rows = must(await sb.from('subscriptions').select('status, plan, trial_used, trial_end, current_period_end, cancel_at_period_end').eq('user_id', user.id).limit(1));

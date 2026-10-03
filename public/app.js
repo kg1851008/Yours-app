@@ -1827,6 +1827,50 @@
       <div class="row" style="margin-top:12px;flex-wrap:wrap">${['terms', 'waiver', 'health'].filter((d) => d !== doc).map((d) => `<button class="btn ghost sm grow" data-action="open-legal" data-doc="${d}">${{ terms: 'Terms of Service', waiver: 'Health &amp; Safety Waiver', health: 'Health data policy' }[d]}</button>`).join('')}<button class="btn ghost sm grow" data-action="open-privacy">Privacy</button></div>`;
   }
 
+  // ---------- reminders (web push) and emails ----------
+  const REMINDER_KINDS = [['workout', "Today's workout", 17], ['checkin', 'Check-in day', 9], ['weigh', 'Morning weigh-in', 7], ['meals', 'Log your food', 20]];
+  const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  const iosNeedsInstall = () => /iphone|ipad|ipod/i.test(navigator.userAgent) && !(window.navigator.standalone || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches));
+  const hourLabel = (h) => `${((h + 11) % 12) + 1}${h < 12 ? 'am' : 'pm'}`;
+  function urlKey(b64) {
+    const pad = '='.repeat((4 - (b64.length % 4)) % 4);
+    const raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+    return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+  }
+  async function enableReminders() {
+    if (!isCloud()) return toast('Sign in to turn on reminders');
+    if (!pushSupported()) return toast(iosNeedsInstall() ? 'Add YOURS to your Home Screen first, then turn on reminders there.' : 'This browser does not support reminders.');
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') return toast('Notifications are blocked. Allow them in your phone settings to get reminders.');
+      const reg = await navigator.serviceWorker.ready;
+      const sub = (await reg.pushManager.getSubscription()) || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlKey((window.YOURS_CONFIG || {}).vapidPublicKey) }));
+      await cloud.savePush(sub);
+      const r = S.data.reminders || {};
+      S.data.reminders = { ...r, on: true, tz: Intl.DateTimeFormat().resolvedOptions().timeZone };
+      REMINDER_KINDS.forEach(([k, , hour]) => { S.data.reminders[k] = { on: true, hour, ...(r[k] || {}) }; });
+      save(); render();
+      toast('Reminders are on');
+    } catch { toast('Could not turn on reminders. Try again.'); }
+  }
+  async function disableReminders() {
+    S.data.reminders = { ...(S.data.reminders || {}), on: false };
+    save(); render();
+    try { const reg = await navigator.serviceWorker.ready; const sub = await reg.pushManager.getSubscription(); if (sub) { if (isCloud()) await cloud.removePush(sub.endpoint).catch(() => {}); await sub.unsubscribe(); } } catch { /* already off */ }
+  }
+  function remindersCard() {
+    if (!isCloud()) return '';
+    const r = S.data.reminders || {};
+    const on = !!r.on;
+    const rows = REMINDER_KINDS.map(([k, label, def]) => { const p = r[k] || { on: true, hour: def }; return `<div class="row between" style="margin-top:10px"><button class="row" style="gap:10px;text-align:left" data-action="reminder-toggle" data-kind="${k}" aria-pressed="${p.on !== false}"><span class="check ${p.on !== false ? 'on' : ''}" style="width:22px;height:22px;border-radius:7px">${p.on !== false ? icon('check', 12) : ''}</span><span class="small">${label}</span></button><select class="select" style="width:auto;height:36px;padding:0 10px" data-reminder-hour="${k}" aria-label="${label} time" ${p.on === false ? 'disabled' : ''}>${Array.from({ length: 24 }, (_, h) => `<option value="${h}" ${h === (Number.isInteger(p.hour) ? p.hour : def) ? 'selected' : ''}>${hourLabel(h)}</option>`).join('')}</select></div>`; }).join('');
+    return `<div class="card flat small"><div class="label">Reminders</div>
+      ${on ? `<p class="muted">Only when there's something to do: no workout reminder on rest days or once you've trained. Lock-screen text never mentions your cycle or weight.</p>${rows}
+        <div class="row" style="margin-top:12px"><button class="btn ghost sm grow" data-action="reminders-test">Send a test</button><button class="btn ghost sm grow" data-action="reminders-off">Turn off</button></div>`
+        : `<p class="muted">Gentle nudges for your workout, check-in day, weigh-in and food log, at times you choose.${iosNeedsInstall() ? ' On iPhone, first add YOURS to your Home Screen (Share, then Add to Home Screen) and open it from there.' : ''}</p><button class="btn primary sm block" style="margin-top:10px" data-action="reminders-on">Turn on reminders</button>`}
+      <div class="row between" style="margin-top:14px"><span class="small">Weekly summary email</span><button class="chip ${S.emailWeekly === false ? '' : 'selected'}" data-action="toggle-weekly-email">${S.emailWeekly === false ? 'Off' : 'On'}</button></div>
+    </div>`;
+  }
+
   // ---------- contact ----------
   const SUPPORT_EMAIL = 'yoursfitapp@gmail.com';
   const mailLink = (subject, label) => `<a class="link" href="mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}">${esc(label || SUPPORT_EMAIL)}</a>`;
@@ -2765,6 +2809,7 @@
         <div class="card flat small"><div class="label">Coach</div><p class="muted">${S.ai ? 'Live AI coach is connected.' : 'Running the on-device coach. Set ANTHROPIC_API_KEY on the server to enable the live AI coach and photo reviews.'}</p></div>
         ${billingOn() && isCloud() ? `<div class="card flat small"><div class="label">Membership</div><p class="muted">${esc(membershipLine())}</p>${S.sub && S.sub.status && !['none', 'comp'].includes(S.sub.status) ? '<button class="btn ghost sm block" style="margin-top:10px" data-action="billing-portal">Manage membership</button>' : ''}<p class="tiny muted" style="margin-top:8px">Cancel, switch plans or update your card on Stripe's secure page.</p></div>` : ''}
         ${isCloud() ? `<div class="card flat small"><div class="label">Account sync</div><p class="muted">${S.syncState === 'offline' ? 'Offline. Changes are saved on this device and sync when you are back online.' : S.syncState === 'saving' ? 'Saving...' : `Synced across your devices${S.syncedAt ? ` · ${timeAgo(S.syncedAt)}` : ''}.`}</p><button class="btn ghost sm block" style="margin-top:10px" data-action="sync-now">Sync now</button>${(S.data.blocked || []).length ? `<button class="link small" style="margin-top:10px" data-action="unblock-all">Show ${plural(S.data.blocked.length, 'hidden member')} again</button>` : ''}</div>` : cloud && !isGuest() ? '<div class="card flat small"><div class="label">Account sync</div><p class="muted">This account lives on this device only. Sign out and sign in again with the same email and password to move it to your YOURS account and sync across devices.</p></div>' : ''}
+        ${remindersCard()}
         <div class="card flat small"><div class="label">Help & contact</div><p class="muted">Questions, feedback or a problem with your membership? We read every email.</p><p style="margin-top:8px">${mailLink('YOURS help')}</p></div>
         <div class="card flat small"><div class="label">Your data</div><p><strong>We never sell your data</strong> or share it with advertisers. No ads, no tracking.</p><p class="muted" style="margin-top:6px">${isCloud() ? 'Your plan and history are stored in your private YOURS account and on this device. Progress photos stay on this device unless you turn on encrypted backup. Nothing is used to train AI models.' : 'Everything is stored on this device. Nothing is used to train AI models.'}</p><button class="btn ghost sm block" style="margin-top:10px" data-action="export-data">${icon('download', 16)} Export my data</button><button class="link small" style="margin-top:10px" data-action="open-privacy">Read our privacy promise</button> · <button class="link small" data-action="open-legal" data-doc="terms">Terms</button> · <button class="link small" data-action="open-legal" data-doc="waiver">Waiver</button> · <button class="link small" data-action="open-legal" data-doc="health">Health data policy</button></div>
         <button class="btn ghost block" style="margin-top:12px" data-action="logout">${isGuest() ? 'Start over' : 'Sign out'}</button>
@@ -2817,7 +2862,7 @@
     S.backupKey = null; S.backupNames = null;
     stopCloudCommunity();
     await loadPhotos();
-    if (session.cloud) { await syncPull(); await refreshSub(); recordConsentIfNeeded(); startCloudCommunity(); }
+    if (session.cloud) { await syncPull(); await refreshSub(); recordConsentIfNeeded(); startCloudCommunity(); cloud.emailPrefs().then((p) => { S.emailWeekly = p.weekly; }).catch(() => {}); }
   }
   // Keep a local name entry for cloud accounts so the app can greet her offline.
   function rememberCloudUser(email, name) {
@@ -3025,6 +3070,7 @@
       if (saved) store.del(dataKey());
       store.del(bkStoreKey());
       stopCloudCommunity();
+      try { const reg = 'serviceWorker' in navigator && await navigator.serviceWorker.getRegistration(); const sub = reg && reg.pushManager && await reg.pushManager.getSubscription(); if (sub) { await cloud.removePush(sub.endpoint).catch(() => {}); await sub.unsubscribe(); } } catch { /* no reminders on this device */ }
       await cloud.signOut();
     }
     S.session = null;
@@ -3116,6 +3162,13 @@
     'agree-toggle': () => { S.agreeChecked = !S.agreeChecked; render(); },
     'health-toggle': () => { S.healthChecked = !S.healthChecked; render(); },
     'agree-continue': () => { if (!S.agreeChecked || !S.healthChecked) return; acceptTerms(); S.agreeChecked = false; S.healthChecked = false; S.tab = 'home'; render(); window.scrollTo(0, 0); },
+    'reminders-on': () => enableReminders(),
+    'reminders-off': () => disableReminders(),
+    'reminder-toggle': (el) => { const r = S.data.reminders || {}; const k = el.dataset.kind; const cur = r[k] || { on: true, hour: REMINDER_KINDS.find((x) => x[0] === k)[2] }; r[k] = { ...cur, on: cur.on === false }; S.data.reminders = r; save(); render(); },
+    'reminders-test': async () => {
+      try { const token = await cloud.accessToken(); const res = await fetch('/api/push-test', { method: 'POST', headers: { Authorization: `Bearer ${token}` } }); toast(res.ok ? 'Test sent. It should arrive in a few seconds.' : res.status === 404 ? 'Turn reminders on again on this device.' : 'Reminders are not switched on on the server yet.'); } catch { toast('Could not send a test.'); }
+    },
+    'toggle-weekly-email': async () => { const next = S.emailWeekly === false; S.emailWeekly = next; render(); try { await cloud.setWeeklyEmail(next); } catch { S.emailWeekly = !next; render(); toast('Could not save. Try again.'); } },
     'open-privacy': () => { S.modal = { type: 'privacy' }; render(); },
     'pay-plan': (el) => { S.payPlan = el.dataset.plan; S.billingError = ''; render(); },
     'pay-start': async () => {
@@ -3534,6 +3587,7 @@
     if (el.form && el.form.dataset.form === 'signup' && (el.name === 'agree' || el.name === 'health')) { S.authForm = { ...(S.authForm || {}), [el.name]: el.checked }; return; }
     if (el.dataset.bindUi === 'pose') { S.pose = el.value; return; }
     if (el.matches('[data-scan-photo]') && el.files && el.files[0]) { scanPhoto(el.files[0]); return; }
+    if (el.dataset.reminderHour && S.data) { const k = el.dataset.reminderHour; S.data.reminders = S.data.reminders || {}; S.data.reminders[k] = { ...(S.data.reminders[k] || { on: true }), hour: Number(el.value) }; S.data.reminders.tz = Intl.DateTimeFormat().resolvedOptions().timeZone; save(); return; }
     if (el.matches('[data-plate-photo]') && el.files && el.files[0]) { handlePlate(el.files[0]); el.value = ''; return; }
     if (el.dataset.estField && S.modal && S.modal.type === 'estimate') { render(); return; }
     if (el.dataset.ciPhoto && el.files && el.files[0] && S.modal && S.modal.type === 'ciPhotos') {
@@ -3792,6 +3846,12 @@
       if (u) await enterCloudAccount(u);
     }
     render();
+    // Opened from a reminder: go to the right screen.
+    const openTo = new URLSearchParams(location.search).get('open');
+    if (openTo && S.session && S.data && ['home', 'workouts', 'meals', 'advisor', 'community', 'checkin'].includes(openTo)) {
+      history.replaceState(null, '', location.pathname);
+      if (openTo === 'checkin') { if (L.weeklyDue(S.data)) S.modal = { type: 'ciPhotos', photos: {} }; S.tab = 'home'; } else goTab(openTo);
+    }
     // Back from Stripe: tidy the address bar, then confirm the membership.
     const billingReturn = new URLSearchParams(location.search).get('billing');
     if (billingReturn) {

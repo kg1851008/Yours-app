@@ -1,5 +1,5 @@
 // YOURS service worker: offline app shell. The AI endpoint is never cached.
-const CACHE = 'yours-v25';
+const CACHE = 'yours-v26';
 const SHELL = ['/', '/index.html', '/styles.css', '/config.js', '/cloud.js', '/legal.js', '/data.js', '/logic.js', '/app.js', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png', '/img/logo.png', '/fonts/fonts.css', '/fonts/anton.woff2', '/fonts/archivo-expanded-black.woff2', '/fonts/dm-mono-400.woff2', '/fonts/dm-mono-500.woff2', '/fonts/instrument-serif.woff2', '/fonts/instrument-serif-italic.woff2', '/fonts/inter.woff2', '/fonts/script.woff2'];
 
 self.addEventListener('install', (e) => {
@@ -27,5 +27,27 @@ self.addEventListener('fetch', (e) => {
     const cached = await cache.match(e.request);
     const fresh = fetch(e.request).then((res) => { if (res.ok) cache.put(e.request, res.clone()); return res; }).catch(() => cached);
     return cached || fresh;
+  }));
+});
+
+// Reminders (web push). Text is discreet by design: no health details on the lock screen.
+self.addEventListener('push', (e) => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch { d = { body: e.data && e.data.text() }; }
+  e.waitUntil(self.registration.showNotification(d.title || 'YOURS', {
+    body: d.body || '',
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    tag: d.tag || 'yours',
+    data: { url: d.url || '/' },
+  }));
+});
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const url = new URL((e.notification.data && e.notification.data.url) || '/', self.location.origin).href;
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+    const open = list.find((c) => c.url.startsWith(self.location.origin));
+    if (open) { open.navigate(url); return open.focus(); }
+    return self.clients.openWindow(url);
   }));
 });

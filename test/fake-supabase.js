@@ -6,7 +6,7 @@ const crypto = require('node:crypto');
 
 function createBackend(opts) {
   const confirmEmail = !!(opts && opts.confirmEmail);
-  const db = { users: [], profiles: [], user_data: [], posts: [], comments: [], likes: [], messages: [], reports: [], subscriptions: [], consents: [], files: {} };
+  const db = { users: [], profiles: [], user_data: [], posts: [], comments: [], likes: [], messages: [], reports: [], subscriptions: [], consents: [], push_subscriptions: [], email_prefs: [], files: {} };
   const tokens = {};
   const now = () => new Date(Date.now() + (db.tick = (db.tick || 0) + 1)).toISOString();
   const err = (message) => ({ data: null, error: { message } });
@@ -55,7 +55,7 @@ function createBackend(opts) {
     const t = db[q.table];
     if (q.action === 'select') {
       let rows = t.filter((r) => match(r, q.filters));
-      if (q.table === 'user_data' || q.table === 'subscriptions') rows = rows.filter((r) => r.user_id === u.id);
+      if (['user_data', 'subscriptions', 'push_subscriptions', 'email_prefs'].includes(q.table)) rows = rows.filter((r) => r.user_id === u.id);
       if (q.table === 'messages') rows = rows.filter((r) => r.from_id === u.id || r.to_id === u.id);
       if (q.order) rows = rows.slice().sort((a, b) => (a[q.order.col] < b[q.order.col] ? -1 : 1) * (q.order.ascending ? 1 : -1));
       if (q.limit) rows = rows.slice(0, q.limit);
@@ -68,6 +68,7 @@ function createBackend(opts) {
       if (q.table === 'messages') { v.id = crypto.randomUUID(); v.from_id = u.id; v.created_at = now(); }
       if (q.table === 'reports') { v.reporter_id = u.id; }
       if (q.table === 'consents') { v.user_id = u.id; v.accepted_at = now(); }
+      if (q.table === 'push_subscriptions' || q.table === 'email_prefs') { v.user_id = u.id; const key = q.table === 'push_subscriptions' ? 'endpoint' : 'user_id'; const i = t.findIndex((r) => r[key] === v[key]); if (i > -1) { t[i] = { ...t[i], ...v }; return { data: null, error: null }; } }
       if (q.table === 'user_data') { if (v.user_id !== u.id) return err('row-level security'); const i = t.findIndex((r) => r.user_id === u.id); if (i > -1) t[i] = v; else t.push(v); return { data: null, error: null }; }
       if (q.table === 'likes') { v.user_id = u.id; if (t.some((r) => r.post_id === v.post_id && r.user_id === u.id)) return { data: null, error: null }; }
       t.push(v);
