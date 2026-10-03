@@ -6,7 +6,7 @@
       short: 'Rest and restore',
       energy: 'Lower energy',
       hormones: 'Estrogen and progesterone are at their lowest. Inflammation and fatigue can run higher.',
-      training: 'Keep intensity low to moderate. Mobility, walking and lighter full-body work keep momentum without draining recovery.',
+      training: 'Keep intensity low to moderate. Mobility and lighter full-body lifting keep momentum without draining recovery.',
       nutrition: 'Prioritise iron, vitamin C, omega-3s and warm, easy-to-digest meals. Hydrate well.',
       tips: [
         'Swap heavy lifting for controlled tempo work at RPE 5-6.',
@@ -48,7 +48,7 @@
       short: 'Sustain and steady',
       energy: 'Gradually lower energy',
       hormones: 'Progesterone rises, body temperature and calorie needs increase, and cravings are normal.',
-      training: 'Moderate loads, higher reps and steady cardio. Focus on technique and consistency rather than PRs.',
+      training: 'Moderate loads, higher reps and controlled tempo. Focus on technique and consistency rather than PRs.',
       nutrition: 'Complex carbs, magnesium and B6. You may need 100-200 more calories, so eat them on purpose.',
       tips: [
         'Hold your weights steady and chase quality reps instead of new maxes.',
@@ -67,14 +67,14 @@
   const WORKOUTS = [
     {
       id: 'm-restore', phase: 'menstrual', name: 'Restore and Mobility', focus: 'Mobility and core', minutes: 30, intensity: 'Low',
-      summary: 'Gentle movement to ease cramps, open the hips and keep you consistent.',
+      summary: 'Gentle mobility and light lifts to ease cramps, open the hips and keep you consistent.',
       exercises: [
         e('Cat-cow', 2, '10', '30s', 'Move slowly with your breath.'),
         e('90/90 hip switches', 2, '8 / side', '30s', 'Sit tall and rotate from the hips.'),
         e('Glute bridge', 3, '12', '45s', 'Squeeze for 2 seconds at the top.'),
+        e('Goblet squat (light)', 2, '10', '60s', 'An easy weight and smooth reps.'),
         e('Bird dog', 3, '8 / side', '30s', 'Keep hips square and core braced.'),
         e('Dead bug', 3, '8 / side', '30s', 'Press your low back into the floor.'),
-        e('Incline walk', 1, '15 min', '-', 'Conversational pace.'),
       ],
     },
     {
@@ -86,17 +86,19 @@
         e('Seated cable row', 3, '12', '60s', 'Pull elbows to your back pockets.'),
         e('Incline dumbbell press', 3, '10', '60s', 'Control the lowering for 2 seconds.'),
         e('Pallof press', 2, '10 / side', '30s', 'Resist rotation and breathe out as you press.'),
-        e('Easy walk', 1, '10 min', '-', 'Cool down.'),
       ],
     },
+    // Ids m-walk, f-hiit and l-pilates are kept so saved plans and history still resolve; all three are lifting sessions now.
     {
-      id: 'm-walk', phase: 'menstrual', name: 'Zone 2 Walk and Core', focus: 'Cardio and core', minutes: 40, intensity: 'Low',
-      summary: 'Steady walking for heart health and cramp relief, finished with core work.',
+      id: 'm-walk', phase: 'menstrual', name: 'Gentle Glutes and Core', focus: 'Glutes and core', minutes: 35, intensity: 'Low',
+      summary: 'Light glute work and core strength at RPE 5-6. Easy on the body, still lifting.',
       exercises: [
-        e('Zone 2 walk', 1, '30 min', '-', 'You should be able to talk in full sentences.'),
+        e('Dumbbell glute bridge', 3, '12', '60s', 'Pause for 2 seconds at the top.', true),
+        e('Step-up (low box)', 3, '8 / leg', '60s', 'Drive through the whole foot, control the way down.'),
+        e('Cable pull-through', 3, '12', '60s', 'Hinge back, then squeeze the glutes to stand.'),
+        e('Lying leg curl', 2, '12', '60s', 'Slow 3-second lowering.'),
         e('Forearm plank', 3, '30s', '30s', 'Ribs down, glutes on.'),
         e('Side plank', 2, '20s / side', '30s', 'Stack hips and keep a long line.'),
-        e('Supine breathing', 1, '2 min', '-', 'Inhale 4 seconds, exhale 6 seconds.'),
       ],
     },
     {
@@ -124,13 +126,15 @@
       ],
     },
     {
-      id: 'f-hiit', phase: 'follicular', name: 'Conditioning Intervals', focus: 'Conditioning', minutes: 30, intensity: 'High',
-      summary: 'Short, hard intervals while your recovery is at its best.',
+      id: 'f-hiit', phase: 'follicular', name: 'Full Body Strength', focus: 'Full body', minutes: 50, intensity: 'High',
+      summary: 'Big compound lifts for the whole body while your recovery is at its best.',
       exercises: [
-        e('Row erg intervals', 8, '30s hard / 60s easy', '-', 'Push through the legs first.'),
-        e('Kettlebell swing', 4, '15', '45s', 'Snap the hips and float the bell.'),
-        e('Reverse lunge', 3, '10 / leg', '45s', 'Step back long and stay tall.'),
-        e('Mountain climbers', 3, '30s', '30s', 'Shoulders over wrists.'),
+        e('Trap bar deadlift', 4, '6', '2-3 min', 'Brace, push the floor away, stand tall.', true),
+        e('Incline dumbbell press', 4, '8', '90s', 'Control the lowering for 2 seconds.', true),
+        e('Reverse lunge', 3, '10 / leg', '75s', 'Step back long and stay tall.'),
+        e('Seated cable row', 3, '10', '75s', 'Pull elbows to your back pockets.'),
+        e('Kettlebell swing', 3, '12', '60s', 'Snap the hips and float the bell.'),
+        e('Pallof press', 2, '10 / side', '45s', 'Resist rotation and breathe out as you press.'),
       ],
     },
     {
@@ -181,15 +185,15 @@
       ],
     },
     {
-      id: 'l-pilates', phase: 'luteal', name: 'Pilates Core Sculpt', focus: 'Core and stability', minutes: 35, intensity: 'Low-moderate',
-      summary: 'Low-impact control work when energy dips late in the cycle.',
+      id: 'l-pilates', phase: 'luteal', name: 'Glute and Core Sculpt', focus: 'Glutes and core', minutes: 40, intensity: 'Low-moderate',
+      summary: 'Lighter glute and core lifting when energy dips late in the cycle.',
       exercises: [
-        e('Hundred', 1, '100 pulses', '30s', 'Chin to chest, legs at tabletop.'),
-        e('Single-leg stretch', 3, '10 / side', '30s', 'Keep the low back heavy.'),
-        e('Side-lying leg series', 2, '15 / side', '30s', 'Long body, small range.'),
-        e('Glute bridge march', 3, '10 / side', '30s', 'Level hips.'),
-        e('Swimming', 3, '30s', '30s', 'Reach long through fingers and toes.'),
-        e('Zone 2 walk', 1, '15 min', '-', 'Easy pace.'),
+        e('Dumbbell hip thrust', 3, '12', '60s', 'Hold the top for 1 second.', true),
+        e('Cable kickback', 3, '12 / leg', '45s', 'Squeeze the glute, not the low back.'),
+        e('Seated hip abduction', 3, '15', '45s', 'Lean forward slightly for upper glutes.'),
+        e('45-degree back extension', 2, '12', '60s', 'Round the upper back and drive with the glutes.'),
+        e('Dead bug', 3, '8 / side', '30s', 'Press your low back into the floor.'),
+        e('Pallof press', 2, '10 / side', '30s', 'Resist rotation and breathe out as you press.'),
       ],
     },
     {
@@ -211,8 +215,8 @@
         e('Low box jump or step-up hop', 4, '5', '60s', 'Land softly. Swap for fast step-ups if jumping does not feel right.'),
         e('Kettlebell swing', 4, '12', '60s', 'Snap the hips, float the bell.', true),
         e('Medicine ball slam', 3, '8', '45s', 'Reach tall, slam with intent.'),
+        e('Dumbbell push press', 3, '8', '60s', 'Dip and drive, then lock out overhead.'),
         e('Single-leg balance reach', 3, '6 / leg', '30s', 'Slow and steady. Hold a wall if needed.'),
-        e('Brisk walk', 1, '15 min', '-', 'Hills or stairs if you have them.'),
       ],
     },
     {
@@ -223,7 +227,7 @@
         e('Thoracic rotations', 2, '8 / side', '30s', 'Follow your hand with your eyes.'),
         e('Glute bridge', 3, '12', '45s', 'Squeeze for 2 seconds at the top.'),
         e('Tandem walk', 2, '10 steps', '30s', 'Heel to toe in a straight line.'),
-        e('Easy walk', 1, '15 min', '-', 'Conversational pace.'),
+        e('Light dumbbell Romanian deadlift', 2, '10', '60s', 'Easy weight, long spine, hips back.'),
       ],
     },
     {
@@ -546,7 +550,6 @@
       e('Heel slides', 2, '8 / side', '30s', 'Exhale and connect as the leg slides out.'),
       e('Glute bridge', 3, '10', '45s', 'Exhale and lift; squeeze the glutes at the top.'),
       e('Side-lying clam', 2, '12 / side', '30s', 'Keep the hips stacked.'),
-      e('Walk', 1, '20 min', '-', 'Pram walks count.'),
     ]),
     pw('pp-1b', 'postpartum', 'Reconnect B', 'Posture and upper body', 25, 'Very low', 'Gentle upper body and posture work for feeding and carrying.', [
       e('360 breathing', 2, '6 breaths', '30s', 'Ribs expand in every direction.'),
@@ -555,7 +558,6 @@
       e('Band pull-apart', 3, '12', '30s', 'Shoulders down and back.'),
       e('Bird dog (from knees)', 2, '6 / side', '30s', 'Slow and steady.'),
       e('Sit-to-stand', 3, '8', '45s', 'Exhale as you stand.'),
-      e('Walk', 1, '20 min', '-', 'Conversational pace.'),
     ]),
     pw('pp-2a', 'postpartum', 'Rebuild A', 'Lower body and core', 30, 'Low', 'Bodyweight strength with the breath leading every rep.', [
       e('Pelvic floor holds', 2, '10 x 8s hold', '45s', 'Build the hold before you build the load.'),
@@ -571,7 +573,6 @@
       e('Band row', 3, '12', '45s', 'Squeeze the shoulder blades.'),
       e('Pallof press', 3, '8 / side', '45s', 'Exhale as you press; resist the twist.'),
       e('Side plank (knees)', 2, '20s / side', '30s', 'Hips in line with shoulders.'),
-      e('Walk', 1, '25 min', '-', 'Hills if you feel good.'),
     ]),
     pw('pp-3a', 'postpartum', 'Load A', 'Lower body strength', 35, 'Moderate', 'Dumbbells come back in. Keep the breath with every rep.', [
       e('Goblet squat', 3, '8-10', '75s', 'Exhale and lift the pelvic floor as you stand.', true),
@@ -587,13 +588,12 @@
       e('Farmer carry', 3, '30 m', '60s', 'Moderate weight, tall posture.'),
       e('Side plank (knees)', 2, '30s / side', '30s', 'Progress to feet when it feels solid.'),
     ]),
-    pw('pp-4a', 'postpartum', 'Strengthen A', 'Strength and impact prep', 40, 'Moderate', 'Heavier lower body and the first impact prep for a return to running.', [
+    pw('pp-4a', 'postpartum', 'Strengthen A', 'Lower body strength', 40, 'Moderate', 'Heavier lower body on the way back to full lifting.', [
       e('Goblet squat', 4, '8', '90s', 'A little heavier than last block.', true),
       e('Hip thrust', 3, '10', '75s', 'Exhale at the top.', true),
+      e('Kettlebell deadlift', 3, '10', '75s', 'Exhale and lift the pelvic floor as you stand.'),
       e('Reverse lunge', 3, '8 / side', '60s', 'Controlled, no rush.'),
       e('Calf raise', 3, '15', '45s', 'Full range.'),
-      e('Marching on the spot', 2, '1 min', '45s', 'Then progress to a gentle jog on the spot if it feels good.'),
-      e('Pogo hops (impact test)', 2, '10', '60s', 'Only if you have no leaking, heaviness or pain. Stop at any symptom.'),
     ]),
     pw('pp-4b', 'postpartum', 'Strengthen B', 'Full body strength', 40, 'Moderate', 'Full body strength with loaded carries.', [
       e('Dumbbell Romanian deadlift', 4, '8', '90s', 'Heavier than last block.', true),
@@ -603,10 +603,10 @@
       e('Suitcase carry', 3, '30 m / side', '60s', 'Heavier than before.'),
       e('Plank', 2, '30s', '45s', 'Only if there is no doming; otherwise stay on your knees.'),
     ]),
-    pw('pp-daily', 'postpartum', 'Daily reset', 'Pelvic floor and walking', 15, 'Very low', 'A few minutes of pelvic floor work and a walk on your off days.', [
+    pw('pp-daily', 'postpartum', 'Daily reset', 'Pelvic floor', 10, 'Very low', 'A few minutes of pelvic floor work on your off days.', [
       e('Pelvic floor holds', 1, '10 x 5-10s hold', '-', 'Lying, sitting or standing.'),
       e('Pelvic floor quick lifts', 1, '10', '-', 'Full release every rep.'),
-      e('Walk', 1, '15-30 min', '-', 'Fresh air counts as training right now.'),
+      e('Glute bridge', 2, '10', '30s', 'Exhale and lift; squeeze the glutes at the top.'),
     ]),
 
     // Glute Build
@@ -731,14 +731,14 @@
       e('Chest-supported row', 4, '6', '2 min', 'Heavy and paused.', true),
       e('Dumbbell bench press', 3, '8', '90s', 'Controlled.'),
       e('Step-down', 3, '8 / side', '60s', 'Slow lowering for knee and balance control.'),
-      e('Jump rope or skips', 3, '30s', '60s', 'Light impact. March instead if needed.'),
+      e('Heel drops', 3, '10', '45s', 'Rise onto toes and drop onto heels: gentle impact for bone. Hold dumbbells when easy.'),
     ]),
   ];
 
   const PROGRAMS = [
     {
       id: 'postpartum', name: 'Postpartum return', kicker: 'After baby', perWeek: 3, offDay: 'pp-daily',
-      tagline: 'Pelvic floor first, then strength, then a safe path back to running and lifting.',
+      tagline: 'Pelvic floor first, then strength, then a safe path back to full lifting.',
       who: 'From your postnatal check (usually 6 weeks or later) once a doctor or midwife has cleared you for exercise. After a C-section, wait for their go-ahead.',
       clearance: true,
       screen: ['Leaking when you cough, sneeze, laugh or lift', 'Heaviness, dragging or bulging in the vagina', 'Pelvic, back or scar pain', 'A ridge or doming along your midline when you lift your head'],
@@ -746,10 +746,10 @@
         { from: 1, to: 2, title: 'Reconnect', note: 'Breath, pelvic floor and gentle strength. Daily pelvic floor work on the other days.', sessions: ['pp-1a', 'pp-1b'] },
         { from: 3, to: 4, title: 'Rebuild', note: 'Bodyweight strength and anti-rotation core.', sessions: ['pp-2a', 'pp-2b'] },
         { from: 5, to: 6, title: 'Load', note: 'Dumbbells come back. Keep exhaling on effort.', sessions: ['pp-3a', 'pp-3b'] },
-        { from: 7, to: 8, title: 'Strengthen', note: 'Heavier work and an impact test before any running.', sessions: ['pp-4a', 'pp-4b'] },
+        { from: 7, to: 8, title: 'Strengthen', note: 'Heavier loads to get you back to full lifting.', sessions: ['pp-4a', 'pp-4b'] },
       ],
       cue: PF,
-      finish: 'If you can do 10 single-leg hops a side, jog on the spot for a minute and lunge 10 times a side without leaking, heaviness or pain, you are ready to start a walk-run plan. If not, a pelvic health physio can help.',
+      finish: 'If you can squat, deadlift and lunge with weights for 10 reps without leaking, heaviness or pain, you are ready for the main YOURS plan or another program. If not, a pelvic health physio can help.',
     },
     {
       id: 'glutes', name: 'Glute build', kicker: '8 weeks', perWeek: 3,
