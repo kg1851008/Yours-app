@@ -904,6 +904,11 @@
     },
   ];
 
+  // Member quotes for the landing page. Only add real quotes from real members, with their permission,
+  // e.g. { quote: 'I finally stopped fighting my body on period week.', name: 'Jess', detail: 'Member since 2026' }.
+  // The section stays hidden while this list is empty.
+  const TESTIMONIALS = [];
+
   // Swap groups: exercises in a group train the same movement and muscles, so any one can stand in for another
   // ("machine taken? swap it"). An exercise can sit in more than one group.
   const SWAPS = [
@@ -996,7 +1001,7 @@
 
   WORKOUTS.push(...PROGRAM_WORKOUTS);
 
-  const api = { SWAPS, PROGRAMS, BASIC_FOODS, RESTAURANTS, STORES, PHASE_COPY, IMAGERY, PHASES, PHASE_ORDER, WORKOUTS, ROTATION, MEALS, FAVORITE_OPTIONS, AVOID_OPTIONS, MEMBERS, SEED_POSTS, AUTO_REPLIES, CYCLE_MODES, SYMPTOMS, MENO_SYMPTOMS, GROCERY };
+  const api = { TESTIMONIALS, SWAPS, PROGRAMS, BASIC_FOODS, RESTAURANTS, STORES, PHASE_COPY, IMAGERY, PHASES, PHASE_ORDER, WORKOUTS, ROTATION, MEALS, FAVORITE_OPTIONS, AVOID_OPTIONS, MEMBERS, SEED_POSTS, AUTO_REPLIES, CYCLE_MODES, SYMPTOMS, MENO_SYMPTOMS, GROCERY };
   if (typeof window !== 'undefined') window.YOURS_DATA = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

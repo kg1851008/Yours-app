@@ -1436,6 +1436,113 @@
     </div>`;
   }
 
+  // ---------- landing page (first visit in a browser; the installed app opens straight to the welcome screen) ----------
+  const showLanding = () => !S.session && S.screen !== 'login' && !isStandalone();
+  function viewLanding() {
+    logEvent('landing_view');
+    const paid = billingOn();
+    const days = trialDays();
+    const m = priceFor('monthly'), y = priceFor('yearly');
+    const save = m && y ? Math.round((1 - y.amount / (m.amount * 12)) * 100) : 0;
+    const cta = (cls) => `<button class="btn primary ${cls || ''}" data-action="start">${paid ? `Start your ${days}-day free trial` : 'Build my free plan'}</button>`;
+    const phone = (img, alt) => `<div class="lp-phone"><img src="img/landing/${img}.jpg" alt="${esc(alt)}" width="390" height="844" loading="lazy"></div>`;
+    const phases = [
+      ['menstrual', 'Period week', 'Lighter lifts, mobility and more rest. Iron-rich meals and gentle movement for cramps.'],
+      ['follicular', 'Follicular', 'Energy climbs. Your best window to add weight and learn new lifts.'],
+      ['ovulation', 'Ovulation', 'Peak strength. Heavy days, personal records and power work.'],
+      ['luteal', 'Luteal', 'Steady weights, quality reps and a little more food, on purpose.'],
+    ];
+    const features = [
+      ['workouts', 'Every weight, suggested', 'YOURS tells you what to lift for every set, lighter on period days and low-energy days, heavier when you are ready.'],
+      ['calendar', 'Plans for every life stage', 'Natural cycle, the pill, PCOS, perimenopause, menopause and after baby. No regular cycle needed.'],
+      ['meals', 'Food in seconds', 'Snap your plate, say what you ate or scan a barcode. Calories and protein set for your phase.'],
+      ['list', 'A weekly check-in', 'Photos, weigh-in and three questions. Next week\'s training, steps and calories adjust to you.'],
+      ['image', 'Before and after', 'A private photo vault, locked with your PIN, with a slider to see the change.'],
+      ['trend', 'Strength by phase', 'See how your cycle affects your lifts, with badges and personal records along the way.'],
+      ['advisor', 'A coach in your pocket', 'Ask anything about training, food or recovery and get answers built around your data.'],
+      ['community', 'Women who lift', 'Share wins, ask questions and message other members.'],
+    ];
+    const faqs = [
+      ['Do I need a regular cycle?', 'No. YOURS has plans for irregular cycles, PCOS, hormonal birth control, perimenopause, menopause and postpartum. Without a natural cycle, your week follows your daily check-in instead.'],
+      ['I have never lifted. Is it for me?', 'Yes. Beginner foundations teaches the basic movements in 8 weeks, and every exercise comes with simple cues and a suggested starting weight.'],
+      ['Gym or home?', 'Both. Home strength needs only dumbbells and a band, and any exercise can be swapped if a machine is taken.'],
+      ['What happens after the free trial?', `It becomes ${money(m)} a month or ${money(y)} a year. Cancel anytime before the trial ends in Profile and you won't be charged.`],
+      ['Is my data private?', 'Yes. We never sell your data or use it for ads. Progress photos stay on your phone, locked with your PIN.'],
+      ['Is this medical advice?', 'No. YOURS is a fitness and nutrition coach. Talk to your doctor before starting, especially if you are pregnant, postpartum or managing a condition.'],
+    ];
+    return `<div class="lp">
+      <header class="lp-top"><div class="wordmark sm">yours.</div><div class="row" style="gap:10px"><button class="link small" data-action="go-login">Sign in</button>${paid ? '' : '<button class="btn soft xs" data-action="demo">Demo</button>'}</div></header>
+      ${pendingInvite() && !regionBlocked() ? `<div class="banner lp-wrap" style="margin-top:8px">${icon('gift', 18)}<div class="grow small"><strong>A friend invited you.</strong> Your free trial is 3 weeks instead of 1.</div></div>` : ''}
+      <section class="lp-hero lp-wrap">
+        <div class="lp-hero-copy">
+          <div class="eyebrow">Strength training for women</div>
+          <h1 class="lp-h1">Train with your cycle, not against&nbsp;it.</h1>
+          <p class="lp-lead">YOURS plans your workouts, food and steps around your cycle or life stage, suggests the weight for every lift, and adapts every week.</p>
+          <div class="lp-cta">${cta()}<button class="btn ghost" data-action="go-login">I have an account</button></div>
+          <p class="tiny muted" style="margin-top:12px">${paid ? `${days} days free, then ${money(m)} a month or ${money(y)} a year. Cancel anytime.` : 'Free to try. No card needed.'}${regionBlocked() ? ' <strong>Currently available in the United States only.</strong>' : ''}</p>
+        </div>
+        <div class="lp-hero-phone">${phone('home', 'YOURS home screen: day 10 of the cycle, follicular phase, rising energy')}</div>
+      </section>
+
+      <section class="lp-wrap lp-sec">
+        <h2 class="lp-h2">Four phases. One plan that moves with them.</h2>
+        <div class="lp-phases">${phases.map(([k, t, d]) => `<div class="lp-phase"><span class="lp-dot" style="background:var(--${k})"></span><h3>${esc(t)}</h3><p class="small muted">${esc(d)}</p></div>`).join('')}</div>
+        <p class="small muted" style="margin-top:14px">No regular cycle? On the pill, PCOS, perimenopause, menopause or after baby, YOURS follows your stage and your daily check-in.</p>
+      </section>
+
+      <section class="lp-sec">
+        <h2 class="lp-h2 lp-wrap">See it in action</h2>
+        <div class="lp-screens" tabindex="0" role="region" aria-label="App screenshots, scroll sideways">${[['workout', 'The weight for every set', 'Workout logger with a suggested 175 lb x 9 on hip thrusts'], ['meals', 'Snap, say or scan your food', 'Food diary with calories and protein remaining'], ['insights', 'Your strength by phase', 'Chart showing strength is highest in the ovulation phase']].map(([img, cap, alt]) => `<figure>${phone(img, alt)}<figcaption class="small">${esc(cap)}</figcaption></figure>`).join('')}</div>
+        <p class="tiny muted lp-wrap" style="margin-top:8px">Screens from the YOURS demo account.</p>
+      </section>
+
+      <section class="lp-wrap lp-sec">
+        <h2 class="lp-h2">How it works</h2>
+        <ol class="lp-steps">${[['Tell us about you', 'Your cycle or life stage, goal, experience and how active you are. About two minutes.'], ['Get your plan', 'Workouts, weights, calories, protein and steps for today and every phase.'], ['It learns from you', 'Log lifts, food and a 20-second daily check-in. Your plan adjusts every week.']].map(([t, d], i) => `<li><span class="lp-num">0${i + 1}</span><div><h3>${esc(t)}</h3><p class="small muted">${esc(d)}</p></div></li>`).join('')}</ol>
+      </section>
+
+      <section class="lp-wrap lp-sec">
+        <h2 class="lp-h2">Everything in one app</h2>
+        <div class="lp-features">${features.map(([ic, t, d]) => `<div class="lp-feature">${icon(ic, 22)}<h3>${esc(t)}</h3><p class="small muted">${esc(d)}</p></div>`).join('')}</div>
+      </section>
+
+      <section class="lp-wrap lp-sec">
+        <h2 class="lp-h2">8-week programs</h2>
+        <div class="chips" style="margin-top:12px">${D.PROGRAMS.map((pr) => `<span class="chip">${esc(pr.name)}</span>`).join('')}</div>
+        <p class="small muted" style="margin-top:10px">From your first goblet squat to your first pull-up, a stronger glute build, training at home, after baby or through menopause.</p>
+      </section>
+
+      ${D.TESTIMONIALS.length ? `<section class="lp-wrap lp-sec"><h2 class="lp-h2">From members</h2><div class="lp-quotes">${D.TESTIMONIALS.map((t) => `<figure class="lp-quote"><blockquote class="serif">“${esc(t.quote)}”</blockquote><figcaption class="small muted">${esc(t.name)}${t.detail ? ` · ${esc(t.detail)}` : ''}</figcaption></figure>`).join('')}</div></section>` : ''}
+
+      ${paid ? `<section class="lp-wrap lp-sec" id="pricing">
+        <h2 class="lp-h2">Simple pricing</h2>
+        <div class="lp-prices">
+          <div class="lp-price"><div class="row between"><h3>Yearly</h3>${save > 0 ? `<span class="tag accent">Save ${save}%</span>` : ''}</div><div class="serif lp-amount">${money(y)}<span class="small muted"> / year</span></div><p class="tiny muted">${money({ amount: Math.round((y.amount / 12) * 100) / 100, currency: y.currency })} a month, billed yearly</p></div>
+          <div class="lp-price"><h3>Monthly</h3><div class="serif lp-amount">${money(m)}<span class="small muted"> / month</span></div><p class="tiny muted">Cancel anytime</p></div>
+        </div>
+        <p class="small" style="margin-top:12px">Both start with <strong>${days} days free</strong>. Cancel before the trial ends and you won't be charged.</p>
+        <div style="margin-top:16px">${cta('block')}</div>
+      </section>` : ''}
+
+      <section class="lp-wrap lp-sec">
+        <h2 class="lp-h2">Questions</h2>
+        <div class="lp-faq">${faqs.map(([q, a]) => `<details><summary>${esc(q)}</summary><p class="small muted">${esc(a)}</p></details>`).join('')}</div>
+      </section>
+
+      <section class="lp-wrap lp-sec lp-final">
+        <div class="wordmark xl" style="color:inherit">yours.</div>
+        <p class="lp-lead" style="margin:14px 0 18px">Your body changes every week. Your training should too.</p>
+        ${cta('cream')}
+      </section>
+
+      <footer class="lp-wrap lp-foot">
+        <p class="small"><strong>We never sell your data.</strong></p>
+        <p class="tiny" style="margin-top:8px"><button class="link tiny" data-action="open-privacy">Privacy</button> · <button class="link tiny" data-action="open-legal" data-doc="terms">Terms</button> · <button class="link tiny" data-action="open-legal" data-doc="health">Health data policy</button> · ${mailLink('YOURS question', 'Contact')}</p>
+        <p class="tiny muted" style="margin-top:8px">YOURS is a fitness and nutrition app, not medical advice. Available in the United States. © ${new Date().getFullYear()} YOURS.</p>
+      </footer>
+    </div>`;
+  }
+
   function viewLogin() {
     return `<div class="screen no-nav">
       <div class="top"><button class="icon-btn" data-action="go-welcome" aria-label="Back">${icon('back', 20)}</button><div class="wordmark sm">yours.</div><span style="width:40px"></span></div>
@@ -3093,7 +3200,9 @@
 
   function render() {
     let html;
-    if (!S.session) html = S.screen === 'login' ? viewLogin() : viewWelcome();
+    const landing = showLanding();
+    root.classList.toggle('wide', landing);
+    if (!S.session) html = S.screen === 'login' ? viewLogin() : landing ? viewLanding() : viewWelcome();
     else if (!S.data.onboarded) html = viewOnboarding();
     else if (!S.data.planSeen) html = viewReveal();
     else if (!termsOk()) html = viewAgreement();

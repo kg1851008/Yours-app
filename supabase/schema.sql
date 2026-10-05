@@ -292,3 +292,39 @@ alter table public.sent_log enable row level security; -- server only: no polici
 --   url := 'https://yours-app-tau.vercel.app/api/cron',
 --   headers := jsonb_build_object('Content-Type', 'application/json', 'x-cron-secret', (select decrypted_secret from vault.decrypted_secrets where name = 'yours_cron_secret')),
 --   body := '{}'::jsonb, timeout_milliseconds := 30000) $$);
+
+-- ---------- Invites (referrals) ----------
+-- Read and written only by the server (api/referral.js, api/billing.js, api/stripe-webhook.js) with the secret key.
+create table if not exists public.referral_codes (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  code text not null unique check (code ~ '^[A-HJ-NP-Z2-9]{6}$'),
+  created_at timestamptz not null default now()
+);
+create table if not exists public.referrals (
+  id bigint generated always as identity primary key,
+  referrer_id uuid not null references auth.users(id) on delete cascade,
+  referred_id uuid not null unique references auth.users(id) on delete cascade,
+  code text not null,
+  status text not null default 'joined' check (status in ('joined', 'earned', 'rewarded', 'void')),
+  created_at timestamptz not null default now(),
+  earned_at timestamptz,
+  rewarded_at timestamptz,
+  check (referrer_id <> referred_id)
+);
+create index if not exists referrals_referrer_idx on public.referrals (referrer_id);
+alter table public.referral_codes enable row level security;
+alter table public.referrals enable row level security;
+revoke all on public.referral_codes from anon, authenticated;
+revoke all on public.referrals from anon, authenticated;
+
+-- ---------- Anonymous usage counts ----------
+-- An event name and a date only: no user id, email, device id or IP address. Written by api/event.js and the
+-- Stripe webhook, read by api/stats.js (owner dashboard, ADMIN_EMAILS only).
+create table if not exists public.events (
+  id bigint generated always as identity primary key,
+  name text not null check (name ~ '^[a-z_]{2,40}$'),
+  day date not null default (now() at time zone 'utc')::date
+);
+create index if not exists events_day_idx on public.events (day, name);
+alter table public.events enable row level security;
+revoke all on public.events from anon, authenticated;
