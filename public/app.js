@@ -1444,7 +1444,7 @@
     const days = trialDays();
     const m = priceFor('monthly'), y = priceFor('yearly');
     const save = m && y ? Math.round((1 - y.amount / (m.amount * 12)) * 100) : 0;
-    const cta = (cls) => `<button class="btn primary ${cls || ''}" data-action="start">${paid ? `Start your ${days}-day free trial` : 'Build my free plan'}</button>`;
+    const cta = (cls) => `<button class="btn primary ${cls || ''}" data-action="start">${paid ? `Start your ${days}-day free trial` : 'Build my plan'}</button>`;
     const phone = (img, alt) => `<div class="lp-phone"><img src="img/landing/${img}.jpg" alt="${esc(alt)}" width="390" height="844" loading="lazy"></div>`;
     const phases = [
       ['menstrual', 'Period week', 'Lighter lifts, mobility and more rest. Iron-rich meals and gentle movement for cramps.'],
@@ -1480,7 +1480,7 @@
           <h1 class="lp-h1">Train with your cycle, not against&nbsp;it.</h1>
           <p class="lp-lead">YOURS plans your workouts, food and steps around your cycle or life stage, suggests the weight for every lift, and adapts every week.</p>
           <div class="lp-cta">${cta()}<button class="btn ghost" data-action="go-login">I have an account</button></div>
-          <p class="tiny muted" style="margin-top:12px">${paid ? `${days} days free, then ${money(m)} a month or ${money(y)} a year. Cancel anytime.` : 'Free to try. No card needed.'}</p>
+          <p class="tiny muted" style="margin-top:12px">${paid ? `${days} days free, then ${money(m)} a month or ${money(y)} a year. Cancel anytime.` : 'Your plan in about 2 minutes.'}</p>
         </div>
         <div class="lp-hero-phone">${phone('home', 'YOURS home screen: day 10 of the cycle, follicular phase, rising energy')}</div>
       </section>
