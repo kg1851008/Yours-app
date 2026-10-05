@@ -76,7 +76,7 @@ async function run(now) {
   const [dataRows, subs, memberships, prefs, accounts] = await Promise.all([
     all('user_data', 'user_id,data'),
     pushConfigured() ? all('push_subscriptions', 'id,user_id,endpoint,p256dh,auth') : [],
-    B.billingConfigured() ? all('subscriptions', 'user_id,status,current_period_end') : [],
+    B.billingConfigured() ? all('subscriptions', 'user_id,status,current_period_end,trial_end,cancel_at_period_end') : [],
     E.emailConfigured() ? all('email_prefs', 'user_id,weekly') : [],
     E.emailConfigured() ? users() : [],
   ]);
@@ -96,6 +96,17 @@ async function run(now) {
           if (await claim(row.user_id, `push:${r.kind}`, r.period)) await sendPush(mine, { title: r.title, body: r.body, url: r.url, tag: `yours-${r.kind}` }, stats);
         } catch { stats.errors++; }
       }
+    }
+  }
+
+  // Trial ending in 2 days: one honest heads-up per trial (push), with how to cancel.
+  if (pushConfigured()) {
+    for (const m of memberships) {
+      const mine = subsBy[m.user_id];
+      const t = mine && N.trialReminder(m, dataBy[m.user_id], now);
+      if (!t) continue;
+      try { if (await claim(m.user_id, 'push:trial', t.period)) await sendPush(mine, { title: t.title, body: t.body, url: t.url, tag: 'yours-trial' }, stats); }
+      catch { stats.errors++; }
     }
   }
 

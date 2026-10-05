@@ -594,3 +594,23 @@ a.link { text-decoration: none; overflow-wrap: anywhere; }
 .journey-row strong { font-size: 22px; }
 .journey-row span { font: 500 10px var(--mono); letter-spacing: 1.2px; text-transform: uppercase; opacity: .75; }
 .journey .btn.cream { background: #F7F2EA; color: #1E2114; }
+
+/* Warm-ups and effort */
+.warmup { margin-top: 10px; padding: 12px 14px; border-radius: 16px; background: var(--surface-2); }
+.effort { display: flex; align-items: center; gap: 6px; margin: 2px 0 8px 46px; flex-wrap: wrap; }
+.effort-btn { width: 34px; height: 30px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); font: 600 13px var(--mono); color: var(--text); }
+.effort-btn.on { background: var(--green); color: var(--bg); border-color: var(--green); }
+.effort-done { margin: 0 0 6px 46px; }
+/* Strength level */
+.level-track { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin-top: 10px; }
+.level-track span { height: 8px; border-radius: 4px; background: var(--surface-2); }
+.level-track span.on { background: var(--accent); }
+/* Builder */
+.builder-ex { margin: 8px 0 0; padding: 12px 14px; }
+.builder-fields { display: grid; grid-template-columns: 0.8fr 1fr 1.2fr; gap: 8px; margin-top: 8px; }
+.builder-fields label { display: flex; flex-direction: column; gap: 4px; }
+.builder-fields .input, .builder-fields .select { height: 42px; }
+.icon-btn.sm { width: 32px; height: 32px; }
+.icon-btn.flip svg { transform: rotate(180deg); }
+.icon-btn:disabled { opacity: .35; }
+.mini-spark { width: 72px; height: 30px; flex: none; } .mini-spark svg { width: 100%; height: 30px; }

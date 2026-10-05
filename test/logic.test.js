@@ -403,3 +403,59 @@ test('exercise library: every exercise has a guide, records come from logged set
   assert.equal(kg.records.maxWeight.value, 70.5);
   assert.equal(L.liftStats(workouts, 'Back squat', 'lb').records, null);
 });
+
+test('custom workouts are found by id and start like any other session', () => {
+  const list = L.setCustomWorkouts([{ id: 'cw-1', name: 'Glute day', exercises: [{ name: 'Barbell hip thrust', sets: 4, reps: '8-10', rest: '2 min' }, { name: 'Cable kickback', sets: 3, reps: '12', rest: '45s' }] }, { id: 'cw-empty', name: 'Empty', exercises: [] }]);
+  assert.equal(list.length, 1);
+  const w = L.workoutById('cw-1');
+  assert.equal(w.name, 'Glute day');
+  assert.ok(w.custom);
+  assert.equal(w.exercises[0].main, true);
+  assert.ok(w.minutes >= 10);
+  assert.equal(L.workoutById('cw-empty'), undefined);
+  L.setCustomWorkouts([]);
+  assert.equal(L.workoutById('cw-1'), undefined);
+});
+
+test('warm-up sets ramp toward the working weight', () => {
+  const bar = L.warmupSets('Back squat', 185, 'lb');
+  assert.deepEqual(bar.map((x) => x.weight), [45, 95, 130, 155]);
+  assert.ok(bar.every((x) => x.weight < 185));
+  assert.deepEqual(L.warmupSets('Back squat', 55, 'lb'), []); // barely above the bar
+  assert.deepEqual(L.warmupSets('Goblet squat', 50, 'lb').map((x) => x.weight), [25, 40]);
+  assert.deepEqual(L.warmupSets('Dumbbell curl', 15, 'lb'), []);
+});
+
+test('effort rating fine-tunes suggested weights', () => {
+  const hist = (rpe, reps) => [{ date: L.dateKey(L.addDays(L.today(), -3)), unit: 'lb', detail: [{ name: 'Goblet squat', sets: [{ weight: 40, reps, rpe }, { weight: 40, reps, rpe }] }] }];
+  const ctx = { phase: 'follicular', unit: 'lb' };
+  assert.equal(L.suggestLoad('Goblet squat', '8-12', hist(10, 12), ctx).weight, 40); // top of range but all-out: hold
+  assert.ok(L.suggestLoad('Goblet squat', '8-12', hist(8, 12), ctx).weight > 40); // top of range, not maxed: add
+  assert.ok(L.suggestLoad('Goblet squat', '8-12', hist(7, 9), ctx).weight > 40); // in range and easy: add
+  assert.equal(L.suggestLoad('Goblet squat', '8-12', hist(9, 9), ctx).weight, 40); // in range and hard: add a rep
+  assert.equal(L.suggestLoad('Goblet squat', '8-12', hist(undefined, 9), ctx).weight, 40); // no rating: as before
+});
+
+test('measurements: change over time and the luteal waist note', () => {
+  const list = [
+    { date: '2026-08-01', phase: 'follicular', waist: 74, hips: 100 },
+    { date: '2026-08-20', phase: 'luteal', waist: 75.5 },
+    { date: '2026-09-01', phase: 'follicular', waist: 72.5, hips: 99 },
+  ];
+  const w = L.measurementSummary(list, 'waist');
+  assert.equal(w.values.length, 3);
+  assert.equal(w.change, -1.5);
+  assert.equal(L.measurementSummary(list, 'arms'), null);
+  assert.deepEqual(L.measurementPhaseNote(list), { cm: 2.3 });
+  assert.equal(L.measurementPhaseNote(list.filter((x) => x.phase !== 'luteal')), null);
+});
+
+test('strength level uses women\'s bodyweight ratios for lifts with standards', () => {
+  const sq = L.strengthLevel('Back squat', 80, 62); // 1.29x
+  assert.equal(sq.level, 'Intermediate');
+  assert.equal(sq.next.level, 'Advanced');
+  assert.equal(L.strengthLevel('Back squat', 20, 62).level, 'Getting started');
+  assert.equal(L.strengthLevel('Hip thrust', 200, 60).level, 'Elite');
+  assert.equal(L.strengthLevel('Goblet squat', 30, 60), null);
+  assert.equal(L.strengthLevel('Back squat', 0, 60), null);
+});
