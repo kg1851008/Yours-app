@@ -1892,7 +1892,7 @@
   }
 
   function exerciseList(wk, withLoads) {
-    return `<ul class="ex-list">${wk.exercises.map((ex, i) => `<li><span class="ex-num">${i + 1}</span><div class="grow"><div class="row between"><strong>${esc(ex.name)}</strong><span class="small muted">${adjustSets(ex)} x ${esc(ex.reps)}</span></div><div class="small muted">${esc(ex.cue)}${ex.rest !== '-' ? ` · Rest ${esc(ex.rest)}` : ''}</div>${withLoads ? loadHint(ex) : ''}</div></li>`).join('')}</ul>`;
+    return `<ul class="ex-list">${wk.exercises.map((ex, i) => `<li><span class="ex-num">${i + 1}</span><div class="grow"><div class="row between"><button class="ex-link" data-action="open-exercise" data-name="${esc(ex.name)}"><strong>${esc(ex.name)}</strong></button><span class="small muted">${adjustSets(ex)} x ${esc(ex.reps)}</span></div><div class="small muted">${esc(ex.cue)}${ex.rest !== '-' ? ` · Rest ${esc(ex.rest)}` : ''}</div>${withLoads ? loadHint(ex) : ''}</div></li>`).join('')}</ul>`;
   }
 
   function viewWorkouts() {
@@ -1931,6 +1931,7 @@
       <div class="section-title"><h2>This week</h2><button class="link" data-action="log-other">Log activity</button></div>
       <div class="card">${thisWeek.length ? thisWeek.map((w) => `<div class="list-item"><div class="ex-num">${icon('check', 14, 2.4)}</div><div class="grow"><strong>${esc(w.name)}</strong><div class="small muted">${fmtDate(parseKey(w.date), { weekday: 'short', month: 'short', day: 'numeric' })} · ${w.minutes} min${w.sets ? ` · ${w.sets} sets` : ''}</div></div>${(S.data.prs || []).some((p) => p.workoutId === w.id) ? '<span class="tag accent">PR</span>' : ''}</div>`).join('') : '<div class="empty">No sessions logged yet this week. Today is a great day to start.</div>'}</div>
 
+      <button class="card lib-entry" data-action="open-library"><div class="row between"><div><div class="eyebrow">Exercise library</div><strong style="display:block;margin-top:4px">Every exercise, with form guides and your records</strong><div class="tiny muted" style="margin-top:4px">Muscles worked, how to do it, common mistakes, strength charts and history.</div></div>${icon('search', 22)}</div></button>
       <div class="section-title"><h2>Workout library</h2></div>
       <div class="chips">${D.PHASE_ORDER.concat(['menopause']).map((p) => `<button class="chip ${lib === p ? 'selected' : ''}" data-action="lib-phase" data-phase="${p}"><span class="dot" style="background:var(--${p})"></span>${phaseName(p)}</button>`).join('')}</div>
       <div class="h-scroll" style="margin-top:14px">${D.WORKOUTS.filter((w) => w.phase === lib).map((w) => `<button class="poster mini" data-action="view-workout" data-id="${w.id}">${backdrop(lib)}<div class="p-row"><span>${w.minutes} min</span><span>${esc(w.intensity)}</span></div><div class="p-body"><div class="p-title">${esc(w.name)}</div><div class="p-cap" style="letter-spacing:.2em">${esc(w.focus)}</div></div></button>`).join('')}</div>
@@ -2149,7 +2150,7 @@
     const maxDay = Math.max(1, ...d.days.map((x) => x.app_open));
     const bars = d.days.map((x, i) => `<rect x="${i * 10 + 1}" y="${60 - (x.app_open / maxDay) * 56}" width="8" height="${Math.max(1, (x.app_open / maxDay) * 56)}" rx="2" fill="var(--accent)"><title>${x.day}: ${x.app_open} opens, ${x.workout_done} workouts</title></rect>`).join('');
     const mem = d.members;
-    const engagement = ['workout_done', 'weekly_checkin', 'program_start', 'exercise_swap', 'photo_compare', 'badge_earned', 'share_card', 'install_done', 'invite_shared', 'invite_opened', 'invite_claimed', 'membership_canceled'];
+    const engagement = ['workout_done', 'weekly_checkin', 'program_start', 'library_open', 'exercise_view', 'exercise_swap', 'photo_compare', 'badge_earned', 'share_card', 'install_done', 'invite_shared', 'invite_opened', 'invite_claimed', 'membership_canceled'];
     return `<div class="stats">${statTile('Paying', n(mem.active), '')}${statTile('In trial', n(mem.trialing), '')}</div>
       <p class="tiny muted" style="margin-top:8px">${n(mem.yearly)} yearly · ${n(mem.monthly)} monthly · ${n(mem.cancelling)} set to cancel · ${n(mem.pastDue)} card failing · ${n(mem.ended)} ended${mem.comp ? ` · ${n(mem.comp)} complimentary` : ''}</p>
       <div class="card" style="margin-top:14px"><div class="eyebrow">Funnel · last 30 days</div>${funnel}<p class="tiny muted" style="margin-top:10px">Percentages compare each step with the one above. Views count once per device per day.</p></div>
@@ -2254,6 +2255,146 @@
       <p class="tiny muted center" style="margin-top:8px">We never sell your data. <button class="link tiny" data-action="open-privacy">Privacy</button> · Questions? ${mailLink('Membership question', 'Email us')}</p>
       <p class="center small" style="margin-top:14px"><button class="link" data-action="billing-recheck">I already subscribed</button>${S.sub && S.sub.status && S.sub.status !== 'none' ? ' · <button class="link" data-action="billing-portal">Manage billing</button>' : ''}</p>
     </div>`;
+  }
+
+  // ---------- exercise library and exercise pages ----------
+  // Front and back body diagram: primary muscles in the accent colour, secondary muscles lighter.
+  function bodyMap(primary, secondary) {
+    const P = primary || [], Q = secondary || [];
+    const tone = (id) => (P.includes(id) ? 'var(--accent)' : Q.includes(id) ? 'var(--bm-sec)' : 'var(--bm-off)');
+    const e = (id, cx, cy, rx, ry) => `<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="${tone(id)}"/>`;
+    const pair = (id, ox, cx, cy, rx, ry) => e(id, ox + cx, cy, rx, ry) + e(id, ox + 100 - cx, cy, rx, ry);
+    const body = (ox) => `<g fill="var(--bm-body)">
+      <circle cx="${ox + 50}" cy="16" r="10"/><rect x="${ox + 45}" y="24" width="10" height="9" rx="3"/>
+      <path d="M${ox + 30} 34 Q${ox + 50} 29 ${ox + 70} 34 L${ox + 68} 96 Q${ox + 50} 103 ${ox + 32} 96 Z"/>
+      <path d="M${ox + 32} 93 Q${ox + 50} 106 ${ox + 68} 93 L${ox + 67} 113 Q${ox + 50} 120 ${ox + 33} 113 Z"/>
+      ${[[25, 56, 6, 15], [21, 84, 5, 14], [19.5, 101, 4, 4.5], [41, 136, 9.5, 27], [41, 184, 6.5, 23], [40, 210, 6.5, 3.5]].map(([x, y, rx, ry]) => `<ellipse cx="${ox + x}" cy="${y}" rx="${rx}" ry="${ry}"/><ellipse cx="${ox + 100 - x}" cy="${y}" rx="${rx}" ry="${ry}"/>`).join('')}
+    </g>`;
+    const front = 0, back = 110;
+    return `<svg class="bodymap" viewBox="0 0 210 234" role="img" aria-label="Muscles worked: ${esc([...P, ...Q].map((m) => D.MUSCLES[m]).filter(Boolean).join(', ') || 'whole body')}">
+      ${body(front)}
+      ${pair('side-delts', front, 26, 42, 3, 5)}${pair('front-delts', front, 31.5, 40, 6, 6)}${pair('chest', front, 42, 48, 8.5, 6.5)}
+      ${pair('biceps', front, 25, 58, 4.2, 10)}${pair('forearms', front, 21, 83, 3.6, 10)}${pair('obliques', front, 38, 76, 3.5, 12)}
+      <rect x="45" y="58" width="10" height="34" rx="4" fill="${tone('core')}"/>
+      ${pair('quads', front, 41, 132, 7, 20)}${pair('adductors', front, 47.3, 123, 2.6, 11)}${pair('calves', front, 41, 184, 4, 15)}
+      ${body(back)}
+      ${e('upper-back', back + 50, 46, 12, 10)}${pair('side-delts', back, 26, 43, 3, 5)}${pair('rear-delts', back, 31.5, 41, 6, 5)}
+      ${pair('lats', back, 40, 66, 6.5, 15)}${pair('triceps', back, 25, 58, 4.2, 10)}${pair('forearms', back, 21, 83, 3.6, 10)}
+      ${e('lower-back', back + 50, 86, 7, 7)}${pair('glute-med', back, 35, 99, 3.5, 6)}${pair('glutes', back, 43, 106, 8, 8.5)}
+      ${pair('hamstrings', back, 41, 138, 6.5, 19)}${pair('calves', back, 41, 182, 5.5, 14)}
+      <text x="50" y="230" text-anchor="middle" class="bm-label">Front</text><text x="160" y="230" text-anchor="middle" class="bm-label">Back</text>
+    </svg>`;
+  }
+  const muscleNames = (ids) => ids.map((m) => D.MUSCLES[m]).filter(Boolean).join(' · ');
+  const loggedLifts = () => { const s = new Set(); (S.data.workouts || []).forEach((w) => (w.detail || []).forEach((d) => { if (d.sets && d.sets.some((x) => x.weight > 0 || x.reps > 0)) s.add(d.name); })); return s; };
+  const favLifts = () => S.data.favLifts || [];
+  function cueFor(name) { for (const w of D.WORKOUTS) { const ex = w.exercises.find((x) => x.name === name); if (ex) return ex.cue; } return ''; }
+
+  function openExercise(name, tab) {
+    const prev = S.modal && S.modal.type !== 'exercise' ? S.modal : S.modal && S.modal.from;
+    S.modal = { type: 'exercise', name, tab: tab || 'overview', from: prev || null };
+    logEvent('exercise_view');
+    render();
+  }
+
+  function exerciseSheet(m) {
+    const name = m.name;
+    const gd = L.guideFor(name);
+    const u = unit();
+    const st = L.liftStats(S.data.workouts, name, u);
+    const r = st.records;
+    const fav = favLifts().includes(name);
+    const back = m.from ? `<button class="link small" style="margin-bottom:10px" data-action="modal-back">${m.from.type === 'active' ? 'Back to workout' : m.from.type === 'library' ? 'Back to library' : 'Back'}</button>` : '';
+    const tabs = `<div class="segment" style="margin-bottom:14px">${[['overview', 'Overview'], ['charts', 'Charts'], ['history', 'History']].map(([id, label]) => `<button class="${m.tab === id ? 'active' : ''}" data-action="ex-tab" data-value="${id}">${label}</button>`).join('')}</div>`;
+    let body = '';
+    if (m.tab === 'charts') {
+      const pts = st.sessions.filter((x) => x.e1rm > 0);
+      if (pts.length < 2) body = `<div class="card empty">Log this lift twice and your strength chart appears here.</div>`;
+      else {
+        const vals = pts.map((x) => x.e1rm), lo = Math.min(...vals), hi = Math.max(...vals), span = hi - lo || 1;
+        const xy = pts.map((x, i) => [(i / (pts.length - 1)) * 280 + 10, 100 - ((x.e1rm - lo) / span) * 80]);
+        const change = vals[vals.length - 1] - vals[0];
+        body = `<div class="card"><div class="row between"><span class="eyebrow">Estimated 1-rep max</span><span class="small"><strong>${change >= 0 ? '+' : ''}${fmtLoad(change, u)}</strong> <span class="muted">since ${esc(shortDate(pts[0].date))}</span></span></div>
+          <svg viewBox="0 0 300 116" style="width:100%;height:150px;margin-top:10px" role="img" aria-label="Estimated one-rep max from ${fmtLoad(vals[0], u)} to ${fmtLoad(vals[vals.length - 1], u)}">
+            <line x1="10" y1="100" x2="290" y2="100" stroke="var(--line)"/><line x1="10" y1="20" x2="290" y2="20" stroke="var(--line)" stroke-dasharray="3 4"/>
+            <polyline points="${xy.map((p) => p.join(',')).join(' ')}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+            ${xy.map(([x, y], i) => `<circle cx="${x}" cy="${y}" r="3.5" fill="${pts[i].phase && D.PHASE_ORDER.includes(pts[i].phase) ? `var(--${pts[i].phase})` : 'var(--accent)'}"><title>${esc(shortDate(pts[i].date))}: ${fmtLoad(pts[i].e1rm, u)}</title></circle>`).join('')}
+            <text x="10" y="114" class="bm-label">${esc(shortDate(pts[0].date))}</text><text x="290" y="114" text-anchor="end" class="bm-label">${esc(shortDate(pts[pts.length - 1].date))}</text>
+            <text x="290" y="15" text-anchor="end" class="bm-label">${fmtLoad(hi, u)}</text>
+          </svg>
+          <p class="tiny muted" style="margin-top:6px">Dots are coloured by cycle phase. Estimated from your best set each session.</p></div>
+          <div class="card"><div class="eyebrow">Heaviest set each session</div>${st.sessions.slice(-8).reverse().map((x) => `<div class="row between" style="margin-top:8px"><span class="small muted">${esc(shortDate(x.date))}</span><span class="small"><strong>${fmtLoad(x.top, u)}</strong></span></div>`).join('')}</div>`;
+      }
+    } else if (m.tab === 'history') {
+      body = st.sessions.length ? `<div class="card">${st.sessions.slice().reverse().map((x) => `<div style="padding:10px 0;border-bottom:1px solid var(--line)"><div class="row between"><strong class="small">${esc(fmtDate(parseKey(x.date), { weekday: 'short', month: 'short', day: 'numeric' }))}</strong><span class="tiny muted">${x.phase && x.phase !== 'steady' ? esc(phaseName(x.phase)) : ''}</span></div><div class="small" style="margin-top:4px;font-family:var(--mono)">${x.sets.map((y) => `${Number(y.weight.toFixed(1))} x ${y.reps}`).join(' · ')}</div>${x.e1rm ? `<div class="tiny muted" style="margin-top:2px">Est. 1-rep max ${fmtLoad(x.e1rm, u)}</div>` : ''}</div>`).join('')}</div>` : `<div class="card empty">No sets logged yet. Your sessions for this lift will be listed here.</div>`;
+    } else {
+      const cue = cueFor(name);
+      const similar = L.swapOptions(name).slice(0, 6);
+      const list = (items, ordered) => `<${ordered ? 'ol' : 'ul'} class="guide-list">${items.map((x) => `<li>${esc(x)}</li>`).join('')}</${ordered ? 'ol' : 'ul'}>`;
+      body = `<div class="card bodymap-card">${bodyMap(gd ? gd.muscles.p : [], gd ? gd.muscles.s : [])}
+          <div class="row" style="gap:14px;justify-content:center;margin-top:4px"><span class="tiny"><span class="bm-dot" style="background:var(--accent)"></span> Main</span><span class="tiny"><span class="bm-dot" style="background:var(--bm-sec)"></span> Also works</span></div></div>
+        ${gd ? `<p class="small" style="margin-top:4px"><strong>Main:</strong> ${esc(muscleNames(gd.muscles.p))}${gd.muscles.s.length ? `<br><span class="muted"><strong>Also:</strong> ${esc(muscleNames(gd.muscles.s))}</span>` : ''}</p>` : ''}
+        <div class="ex-actions">
+          <button class="btn ghost sm" data-action="ex-fav" aria-pressed="${fav}">${icon('heart', 16)} ${fav ? 'Saved' : 'Save'}</button>
+          <a class="btn ghost sm" href="https://www.youtube.com/results?search_query=${encodeURIComponent(`${name} proper form`)}" target="_blank" rel="noopener">${icon('eye', 16)} Form videos</a>
+          <button class="btn ghost sm" data-action="ex-share">${icon('share', 16)} Share</button>
+          <span class="tag">${esc(L.equipmentOf(name))}</span>
+        </div>
+        ${cue ? `<div class="why" style="margin-top:12px"><strong>Coach cue:</strong> ${esc(cue)}</div>` : ''}
+        <div class="section-title" style="margin-top:18px"><h2>Personal records</h2></div>
+        ${r ? `<div class="stats">${statTile('Heaviest', fmtLoad(r.maxWeight.value, u), shortDate(r.maxWeight.date))}${statTile('Est. 1-rep max', r.e1rm.value ? fmtLoad(r.e1rm.value, u) : '-', r.e1rm.value ? shortDate(r.e1rm.date) : '')}</div>
+          <div class="stats" style="margin-top:8px">${statTile('Most reps', r.mostReps ? `${r.mostReps.reps}` : '-', r.mostReps ? `at ${fmtLoad(r.mostReps.weight, u)}` : '')}${statTile('Best session', `${Math.round(r.volume.value).toLocaleString()}`, `${u} total`)}</div>
+          <p class="tiny muted" style="margin-top:6px">${plural(st.sessions.length, 'session')} logged.</p>`
+          : `<div class="card empty">No sets logged yet. Log this lift and your records show up here.</div>`}
+        ${gd ? `<div class="section-title"><h2>How to do it</h2></div><div class="card">${list(gd.steps, true)}</div>
+          <div class="section-title"><h2>Common mistakes</h2></div><div class="card">${list(gd.mistakes)}</div>
+          <div class="section-title"><h2>Pro tips</h2></div><div class="card">${list(gd.tips)}</div>` : ''}
+        ${similar.length ? `<div class="section-title"><h2>Similar exercises</h2></div><div class="chips">${similar.map((o) => `<button class="chip" data-action="open-exercise" data-name="${esc(o.name)}">${esc(o.name)}</button>`).join('')}</div>` : ''}
+        <p class="tiny muted" style="margin-top:16px">General guidance, not medical advice. Stop if anything hurts, and check with a professional if you are unsure about your form.</p>`;
+    }
+    return `${back}${tabs}${body}`;
+  }
+
+  function openLibrary() {
+    S.modal = { type: 'library', q: '', group: 'all', view: loggedLifts().size ? 'mine' : 'all' };
+    logEvent('library_open');
+    render();
+  }
+  function libraryRows(m) {
+    const mine = loggedLifts();
+    const favs = favLifts();
+    const u = unit();
+    const q = (m.q || '').trim().toLowerCase();
+    const grp = D.MUSCLE_GROUPS.find((x) => x.id === m.group);
+    const rows = L.allExercises().filter((x) => (m.view === 'mine' ? mine.has(x.name) : m.view === 'fav' ? favs.includes(x.name) : true))
+      .filter((x) => !q || x.name.toLowerCase().includes(q) || muscleNames(x.primary).toLowerCase().includes(q))
+      .filter((x) => !grp || x.primary.some((p) => grp.muscles.includes(p)));
+    if (!rows.length) return `<div class="empty">${m.view === 'mine' ? 'No logged lifts match. Try All exercises.' : m.view === 'fav' ? 'Tap Save on any exercise to keep it here.' : 'Nothing matches that search.'}</div>`;
+    return rows.map((x) => {
+      const r = mine.has(x.name) ? L.liftStats(S.data.workouts, x.name, u).records : null;
+      return `<button class="list-item" style="width:100%;text-align:left" data-action="open-exercise" data-name="${esc(x.name)}"><div class="grow"><strong class="small">${esc(x.name)}</strong><div class="tiny muted">${esc(muscleNames(x.primary))}</div></div>${r && r.maxWeight.value ? `<span class="tiny" style="font-family:var(--mono);margin-right:8px">${fmtLoad(r.maxWeight.value, u)}</span>` : ''}<span class="tag">${esc(x.equipment)}</span></button>`;
+    }).join('');
+  }
+  function librarySheet(m) {
+    const mineCount = loggedLifts().size;
+    return `<input class="input" type="search" placeholder="Search exercises or muscles" value="${esc(m.q || '')}" data-lib-q aria-label="Search exercises">
+      <div class="segment" style="margin-top:12px">${[['mine', `My lifts ${mineCount}`], ['all', 'All exercises'], ['fav', 'Saved']].map(([id, label]) => `<button class="${m.view === id ? 'active' : ''}" data-action="lib-view" data-value="${id}">${label}</button>`).join('')}</div>
+      <div class="chips" style="margin-top:10px">${[{ id: 'all', label: 'All' }, ...D.MUSCLE_GROUPS].map((x) => `<button class="chip ${m.group === x.id ? 'selected' : ''}" data-action="lib-group" data-value="${x.id}">${esc(x.label)}</button>`).join('')}</div>
+      <div id="lib-list" style="margin-top:8px">${libraryRows(m)}</div>`;
+  }
+
+  // Lifetime totals for Insights ("your journey").
+  function journeyCard() {
+    const ws = S.data.workouts || [];
+    if (!ws.length) return '';
+    const minutes = ws.reduce((n, w) => n + (w.minutes || 0), 0);
+    const u = unit();
+    const lifted = ws.reduce((n, w) => n + (w.detail || []).reduce((a, d) => a + d.sets.reduce((b, x) => b + (x.weight > 0 && x.reps > 0 ? (u === (w.unit || 'kg') ? x.weight : u === 'lb' ? x.weight * 2.20462 : x.weight / 2.20462) * x.reps : 0), 0), 0), 0);
+    const first = ws.map((w) => w.date).sort()[0];
+    return `<div class="card journey"><div class="eyebrow" style="color:inherit;opacity:.75">Your journey · since ${esc(fmtDate(parseKey(first), { month: 'short', day: 'numeric', year: 'numeric' }))}</div>
+      <div class="journey-big">${minutes.toLocaleString()}</div><div class="eyebrow" style="color:inherit;opacity:.75;margin-top:-4px">Total active minutes</div>
+      <div class="journey-row"><div><strong>${ws.length.toLocaleString()}</strong><span>Workouts</span></div><div><strong>${Math.round(minutes / ws.length)}</strong><span>Avg minutes</span></div><div><strong>${lifted >= 10000 ? `${Math.round(lifted / 1000).toLocaleString()}k` : Math.round(lifted).toLocaleString()}</strong><span>${u} lifted</span></div></div>
+      <button class="btn cream sm" style="margin-top:14px" data-action="open-library">${icon('workouts', 16)} My lifts and records</button></div>`;
   }
 
   // ---------- 8-week programs ----------
@@ -2417,7 +2558,7 @@
       <div class="sheet-head"><button class="icon-btn" data-action="close-modal" aria-label="Minimise">${icon('back', 20)}</button><div class="center"><div class="eyebrow">In progress</div><strong>${esc(a.name)}</strong></div><button class="link" data-action="discard-workout">Discard</button></div>
       <div class="progress-bar"><div style="width:${(doneSets / total) * 100}%"></div></div>
       <p class="small muted center" style="margin-top:8px">${doneSets} of ${total} sets</p>
-      ${a.exercises.map((ex, ei) => { const tag = supersetTag(a, ei); return `<div class="card" style="margin-top:${ei && a.exercises[ei - 1].superset ? 4 : 12}px;${tag ? 'border-left:3px solid var(--accent)' : ''}"><div class="row between"><strong>${tag ? `<span class="tag accent" style="margin-right:6px">${tag}</span>` : ''}${esc(ex.name)}</strong><span class="small muted">Target ${esc(ex.reps)}${ex.rest ? ` · rest ${fmtRest(ex.rest)}` : ''}</span></div>
+      ${a.exercises.map((ex, ei) => { const tag = supersetTag(a, ei); return `<div class="card" style="margin-top:${ei && a.exercises[ei - 1].superset ? 4 : 12}px;${tag ? 'border-left:3px solid var(--accent)' : ''}"><div class="row between"><strong>${tag ? `<span class="tag accent" style="margin-right:6px">${tag}</span>` : ''}<button class="ex-link" data-action="open-exercise" data-name="${esc(ex.name)}">${esc(ex.name)}</button></strong><span class="small muted">Target ${esc(ex.reps)}${ex.rest ? ` · rest ${fmtRest(ex.rest)}` : ''}</span></div>
         ${ex.suggestion ? `<div class="why" style="margin-top:8px"><strong>${fmtLoad(ex.suggestion.weight, ex.suggestion.unit)} x ${ex.suggestion.reps}</strong> · ${esc(ex.suggestion.reason)}</div>` : ''}
         <div class="set-row tiny muted" style="margin-top:10px"><span>Set</span><span class="center">${ex.weighted ? a.unit : '-'}</span><span class="center">Reps</span><span></span></div>
         ${ex.sets.map((s, si) => `<div class="set-row"><span class="ex-num">${si + 1}</span><input class="input" type="number" inputmode="decimal" placeholder="-" value="${esc(s.weight)}" data-set="${ei}.${si}.weight" aria-label="Weight set ${si + 1}"><input class="input" type="number" inputmode="numeric" placeholder="${esc(s.target || '-')}" value="${esc(s.reps)}" data-set="${ei}.${si}.reps" aria-label="Reps set ${si + 1}"><button class="check ${s.done ? 'on' : ''}" data-action="toggle-set" data-ei="${ei}" data-si="${si}" aria-label="Mark set done">${icon('check', 18, 2.4)}</button></div>`).join('')}
@@ -2565,6 +2706,7 @@
     const nextPeriod = !c.steady && d.profile.periodStart ? addDays(parseKey(d.profile.periodStart), c.len) : null;
 
     return `
+      ${journeyCard()}
       <div class="card ${due ? 'accent' : ''}">
         <div class="row between"><div class="eyebrow">Weekly check-in</div>${last ? `<span class="tiny muted">Last: ${shortDate(last.date)}</span>` : ''}</div>
         ${due ? `<div class="stack-caps" style="font-size:38px;margin-top:10px">${today().getDay() === L.checkinDay(d) ? 'It\'s check-in day.' : 'Time for your check-in.'}</div>` : `<h2 style="margin-top:6px">${last ? 'Plan updated' : 'Every Sunday'}</h2>`}
@@ -3082,6 +3224,8 @@
         <div class="row" style="margin-top:16px"><button class="btn primary grow" data-action="start-workout" data-id="${wk.id}">Start now</button>${isToday ? '' : `<button class="btn ghost" data-action="set-today" data-id="${wk.id}">Make today's</button>`}</div>`);
     }
     if (m.type === 'stats') return sheet('Owner dashboard', statsSheet(m));
+    if (m.type === 'exercise') return sheet(esc(m.name), exerciseSheet(m));
+    if (m.type === 'library') return sheet('Exercise library', librarySheet(m));
     if (m.type === 'install') {
       const platform = installPlatform();
       if (platform === 'installed') return sheet('You have the app', '<p class="small">YOURS is already on your Home Screen. You are using it right now.</p>');
@@ -3834,6 +3978,18 @@
     },
     'share-card': () => shareCard(),
     'open-stats': () => openStats(),
+    'open-library': () => openLibrary(),
+    'open-exercise': (el) => openExercise(el.dataset.name),
+    'ex-tab': (el) => { S.modal.tab = el.dataset.value; render(); const sh = root.querySelector('.sheet'); if (sh) sh.scrollTop = 0; },
+    'ex-fav': () => { const n = S.modal.name; const f = favLifts(); S.data.favLifts = f.includes(n) ? f.filter((x) => x !== n) : f.concat(n); save(); render(); },
+    'ex-share': async () => {
+      const m = S.modal; const u = unit(); const r = L.liftStats(S.data.workouts, m.name, u).records;
+      if (r && r.maxWeight.value) return openShare({ art: cyc().phase, eyebrow: 'Personal record', big: fmtLoad(r.maxWeight.value, u), sub: `My heaviest ${m.name.toLowerCase()} so far.`, foot: shortDate(r.maxWeight.date) });
+      const url = `${location.origin}/`; const text = `${m.name}: how to do it, muscles worked and common mistakes, in YOURS.`;
+      if (navigator.share) { try { await navigator.share({ title: m.name, text, url }); } catch { /* cancelled */ } } else { try { await navigator.clipboard.writeText(`${text} ${url}`); toast('Copied'); } catch { /* unavailable */ } }
+    },
+    'lib-view': (el) => { S.modal.view = el.dataset.value; render(); },
+    'lib-group': (el) => { S.modal.group = el.dataset.value; render(); },
     'invite-load': async () => { await loadInvite(); render(); if (!S.invite) toast('Could not load your invite link. Try again in a moment.'); },
     'invite-copy': async () => { const link = inviteLink(); if (!link) return; try { await navigator.clipboard.writeText(link); toast('Invite link copied'); } catch { prompt('Copy your invite link', link); } logEvent('invite_shared'); },
     'invite-share': async () => {
@@ -3987,6 +4143,7 @@
       const box = document.getElementById('food-macros');
       if (box) box.innerHTML = foodMacroTiles(L.foodMacros(S.modal.food, S.modal.amount, 'grams'));
     }
+    if (el.matches('[data-lib-q]') && S.modal && S.modal.type === 'library') { S.modal.q = el.value; const box = document.getElementById('lib-list'); if (box) box.innerHTML = libraryRows(S.modal); return; }
     if (el.matches('[data-cmp-range]')) { S.cmp.pos = Number(el.value); const box = el.closest('.cmp-slider'); if (box) box.style.setProperty('--pos', `${el.value}%`); return; }
     if (el.dataset.note != null && S.data && S.data.activeWorkout) { const ex = S.data.activeWorkout.exercises[el.dataset.note]; if (ex) { ex.note = el.value.slice(0, 300); save(); } return; }
     if (el.dataset.set && S.data.activeWorkout) {
