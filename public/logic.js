@@ -802,6 +802,28 @@
     const dates = (data.workouts || []).map((w) => w.date).sort();
     return !last && dates.length > 0 && daysBetween(parseKey(dates[0]), now) >= 7;
   }
+  // ---------- exercise swaps ----------
+  // What a lift needs, from its name. Used to label swap options ("machine taken? swap it").
+  function equipmentOf(name) {
+    const n = String(name || '').toLowerCase();
+    if (/single-leg hip thrust|single-leg glute bridge/.test(n)) return 'Bodyweight';
+    if (/machine|leg press|hack squat|pec deck|leg curl|hip abduction|seated calf|smith/.test(n)) return 'Machine';
+    if (/cable|pulldown|pushdown|face pull(?!.*band)|pull-through|seated cable/.test(n) && !/band/.test(n)) return 'Cable';
+    if (/band/.test(n)) return 'Band';
+    if (/dumbbell|goblet|kettlebell|farmer|suitcase|arnold|renegade|thruster|hammer curl|step-up/.test(n)) return 'Dumbbell';
+    if (/barbell|back squat|front-loaded|trap bar|sumo deadlift|^romanian|deficit romanian|overhead press|push press|hip thrust|box squat/.test(n)) return 'Barbell';
+    return 'Bodyweight';
+  }
+  // Other exercises that train the same movement, closest group first. Excludes ones already in today's session.
+  function swapOptions(name, exclude) {
+    const skip = new Set([name].concat(exclude || []));
+    const out = [];
+    for (const g of D.SWAPS || []) {
+      if (!g.names.includes(name)) continue;
+      for (const n of g.names) if (!skip.has(n) && (!/\blight\b/i.test(n) || /\blight\b/i.test(name))) { skip.add(n); out.push({ name: n, group: g.label, equipment: equipmentOf(n) }); }
+    }
+    return out;
+  }
   const checkinTomorrow = (data, now) => ((now || today()).getDay() + 1) % 7 === checkinDay(data);
 
   const api = {
@@ -810,6 +832,7 @@
     learnCycle, addPeriod, cycleInfo, targets, readiness, readinessLabel, patterns,
     workoutById, plannedWorkout, workoutFor, programById, programDay, programProgress, adjustSets, parseReps, e1rm, suggestLoad, detectPRs, strengthByPhase, exerciseHistory,
     mealOptions, mealFor, proteinFor, aisleFor, storeLink, buildTotals, macrosFor, parseOFF, foodMacros, validBarcode, recipeTotals, recipeFood, groceryList, parseFoodText, usualRequest, usualMeal, cleanEstimates, estimateFood, parseRest, isBarbell, platesFor, defaultBar, BARS, streak, weeklyStats, weeklyAdjust, applyAdjustments, weeklyDue,
+    equipmentOf, swapOptions,
   };
   if (typeof window !== 'undefined') window.YOURS_LOGIC = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

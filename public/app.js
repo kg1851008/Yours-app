@@ -1348,6 +1348,10 @@
 
   // ---------- toast ----------
   let toastTimer;
+  // Anonymous usage counts (see logEventNow below). Never blocks or throws.
+  function logEvent(name) { try { logEventNow(name); } catch { /* analytics never breaks the app */ } }
+  function logEventNow() { /* replaced by analytics */ }
+
   function toast(msg) {
     let el = document.querySelector('.toast');
     if (!el) { el = document.createElement('div'); el.className = 'toast'; el.setAttribute('role', 'status'); document.body.appendChild(el); }
@@ -1730,7 +1734,7 @@
 
   // ---------- workouts ----------
   // Bodyweight and skill work gets no weight suggestion.
-  const BODYWEIGHT = /pelvic|breathing|clam|heel slide|bird dog|dead bug|wall push|sit-to-stand|plank|hang\b|hollow|pogo|marching|balance|heel drop|scapular|negative|pull-up attempt|assisted pull|inverted row|frog pump|box jump|jump rope|band pull|band row|banded|pallof|cat-cow|90\/90|stretch|rotation|walk\b/i;
+  const BODYWEIGHT = /pelvic|breathing|clam|heel slide|bird dog|dead bug|wall push|push-up|sit-to-stand|plank|hang\b|hollow|pogo|marching|balance|heel drop|scapular|negative|pull-up attempt|assisted pull|inverted row|frog pump|box jump|jump rope|band pull|band row|banded|pallof|cat-cow|90\/90|stretch|rotation|walk\b/i;
   function loadHint(ex) {
     if (BODYWEIGHT.test(ex.name)) return '';
     const s = L.suggestLoad(ex.name, ex.reps, S.data.workouts, { phase: cyc().phase, readiness: readinessToday(), unit: unit() });
@@ -2023,6 +2027,7 @@
     if (p.postpartum) rec.push('postpartum');
     if (L.MENO_MODES.includes(p.cycleMode)) rec.push('menopause');
     if (p.goal === 'glutes') rec.push('glutes');
+    if (p.level === 'beginner') rec.push('beginner');
     return rec;
   }
   function programContext() {
@@ -2049,7 +2054,7 @@
     const rec = recommendedPrograms();
     const list = D.PROGRAMS.slice().sort((a, b) => (rec.includes(b.id) ? 1 : 0) - (rec.includes(a.id) ? 1 : 0));
     return `<div class="section-title"><h2>8-week programs</h2></div>
-      <div class="h-scroll">${list.map((pr) => `<button class="poster mini" style="text-align:left" data-action="open-program" data-id="${pr.id}">${backdrop(pr.id === 'menopause' ? 'menopause' : pr.id === 'postpartum' ? 'menstrual' : pr.id === 'pullup' ? 'follicular' : 'ovulation')}<div class="p-row"><span>${esc(pr.kicker)}</span><span>${rec.includes(pr.id) ? 'For you' : `${pr.perWeek}x / week`}</span></div><div class="p-body"><div class="p-title" style="${Math.max(...pr.name.split(' ').map((w) => w.length)) >= 9 ? 'font-size:27px' : ''}">${esc(pr.name)}</div></div></button>`).join('')}</div>`;
+      <div class="h-scroll">${list.map((pr) => `<button class="poster mini" style="text-align:left" data-action="open-program" data-id="${pr.id}">${backdrop({ menopause: 'menopause', postpartum: 'menstrual', pullup: 'follicular', beginner: 'steady', home: 'luteal' }[pr.id] || 'ovulation')}<div class="p-row"><span>${esc(pr.kicker)}</span><span>${rec.includes(pr.id) ? 'For you' : `${pr.perWeek}x / week`}</span></div><div class="p-body"><div class="p-title" style="${Math.max(...pr.name.split(' ').map((w) => w.length)) >= 9 ? 'font-size:27px' : ''}">${esc(pr.name)}</div></div></button>`).join('')}</div>`;
   }
   function programSheet(m) {
     const pr = D.PROGRAMS.find((x) => x.id === m.id);
@@ -2135,18 +2140,32 @@
     </div>`;
   }
 
+  // One exercise in the logger, with suggested weight, last note and empty sets.
+  function loggerEntry(name, reps, rest, sets, u, phase) {
+    const s = L.suggestLoad(name, reps, S.data.workouts, { phase, readiness: readinessToday(), unit: u });
+    const weighted = !!L.parseReps(reps) && !BODYWEIGHT.test(name);
+    const lastNote = (S.data.workouts.slice().reverse().map((w) => (w.detail || []).find((d) => d.name === name && d.note)).find(Boolean) || {}).note || '';
+    return { name, reps, rest, note: '', lastNote, weighted, suggestion: s && !s.first ? s : null, sets: Array.from({ length: sets }, () => ({ weight: s && !s.first ? String(s.weight) : '', reps: '', target: s ? s.reps : '', done: false })) };
+  }
+  // "Machine taken? Swap it": exercises that train the same movement, until a set is logged.
+  function swapPanel(a, ex, ei) {
+    if (ex.sets.some((x) => x.done)) return '';
+    const opts = L.swapOptions(ex.name, a.exercises.map((x) => x.name));
+    if (!opts.length) return '';
+    if (!ex.swapOpen) return `<button class="link small" style="margin-top:8px;margin-right:14px" data-action="swap-toggle" data-ei="${ei}">Swap exercise</button>`;
+    return `<div class="plates-box">
+      <div class="row between"><span class="eyebrow" style="color:var(--text)">Machine taken? Same muscles:</span><button class="link small" data-action="swap-toggle" data-ei="${ei}">Hide</button></div>
+      ${opts.slice(0, 8).map((o) => `<button class="list-item" style="width:100%;text-align:left;padding:9px 0" data-action="swap-pick" data-ei="${ei}" data-name="${esc(o.name)}"><div class="grow"><strong class="small">${esc(o.name)}</strong><div class="tiny muted">${esc(o.group)}</div></div><span class="tag">${esc(o.equipment)}</span></button>`).join('')}
+    </div>`;
+  }
+
   function startWorkout(id) {
     const wk = workoutById(id);
     const c = cyc();
     const u = unit();
     S.data.activeWorkout = {
       templateId: id, name: wk.name, startedAt: Date.now(), unit: u, phase: c.phase,
-      exercises: wk.exercises.map((ex) => {
-        const s = L.suggestLoad(ex.name, ex.reps, S.data.workouts, { phase: c.phase, readiness: readinessToday(), unit: u });
-        const weighted = !!L.parseReps(ex.reps) && !BODYWEIGHT.test(ex.name);
-        const lastNote = (S.data.workouts.slice().reverse().map((w) => (w.detail || []).find((d) => d.name === ex.name && d.note)).find(Boolean) || {}).note || '';
-        return { name: ex.name, reps: ex.reps, rest: L.parseRest(ex.rest), note: '', lastNote, weighted, suggestion: s && !s.first ? s : null, sets: Array.from({ length: adjustSets(ex) }, () => ({ weight: s && !s.first ? String(s.weight) : '', reps: '', target: s ? s.reps : '', done: false })) };
-      }),
+      exercises: wk.exercises.map((ex) => loggerEntry(ex.name, ex.reps, L.parseRest(ex.rest), adjustSets(ex), u, c.phase)),
     };
     save();
     S.modal = { type: 'active' };
@@ -2166,7 +2185,8 @@
         ${ex.suggestion ? `<div class="why" style="margin-top:8px"><strong>${fmtLoad(ex.suggestion.weight, ex.suggestion.unit)} x ${ex.suggestion.reps}</strong> · ${esc(ex.suggestion.reason)}</div>` : ''}
         <div class="set-row tiny muted" style="margin-top:10px"><span>Set</span><span class="center">${ex.weighted ? a.unit : '-'}</span><span class="center">Reps</span><span></span></div>
         ${ex.sets.map((s, si) => `<div class="set-row"><span class="ex-num">${si + 1}</span><input class="input" type="number" inputmode="decimal" placeholder="-" value="${esc(s.weight)}" data-set="${ei}.${si}.weight" aria-label="Weight set ${si + 1}"><input class="input" type="number" inputmode="numeric" placeholder="${esc(s.target || '-')}" value="${esc(s.reps)}" data-set="${ei}.${si}.reps" aria-label="Reps set ${si + 1}"><button class="check ${s.done ? 'on' : ''}" data-action="toggle-set" data-ei="${ei}" data-si="${si}" aria-label="Mark set done">${icon('check', 18, 2.4)}</button></div>`).join('')}
-        ${ex.weighted && L.isBarbell(ex.name) ? platesPanel(a, ex, ei) : ''}
+        ${ex.swappedFrom ? `<p class="tiny muted" style="margin-top:6px">Swapped from ${esc(ex.swappedFrom)}</p>` : ''}
+        ${ex.weighted && L.isBarbell(ex.name) ? platesPanel(a, ex, ei) : ''}${swapPanel(a, ex, ei)}
         ${ex.lastNote ? `<p class="tiny muted" style="margin-top:8px">Last time: ${esc(ex.lastNote)}</p>` : ''}
         ${ex.noteOpen || ex.note ? `<textarea class="input" style="margin-top:8px;height:64px;padding:10px 14px;resize:none" data-note="${ei}" maxlength="300" placeholder="Note for next time, e.g. felt easy, go up 5 lb" aria-label="Note for ${esc(ex.name)}">${esc(ex.note || '')}</textarea>` : `<button class="link small" style="margin-top:8px" data-action="note-open" data-ei="${ei}">Add note</button>`}
       </div>${ei < a.exercises.length - 1 && !(ei && a.exercises[ei - 1].superset) ? `<div class="center" style="margin-top:6px"><button class="link tiny" data-action="superset-toggle" data-ei="${ei}">${ex.superset ? 'Unlink superset' : 'Superset with next'}</button></div>` : ''}`; }).join('')}
@@ -3354,6 +3374,18 @@
     'rest-skip': () => { stopRest(); render(); },
     'superset-toggle': (el) => { const ex = S.data.activeWorkout.exercises[el.dataset.ei]; ex.superset = !ex.superset; save(); render(); },
     'note-open': (el) => { S.data.activeWorkout.exercises[el.dataset.ei].noteOpen = true; render(); const t = root.querySelector(`[data-note="${el.dataset.ei}"]`); if (t) t.focus(); },
+    'swap-toggle': (el) => { const ex = S.data.activeWorkout.exercises[el.dataset.ei]; ex.swapOpen = !ex.swapOpen; render(); },
+    'swap-pick': (el) => {
+      const a = S.data.activeWorkout;
+      const ei = Number(el.dataset.ei);
+      const ex = a.exercises[ei];
+      if (!ex || ex.sets.some((x) => x.done) || !L.swapOptions(ex.name).some((o) => o.name === el.dataset.name)) return;
+      const next = loggerEntry(el.dataset.name, ex.reps, ex.rest, ex.sets.length, a.unit, a.phase);
+      a.exercises[ei] = { ...next, superset: ex.superset, swappedFrom: ex.swappedFrom || ex.name };
+      logEvent('exercise_swap');
+      save(); render();
+      toast(`Swapped to ${next.name}`);
+    },
     'plates-toggle': (el) => { const ex = S.data.activeWorkout.exercises[el.dataset.ei]; ex.platesOpen = !ex.platesOpen; render(); },
     'plates-bar': (el) => { S.data.activeWorkout.exercises[el.dataset.ei].bar = Number(el.dataset.bar); save(); render(); },
     'finish-workout': () => finishWorkout(),
