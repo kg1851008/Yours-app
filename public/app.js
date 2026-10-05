@@ -66,6 +66,10 @@
     store: '<path d="M4 9h16l-1 11H5z"/><path d="M8 9V7a4 4 0 0 1 8 0v2"/>',
     mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/>',
     fork: '<path d="M7 3v8a2 2 0 0 0 4 0V3M9 11v10M17 3c-2 0-3 2-3 5s1 4 3 4v9"/>',
+    eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>',
+    arrows: '<path d="M9 6l-6 6 6 6M15 6l6 6-6 6"/>',
+    award: '<circle cx="12" cy="9" r="6"/><path d="M8.5 14 7 21l5-3 5 3-1.5-7"/>',
+    gift: '<rect x="3.5" y="8" width="17" height="4" rx="1"/><path d="M5 12v8h14v-8M12 8v12M12 8c-1.5-3-6-3.5-6-1s4 1 6 1zm0 0c1.5-3 6-3.5 6-1s-4 1-6 1z"/>',
     image: '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m4 18 5-5 4 4 3-3 4 4"/>',
   };
   const icon = (name, size = 22, sw = 1.8) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
@@ -88,6 +92,7 @@
     photos: [],
     revealed: {},
     compare: [],
+    cmp: { pose: null, a: null, b: null, mode: 'slider', pos: 50, shown: false },
     analyzing: false,
     authError: '',
     installPrompt: null,
@@ -2399,7 +2404,7 @@
         <div class="row" style="margin-top:12px"><button class="btn accent grow" data-action="analyze" ${S.analyzing ? 'disabled' : ''}>${S.analyzing ? 'Analyzing...' : S.compare.length ? `Analyze ${plural(S.compare.length, 'photo')}` : 'Analyze my data'}</button>${S.compare.length ? `<button class="btn ghost" data-action="delete-photos" aria-label="Delete selected">${icon('trash', 18)}</button>` : ''}</div>`
         : `<div class="card empty">Take your first photos front, side and back. Retake every 2-4 weeks in the same cycle phase.</div>
            <button class="btn accent block" style="margin-top:12px" data-action="analyze" ${S.analyzing ? 'disabled' : ''}>${S.analyzing ? 'Analyzing...' : 'Analyze my data'}</button>`}
-      ${S.compare.length === 2 ? compareView() : ''}
+      ${photoCompareCard()}
 
       ${review ? `<div class="card" style="margin-top:16px"><div class="row between"><span class="verdict ${review.verdict}">${verdictLabel[review.verdict] || 'Review'}</span><span class="tiny muted">${shortDate(review.date)}</span></div>
         <div class="rich small" style="margin-top:12px">${rich(review.text)}</div>
@@ -2425,13 +2430,50 @@
         ${r.text ? `<p class="tiny muted" style="margin-top:8px">${esc(r.text.split('\n')[0]).slice(0, 160)}</p>` : ''}</div>`).join('')}</div>`;
   }
 
-  function compareView() {
-    const [a, b] = S.compare.map((id) => S.photos.find((p) => p.id === id));
-    if (!a || !b) return '';
-    const [older, newer] = a.date <= b.date ? [a, b] : [b, a];
-    return `<div class="card" style="margin-top:12px"><div class="eyebrow">Side by side</div><div class="row" style="margin-top:10px;align-items:flex-start">
-      ${[older, newer].map((p) => `<div class="grow"><div class="photo" style="border:none"><img src="${p.data}" alt="${esc(p.pose)} photo from ${esc(p.date)}"></div><div class="tiny muted center" style="margin-top:6px">${fmtDate(parseKey(p.date), { month: 'short', day: 'numeric', year: 'numeric' })}</div></div>`).join('')}
-    </div><p class="small muted center" style="margin-top:8px">${plural(daysBetween(parseKey(older.date), parseKey(newer.date)), 'day')} apart</p></div>`;
+  // Before and after: drag a slider across two photos of the same pose, or view them side by side.
+  // Defaults to the first and latest photo of a pose; two selected photos in the vault take over.
+  function photoCompareCard() {
+    const C = S.cmp;
+    const poses = ['front', 'side', 'back'].filter((pose) => S.photos.filter((ph) => ph.pose === pose).length >= 2);
+    const picked = S.compare.length === 2 ? S.compare.map((id) => S.photos.find((ph) => ph.id === id)).filter(Boolean) : [];
+    if (!poses.length && picked.length < 2) {
+      return S.photos.length ? `<div class="card soft" style="margin-top:12px"><div class="eyebrow">Before and after</div><p class="small" style="margin-top:6px">Take the same pose again in 2-4 weeks and you can slide between them here.</p></div>` : '';
+    }
+    let a, b, list = [];
+    if (picked.length === 2) {
+      [a, b] = picked[0].date <= picked[1].date ? picked : [picked[1], picked[0]];
+    } else {
+      const pose = poses.includes(C.pose) ? C.pose : poses[0];
+      C.pose = pose;
+      list = S.photos.filter((ph) => ph.pose === pose).sort((x, y) => (x.date < y.date ? -1 : x.date > y.date ? 1 : 0));
+      a = list.find((ph) => ph.id === C.a) || list[0];
+      b = list.find((ph) => ph.id === C.b) || list[list.length - 1];
+      if (a === b) b = list.find((ph) => ph !== a);
+    }
+    const day = (ph) => fmtDate(parseKey(ph.date), { month: 'short', day: 'numeric', ...(ph.date.slice(0, 4) === todayKey().slice(0, 4) ? {} : { year: 'numeric' }) });
+    const opt = (ph, cur) => `<option value="${ph.id}" ${ph === cur ? 'selected' : ''}>${esc(day(ph))}${ph.phase && ph.phase !== 'steady' ? ` · ${esc(phaseName(ph.phase))}` : ''}</option>`;
+    const apart = daysBetween(parseKey(a.date), parseKey(b.date));
+    const weightAt = (key) => { const w = S.data.checkins.filter((x) => x.date <= key).slice(-1)[0]; return w && daysBetween(parseKey(w.date), parseKey(key)) <= 7 ? w.kg : null; };
+    const wa = weightAt(a.date), wb = weightAt(b.date);
+    const blur = C.shown ? '' : 'filter:blur(22px)';
+    const alt = (ph, when) => `${esc(ph.pose)} progress photo, ${when}, ${esc(day(ph))}`;
+    return `<div class="card" style="margin-top:12px">
+      <div class="row between"><div class="eyebrow">Before and after</div><div class="chips" style="margin:0">${['slider', 'side'].map((m) => `<button class="chip ${C.mode === m ? 'selected' : ''}" data-action="cmp-mode" data-mode="${m}">${m === 'slider' ? 'Slider' : 'Side by side'}</button>`).join('')}</div></div>
+      ${picked.length === 2 ? '<p class="tiny muted" style="margin-top:6px">Comparing the two photos you selected.</p>' : `
+        <div class="chips" style="margin-top:10px">${poses.map((pose) => `<button class="chip ${C.pose === pose ? 'selected' : ''}" data-action="cmp-pose" data-pose="${pose}">${pose[0].toUpperCase() + pose.slice(1)}</button>`).join('')}</div>
+        <div class="row" style="gap:8px;margin-top:8px"><label class="grow"><span class="label">Before</span><select class="select" data-cmp-pick="a">${list.filter((ph) => ph !== b).map((ph) => opt(ph, a)).join('')}</select></label><label class="grow"><span class="label">After</span><select class="select" data-cmp-pick="b">${list.filter((ph) => ph !== a).map((ph) => opt(ph, b)).join('')}</select></label></div>`}
+      ${C.mode === 'slider' ? `<div class="cmp-slider" style="--pos:${C.pos}%;margin-top:12px">
+          <img src="${b.data}" alt="${alt(b, 'after')}" style="${blur}">
+          <div class="cmp-before"><img src="${a.data}" alt="${alt(a, 'before')}" style="${blur}"></div>
+          ${C.shown ? `<div class="cmp-line" aria-hidden="true"><span>${icon('arrows', 16)}</span></div>` : ''}
+          <span class="cmp-tag l">Before</span><span class="cmp-tag r">After</span>
+          ${C.shown ? `<input type="range" min="0" max="100" value="${C.pos}" data-cmp-range aria-label="Drag to compare before and after">` : `<button class="cmp-reveal" data-action="cmp-show">${icon('eye', 18)} Tap to reveal</button>`}
+        </div>`
+        : `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:12px;position:relative">${[[a, 'Before'], [b, 'After']].map(([ph, t]) => `<div><div class="photo" style="border:none"><img src="${ph.data}" alt="${alt(ph, t.toLowerCase())}" style="${blur}"></div><div class="tiny muted center" style="margin-top:6px">${t} · ${esc(day(ph))}</div></div>`).join('')}
+          ${C.shown ? '' : `<button class="cmp-reveal" data-action="cmp-show">${icon('eye', 18)} Tap to reveal</button>`}</div>`}
+      <p class="small center" style="margin-top:10px"><strong>${plural(apart, 'day')}</strong> apart${wa && wb ? ` · ${(() => { const d = (wb - wa) * (unit() === 'lb' ? 2.20462 : 1); return `${d > 0 ? '+' : ''}${d.toFixed(1)} ${unit()}`; })()}` : ''}</p>
+      <p class="tiny muted center" style="margin-top:2px">Same light, outfit and cycle phase make the fairest comparison.</p>
+    </div>`;
   }
 
   function sparkline(values) {
@@ -3386,6 +3428,9 @@
       save(); render();
       toast(`Swapped to ${next.name}`);
     },
+    'cmp-mode': (el) => { S.cmp.mode = el.dataset.mode; render(); },
+    'cmp-pose': (el) => { S.cmp = { ...S.cmp, pose: el.dataset.pose, a: null, b: null }; render(); },
+    'cmp-show': () => { S.cmp.shown = true; logEvent('photo_compare'); render(); },
     'plates-toggle': (el) => { const ex = S.data.activeWorkout.exercises[el.dataset.ei]; ex.platesOpen = !ex.platesOpen; render(); },
     'plates-bar': (el) => { S.data.activeWorkout.exercises[el.dataset.ei].bar = Number(el.dataset.bar); save(); render(); },
     'finish-workout': () => finishWorkout(),
@@ -3551,7 +3596,7 @@
       await rewriteAllPhotos();
       S.data.pinHash = null; S.data.pinSalt = null; S.modal = null; save(); render(); toast('PIN removed. Photos are no longer encrypted.');
     },
-    'lock-vault': () => { S.vaultUnlocked = false; S.photoKey = null; S.backupKey = null; S.photos = []; S.revealed = {}; S.compare = []; render(); },
+    'lock-vault': () => { S.vaultUnlocked = false; S.photoKey = null; S.backupKey = null; S.photos = []; S.revealed = {}; S.compare = []; S.cmp.shown = false; render(); },
 
     'community-view': (el) => { S.communityView = el.dataset.value; S.openThread = null; render(); },
     'post-tag': (el) => { S.postTag = el.dataset.value; const ta = root.querySelector('[data-form="post"] textarea'); const keep = ta ? ta.value : ''; render(); const nt = root.querySelector('[data-form="post"] textarea'); if (nt) nt.value = keep; },
@@ -3666,6 +3711,7 @@
       const box = document.getElementById('food-macros');
       if (box) box.innerHTML = foodMacroTiles(L.foodMacros(S.modal.food, S.modal.amount, 'grams'));
     }
+    if (el.matches('[data-cmp-range]')) { S.cmp.pos = Number(el.value); const box = el.closest('.cmp-slider'); if (box) box.style.setProperty('--pos', `${el.value}%`); return; }
     if (el.dataset.note != null && S.data && S.data.activeWorkout) { const ex = S.data.activeWorkout.exercises[el.dataset.note]; if (ex) { ex.note = el.value.slice(0, 300); save(); } return; }
     if (el.dataset.set && S.data.activeWorkout) {
       const [ei, si, field] = el.dataset.set.split('.');
@@ -3679,6 +3725,7 @@
     const el = ev.target;
     if (el.form && el.form.dataset.form === 'signup' && (el.name === 'agree' || el.name === 'health')) { S.authForm = { ...(S.authForm || {}), [el.name]: el.checked }; return; }
     if (el.dataset.bindUi === 'pose') { S.pose = el.value; return; }
+    if (el.dataset.cmpPick) { S.cmp[el.dataset.cmpPick] = el.value; render(); return; }
     if (el.matches('[data-scan-photo]') && el.files && el.files[0]) { scanPhoto(el.files[0]); return; }
     if (el.dataset.reminderHour && S.data) { const k = el.dataset.reminderHour; S.data.reminders = S.data.reminders || {}; S.data.reminders[k] = { ...(S.data.reminders[k] || { on: true }), hour: Number(el.value) }; S.data.reminders.tz = Intl.DateTimeFormat().resolvedOptions().timeZone; save(); return; }
     if (el.matches('[data-plate-photo]') && el.files && el.files[0]) { handlePlate(el.files[0]); el.value = ''; return; }
@@ -3900,7 +3947,7 @@
   // Opening the camera or photo picker briefly hides the page, so that does not count.
   function lockVault() {
     if (!S.data || !S.data.pinHash || !S.vaultUnlocked) return;
-    S.vaultUnlocked = false; S.photoKey = null; S.backupKey = null; S.backupRaw = null; S.photos = []; S.revealed = {}; S.compare = [];
+    S.vaultUnlocked = false; S.photoKey = null; S.backupKey = null; S.backupRaw = null; S.photos = []; S.revealed = {}; S.compare = []; S.cmp.shown = false;
   }
   document.addEventListener('click', (ev) => { if (ev.target.closest('label') && ev.target.closest('label').querySelector('input[type=file]')) S.pickingFile = Date.now(); }, true);
   document.addEventListener('visibilitychange', () => {

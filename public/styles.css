@@ -480,3 +480,16 @@ a.link { text-decoration: none; overflow-wrap: anywhere; }
 .install-step:first-child { border-top: none; }
 .install-n { width: 30px; height: 30px; border-radius: 50%; background: var(--green); color: var(--bg); display: inline-flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 13px; flex: none; }
 .install-pic { width: 44px; height: 44px; border-radius: 12px; background: var(--surface-2); display: inline-flex; align-items: center; justify-content: center; color: #0A84FF; flex: none; }
+
+/* Before and after photo slider */
+.cmp-slider { position: relative; aspect-ratio: 3 / 4; border-radius: 18px; overflow: hidden; background: var(--surface-2, #222); touch-action: pan-y; }
+.cmp-slider img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.cmp-before { position: absolute; inset: 0; clip-path: inset(0 calc(100% - var(--pos)) 0 0); }
+.cmp-line { position: absolute; top: 0; bottom: 0; left: var(--pos); width: 2px; margin-left: -1px; background: #fff; box-shadow: 0 0 6px rgba(0,0,0,.35); pointer-events: none; }
+.cmp-line span { position: absolute; top: 50%; left: 50%; width: 36px; height: 36px; margin: -18px 0 0 -18px; border-radius: 50%; background: #fff; color: #1E2412; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,.3); }
+.cmp-tag { position: absolute; top: 10px; padding: 4px 9px; border-radius: 999px; background: rgba(20,22,16,.62); color: #fff; font: 600 10px/1.2 var(--mono, monospace); letter-spacing: 1.5px; text-transform: uppercase; pointer-events: none; }
+.cmp-tag.l { left: 10px; } .cmp-tag.r { right: 10px; }
+.cmp-slider input[type=range] { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: ew-resize; -webkit-appearance: none; appearance: none; }
+.cmp-slider input[type=range]:focus-visible { opacity: .01; }
+.cmp-slider:has(input:focus-visible) { outline: 3px solid var(--accent-ink); outline-offset: 2px; }
+.cmp-reveal { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: inline-flex; gap: 8px; align-items: center; padding: 12px 18px; border-radius: 999px; background: rgba(20,22,16,.72); color: #fff; font-weight: 600; font-size: 14px; }
