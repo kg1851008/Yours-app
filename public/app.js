@@ -66,6 +66,10 @@
     store: '<path d="M4 9h16l-1 11H5z"/><path d="M8 9V7a4 4 0 0 1 8 0v2"/>',
     mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/>',
     fork: '<path d="M7 3v8a2 2 0 0 0 4 0V3M9 11v10M17 3c-2 0-3 2-3 5s1 4 3 4v9"/>',
+    eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>',
+    arrows: '<path d="M9 6l-6 6 6 6M15 6l6 6-6 6"/>',
+    award: '<circle cx="12" cy="9" r="6"/><path d="M8.5 14 7 21l5-3 5 3-1.5-7"/>',
+    gift: '<rect x="3.5" y="8" width="17" height="4" rx="1"/><path d="M5 12v8h14v-8M12 8v12M12 8c-1.5-3-6-3.5-6-1s4 1 6 1zm0 0c1.5-3 6-3.5 6-1s-4 1-6 1z"/>',
     image: '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m4 18 5-5 4 4 3-3 4 4"/>',
   };
   const icon = (name, size = 22, sw = 1.8) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
@@ -88,6 +92,7 @@
     photos: [],
     revealed: {},
     compare: [],
+    cmp: { pose: null, a: null, b: null, mode: 'slider', pos: 50, shown: false },
     analyzing: false,
     authError: '',
     installPrompt: null,
@@ -836,7 +841,7 @@
     luteal: ['#9A8466', '#3E3127', '#CDB89A'], steady: ['#B9AD9C', '#5C5145', '#EDE6DA'], menopause: ['#8B7A8C', '#3A2F3B', '#D9C6D3'], session: ['#2F3720', '#121409', '#6A7A48'],
   };
   async function makeCard(card) {
-    const W = 1080, H = 1350;
+    const W = 1080, H = card.story ? 1920 : 1350;
     const c = document.createElement('canvas');
     c.width = W; c.height = H;
     const g = c.getContext('2d');
@@ -891,13 +896,21 @@
     g.globalAlpha = 1;
     g.font = '900 64px Archivo, "Arial Black", sans-serif';
     g.fillText('yours.', 64, H - 64);
+    // Where to find YOURS (and her invite code, when she has one).
+    g.font = '500 24px "DM Mono", monospace';
+    g.globalAlpha = 0.85;
+    const where = card.invite ? `${location.host} · code ${card.invite}` : location.host;
+    g.fillText(where, W - 70 - g.measureText(where).width, H - 76);
+    g.globalAlpha = 1;
     return c.toDataURL('image/png');
   }
   async function openShare(card) {
+    card = { ...card, invite: card.invite || myInviteCode() };
     S.modal = { type: 'share', card, url: null };
     render();
-    S.modal.url = await makeCard(card);
-    render();
+    const url = await makeCard(card);
+    if (S.modal && S.modal.type === 'share' && S.modal.card === card) { S.modal.url = url; render(); }
+    logEvent('share_card');
   }
   async function shareCard() {
     const url = S.modal && S.modal.url;
@@ -1348,6 +1361,36 @@
 
   // ---------- toast ----------
   let toastTimer;
+  // Anonymous usage counts (see logEventNow below). Never blocks or throws.
+  function logEvent(name) { try { logEventNow(name); } catch { /* analytics never breaks the app */ } }
+  // Anonymous counts only: an event name, nothing about her. Views are counted once a day per device,
+  // funnel steps once per device. Browsers set to Do Not Track or Global Privacy Control send nothing.
+  const ONCE_A_DAY = ['app_open', 'landing_view'];
+  const ONCE_EVER = ['signup_start', 'onboarding_done', 'account_created', 'checkout_start', 'invite_opened', 'invite_claimed', 'install_done'];
+  function logEventNow(name) {
+    if (navigator.doNotTrack === '1' || window.doNotTrack === '1' || navigator.globalPrivacyControl) return;
+    if (/^(localhost|127\.)/.test(location.hostname) && !window.YOURS_TRACK_LOCAL) return;
+    const sent = store.get('yours.ev', {});
+    const key = ONCE_A_DAY.includes(name) ? `${name}:${todayKey()}` : ONCE_EVER.includes(name) ? name : null;
+    if (key && sent[key]) return;
+    if (key) { sent[key] = 1; Object.keys(sent).forEach((k) => { if (k.includes(':') && !k.endsWith(todayKey())) delete sent[k]; }); store.set('yours.ev', sent); }
+    const body = new Blob([JSON.stringify({ name })], { type: 'application/json' });
+    if (!(navigator.sendBeacon && navigator.sendBeacon('/api/event', body))) fetch('/api/event', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }), keepalive: true }).catch(() => {});
+  }
+
+  // Record newly reached badges (earned once, kept forever). Returns the new ones.
+  function awardBadges(announce) {
+    if (!S.data || !S.data.onboarded) return [];
+    let fresh = [];
+    try { fresh = L.newBadges(S.data); } catch { return []; }
+    if (!fresh.length) return [];
+    S.data.badges = { ...(S.data.badges || {}) };
+    fresh.forEach((b) => { S.data.badges[b.id] = todayKey(); logEvent('badge_earned'); });
+    save();
+    if (announce) toast(`Badge unlocked: ${fresh[fresh.length - 1].title}`);
+    return fresh;
+  }
+
   function toast(msg) {
     let el = document.querySelector('.toast');
     if (!el) { el = document.createElement('div'); el.className = 'toast'; el.setAttribute('role', 'status'); document.body.appendChild(el); }
@@ -1382,6 +1425,7 @@
         <div class="script-sig">for your body</div>
       </div>
       <div class="stack">
+        ${pendingInvite() && !regionBlocked() ? `<div class="banner" style="margin-bottom:12px">${icon('gift', 18)}<div class="grow small"><strong>A friend invited you.</strong> Your free trial is 3 weeks instead of 1.</div></div>` : ''}
         <button class="btn primary block" data-action="start">Get started</button>
         <button class="btn ghost block" data-action="go-login">I have an account</button>
         ${billingOn() ? '' : '<button class="btn soft block" data-action="demo">Try the demo</button>'}
@@ -1389,6 +1433,114 @@
         <p class="tiny center" style="margin-top:14px">We never sell your data. <button class="link tiny" data-action="open-privacy">Privacy</button> · <button class="link tiny" data-action="open-legal" data-doc="terms">Terms</button> · <button class="link tiny" data-action="open-legal" data-doc="health">Health data policy</button></p>
         <div class="p-row" style="margin-top:12px;opacity:.7"><span>Cycle</span><span>Vol. 01</span></div>
       </div>
+    </div>`;
+  }
+
+  // ---------- landing page (first visit in a browser; the installed app opens straight to the welcome screen) ----------
+  const showLanding = () => !S.session && S.screen !== 'login' && !isStandalone();
+  function viewLanding() {
+    logEvent('landing_view');
+    const paid = billingOn();
+    const days = trialDays();
+    const m = priceFor('monthly'), y = priceFor('yearly');
+    const save = m && y ? Math.round((1 - y.amount / (m.amount * 12)) * 100) : 0;
+    const cta = (cls) => `<button class="btn primary ${cls || ''}" data-action="start">${paid ? `Start your ${days}-day free trial` : 'Build my free plan'}</button>`;
+    const phone = (img, alt) => `<div class="lp-phone"><img src="img/landing/${img}.jpg" alt="${esc(alt)}" width="390" height="844" loading="lazy"></div>`;
+    const phases = [
+      ['menstrual', 'Period week', 'Lighter lifts, mobility and more rest. Iron-rich meals and gentle movement for cramps.'],
+      ['follicular', 'Follicular', 'Energy climbs. Your best window to add weight and learn new lifts.'],
+      ['ovulation', 'Ovulation', 'Peak strength. Heavy days, personal records and power work.'],
+      ['luteal', 'Luteal', 'Steady weights, quality reps and a little more food, on purpose.'],
+    ];
+    const features = [
+      ['workouts', 'Every weight, suggested', 'YOURS tells you what to lift for every set, lighter on period days and low-energy days, heavier when you are ready.'],
+      ['calendar', 'Plans for every life stage', 'Natural cycle, the pill, PCOS, perimenopause, menopause and after baby. No regular cycle needed.'],
+      ['meals', 'Food in seconds', 'Snap your plate, say what you ate or scan a barcode. Calories and protein set for your phase.'],
+      ['list', 'A weekly check-in', 'Photos, weigh-in and three questions. Next week\'s training, steps and calories adjust to you.'],
+      ['image', 'Before and after', 'A private photo vault, locked with your PIN, with a slider to see the change.'],
+      ['trend', 'Strength by phase', 'See how your cycle affects your lifts, with badges and personal records along the way.'],
+      ['advisor', 'A coach in your pocket', 'Ask anything about training, food or recovery and get answers built around your data.'],
+      ['community', 'Women who lift', 'Share wins, ask questions and message other members.'],
+    ];
+    const faqs = [
+      ['Do I need a regular cycle?', 'No. YOURS has plans for irregular cycles, PCOS, hormonal birth control, perimenopause, menopause and postpartum. Without a natural cycle, your week follows your daily check-in instead.'],
+      ['I have never lifted. Is it for me?', 'Yes. Beginner foundations teaches the basic movements in 8 weeks, and every exercise comes with simple cues and a suggested starting weight.'],
+      ['Gym or home?', 'Both. Home strength needs only dumbbells and a band, and any exercise can be swapped if a machine is taken.'],
+      ['What happens after the free trial?', `It becomes ${money(m)} a month or ${money(y)} a year. Cancel anytime before the trial ends in Profile and you won't be charged.`],
+      ['Is my data private?', 'Yes. We never sell your data or use it for ads. Progress photos stay on your phone, locked with your PIN.'],
+      ['Is this medical advice?', 'No. YOURS is a fitness and nutrition coach. Talk to your doctor before starting, especially if you are pregnant, postpartum or managing a condition.'],
+    ];
+    return `<div class="lp">
+      <header class="lp-top"><div class="wordmark sm">yours.</div><div class="row" style="gap:10px"><button class="link small" data-action="go-login">Sign in</button>${paid ? '' : '<button class="btn soft xs" data-action="demo">Demo</button>'}</div></header>
+      ${regionBlocked() ? `<div class="banner lp-wrap" style="margin-top:8px" role="status">${icon('shield', 18)}<div class="grow small"><strong>YOURS is only available in the United States right now.</strong> We hope to come to you soon.</div></div>` : ''}
+      ${pendingInvite() && !regionBlocked() ? `<div class="banner lp-wrap" style="margin-top:8px">${icon('gift', 18)}<div class="grow small"><strong>A friend invited you.</strong> Your free trial is 3 weeks instead of 1.</div></div>` : ''}
+      <section class="lp-hero lp-wrap">
+        <div class="lp-hero-copy">
+          <div class="eyebrow">Strength training for women</div>
+          <h1 class="lp-h1">Train with your cycle, not against&nbsp;it.</h1>
+          <p class="lp-lead">YOURS plans your workouts, food and steps around your cycle or life stage, suggests the weight for every lift, and adapts every week.</p>
+          <div class="lp-cta">${cta()}<button class="btn ghost" data-action="go-login">I have an account</button></div>
+          <p class="tiny muted" style="margin-top:12px">${paid ? `${days} days free, then ${money(m)} a month or ${money(y)} a year. Cancel anytime.` : 'Free to try. No card needed.'}</p>
+        </div>
+        <div class="lp-hero-phone">${phone('home', 'YOURS home screen: day 10 of the cycle, follicular phase, rising energy')}</div>
+      </section>
+
+      <section class="lp-wrap lp-sec">
+        <h2 class="lp-h2">Four phases. One plan that moves with them.</h2>
+        <div class="lp-phases">${phases.map(([k, t, d]) => `<div class="lp-phase"><span class="lp-dot" style="background:var(--${k})"></span><h3>${esc(t)}</h3><p class="small muted">${esc(d)}</p></div>`).join('')}</div>
+        <p class="small muted" style="margin-top:14px">No regular cycle? On the pill, PCOS, perimenopause, menopause or after baby, YOURS follows your stage and your daily check-in.</p>
+      </section>
+
+      <section class="lp-sec">
+        <h2 class="lp-h2 lp-wrap">See it in action</h2>
+        <div class="lp-screens" tabindex="0" role="region" aria-label="App screenshots, scroll sideways">${[['workout', 'The weight for every set', 'Workout logger with a suggested 175 lb x 9 on hip thrusts'], ['meals', 'Snap, say or scan your food', 'Food diary with calories and protein remaining'], ['insights', 'Your strength by phase', 'Chart showing strength is highest in the ovulation phase']].map(([img, cap, alt]) => `<figure>${phone(img, alt)}<figcaption class="small">${esc(cap)}</figcaption></figure>`).join('')}</div>
+        <p class="tiny muted lp-wrap" style="margin-top:8px">Screens from the YOURS demo account.</p>
+      </section>
+
+      <section class="lp-wrap lp-sec">
+        <h2 class="lp-h2">How it works</h2>
+        <ol class="lp-steps">${[['Tell us about you', 'Your cycle or life stage, goal, experience and how active you are. About two minutes.'], ['Get your plan', 'Workouts, weights, calories, protein and steps for today and every phase.'], ['It learns from you', 'Log lifts, food and a 20-second daily check-in. Your plan adjusts every week.']].map(([t, d], i) => `<li><span class="lp-num">0${i + 1}</span><div><h3>${esc(t)}</h3><p class="small muted">${esc(d)}</p></div></li>`).join('')}</ol>
+      </section>
+
+      <section class="lp-wrap lp-sec">
+        <h2 class="lp-h2">Everything in one app</h2>
+        <div class="lp-features">${features.map(([ic, t, d]) => `<div class="lp-feature">${icon(ic, 22)}<h3>${esc(t)}</h3><p class="small muted">${esc(d)}</p></div>`).join('')}</div>
+      </section>
+
+      <section class="lp-wrap lp-sec">
+        <h2 class="lp-h2">8-week programs</h2>
+        <div class="chips" style="margin-top:12px">${D.PROGRAMS.map((pr) => `<span class="chip">${esc(pr.name)}</span>`).join('')}</div>
+        <p class="small muted" style="margin-top:10px">From your first goblet squat to your first pull-up, a stronger glute build, training at home, after baby or through menopause.</p>
+      </section>
+
+      ${D.TESTIMONIALS.length ? `<section class="lp-wrap lp-sec"><h2 class="lp-h2">From members</h2><div class="lp-quotes">${D.TESTIMONIALS.map((t) => `<figure class="lp-quote"><blockquote class="serif">“${esc(t.quote)}”</blockquote><figcaption class="small muted">${esc(t.name)}${t.detail ? ` · ${esc(t.detail)}` : ''}</figcaption></figure>`).join('')}</div></section>` : ''}
+
+      ${paid ? `<section class="lp-wrap lp-sec" id="pricing">
+        <h2 class="lp-h2">Simple pricing</h2>
+        <div class="lp-prices">
+          <div class="lp-price"><div class="row between"><h3>Yearly</h3>${save > 0 ? `<span class="tag accent">Save ${save}%</span>` : ''}</div><div class="serif lp-amount">${money(y)}<span class="small muted"> / year</span></div><p class="tiny muted">${money({ amount: Math.round((y.amount / 12) * 100) / 100, currency: y.currency })} a month, billed yearly</p></div>
+          <div class="lp-price"><h3>Monthly</h3><div class="serif lp-amount">${money(m)}<span class="small muted"> / month</span></div><p class="tiny muted">Cancel anytime</p></div>
+        </div>
+        <p class="small" style="margin-top:12px">Both start with <strong>${days} days free</strong>. Cancel before the trial ends and you won't be charged.</p>
+        <div style="margin-top:16px">${cta('block')}</div>
+      </section>` : ''}
+
+      <section class="lp-wrap lp-sec">
+        <h2 class="lp-h2">Questions</h2>
+        <div class="lp-faq">${faqs.map(([q, a]) => `<details><summary>${esc(q)}</summary><p class="small muted">${esc(a)}</p></details>`).join('')}</div>
+      </section>
+
+      <section class="lp-wrap lp-sec lp-final">
+        <div class="wordmark xl" style="color:inherit">yours.</div>
+        <p class="lp-lead" style="margin:14px 0 18px">Your body changes every week. Your training should too.</p>
+        ${cta('cream')}
+      </section>
+
+      <footer class="lp-wrap lp-foot">
+        <p class="small"><strong>We never sell your data.</strong></p>
+        <p class="tiny" style="margin-top:8px"><button class="link tiny" data-action="open-privacy">Privacy</button> · <button class="link tiny" data-action="open-legal" data-doc="terms">Terms</button> · <button class="link tiny" data-action="open-legal" data-doc="health">Health data policy</button> · ${mailLink('YOURS question', 'Contact')}</p>
+        <p class="tiny muted" style="margin-top:8px">YOURS is a fitness and nutrition app, not medical advice. Available in the United States. © ${new Date().getFullYear()} YOURS.</p>
+      </footer>
     </div>`;
   }
 
@@ -1730,7 +1882,7 @@
 
   // ---------- workouts ----------
   // Bodyweight and skill work gets no weight suggestion.
-  const BODYWEIGHT = /pelvic|breathing|clam|heel slide|bird dog|dead bug|wall push|sit-to-stand|plank|hang\b|hollow|pogo|marching|balance|heel drop|scapular|negative|pull-up attempt|assisted pull|inverted row|frog pump|box jump|jump rope|band pull|band row|banded|pallof|cat-cow|90\/90|stretch|rotation|walk\b/i;
+  const BODYWEIGHT = /pelvic|breathing|clam|heel slide|bird dog|dead bug|wall push|push-up|sit-to-stand|plank|hang\b|hollow|pogo|marching|balance|heel drop|scapular|negative|pull-up attempt|assisted pull|inverted row|frog pump|box jump|jump rope|band pull|band row|banded|pallof|cat-cow|90\/90|stretch|rotation|walk\b/i;
   function loadHint(ex) {
     if (BODYWEIGHT.test(ex.name)) return '';
     const s = L.suggestLoad(ex.name, ex.reps, S.data.workouts, { phase: cyc().phase, readiness: readinessToday(), unit: unit() });
@@ -1932,7 +2084,94 @@
   // ---------- membership (Stripe via /api/billing; status mirrored in Supabase) ----------
   const billingOn = () => !!(S.billing && S.billing.enabled && cloud);
   const regionBlocked = () => !!(S.billing && S.billing.region && S.billing.region.allowed === false);
-  const trialDays = () => (S.billing && S.billing.trialDays) || 7;
+  const trialDays = () => ((S.billing && S.billing.trialDays) || 7) + inviteBonusDays();
+
+  // ---------- invite friends (/api/referral) ----------
+  // An invite link (?invite=CODE) is remembered on this device until she has an account, then claimed once.
+  // The friend gets 2 extra trial weeks; the inviter gets a free month when the friend's first payment goes through.
+  const INVITE_BONUS = 14;
+  const pendingInvite = () => store.get('yours.invite', null);
+  function inviteBonusDays() {
+    if (S.sub && S.sub.trial_used) return 0;
+    if (S.invite && isCloud()) return S.invite.bonusDays || 0;
+    return pendingInvite() ? INVITE_BONUS : 0;
+  }
+  function myInviteCode() { return (S.invite && S.invite.code) || null; }
+  const inviteLink = () => (myInviteCode() ? `${location.origin}/?invite=${myInviteCode()}` : '');
+  async function referralCall(body) {
+    const token = await cloud.accessToken();
+    const r = await fetch('/api/referral', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    return { ok: r.ok, status: r.status, ...j };
+  }
+  async function loadInvite() {
+    if (!isCloud()) { S.invite = null; return; }
+    try { const j = await referralCall({ action: 'me' }); if (j.ok && j.code) S.invite = j; } catch { /* offline: try again later */ }
+  }
+  async function claimInvite() {
+    const code = pendingInvite();
+    if (!isCloud()) return;
+    if (!code) { await loadInvite(); render(); return; }
+    try {
+      const j = await referralCall({ action: 'claim', code });
+      if (j.ok) { store.del('yours.invite'); logEvent('invite_claimed'); toast(`Invite applied: your free trial is ${7 + (j.bonusDays || INVITE_BONUS)} days`); }
+      else if (j.status === 400) store.del('yours.invite'); // not usable (own code, already used, not a new account)
+    } catch { /* offline: keep it and try next time */ }
+    await loadInvite();
+    render();
+  }
+  // ---------- owner dashboard (/api/stats; server allows ADMIN_EMAILS only) ----------
+  const adminHint = () => isCloud() && S.session && ((window.YOURS_CONFIG || {}).adminEmails || []).map((x) => String(x).toLowerCase()).includes(String(S.session.email).toLowerCase());
+  async function openStats() {
+    S.modal = { type: 'stats', data: null, error: '' };
+    render();
+    try {
+      const token = await cloud.accessToken();
+      const r = await fetch('/api/stats', { headers: { Authorization: `Bearer ${token}` } });
+      const j = await r.json().catch(() => ({}));
+      if (!S.modal || S.modal.type !== 'stats') return;
+      if (r.ok) S.modal.data = j; else S.modal.error = r.status === 404 ? 'This account is not on the owner list (ADMIN_EMAILS in Vercel).' : j.error || 'Could not load stats.';
+    } catch { if (S.modal && S.modal.type === 'stats') S.modal.error = 'Could not load stats. Check your connection.'; }
+    render();
+  }
+  function statsSheet(m) {
+    if (m.error) return `<p class="error">${esc(m.error)}</p>`;
+    const d = m.data;
+    if (!d) return '<div class="empty">Loading...</div>';
+    const ev = d.events;
+    const n = (x) => Number(x || 0).toLocaleString();
+    const pct = (a, b) => (b ? `${Math.round((a / b) * 100)}%` : '-');
+    const top = Math.max(1, ...d.funnel.map((k) => ev[k].d30));
+    const funnel = d.funnel.map((k, i) => {
+      const prev = i ? ev[d.funnel[i - 1]].d30 : null;
+      return `<div style="margin-top:10px"><div class="row between tiny"><span>${esc(ev[k].label)}</span><span><strong>${n(ev[k].d30)}</strong>${prev != null ? ` <span class="muted">· ${pct(ev[k].d30, prev)}</span>` : ''}</span></div><div class="stat-bar"><span style="width:${(ev[k].d30 / top) * 100}%"></span></div></div>`;
+    }).join('');
+    const maxDay = Math.max(1, ...d.days.map((x) => x.app_open));
+    const bars = d.days.map((x, i) => `<rect x="${i * 10 + 1}" y="${60 - (x.app_open / maxDay) * 56}" width="8" height="${Math.max(1, (x.app_open / maxDay) * 56)}" rx="2" fill="var(--accent)"><title>${x.day}: ${x.app_open} opens, ${x.workout_done} workouts</title></rect>`).join('');
+    const mem = d.members;
+    const engagement = ['workout_done', 'weekly_checkin', 'program_start', 'exercise_swap', 'photo_compare', 'badge_earned', 'share_card', 'install_done', 'invite_shared', 'invite_opened', 'invite_claimed', 'membership_canceled'];
+    return `<div class="stats">${statTile('Paying', n(mem.active), '')}${statTile('In trial', n(mem.trialing), '')}</div>
+      <p class="tiny muted" style="margin-top:8px">${n(mem.yearly)} yearly · ${n(mem.monthly)} monthly · ${n(mem.cancelling)} set to cancel · ${n(mem.pastDue)} card failing · ${n(mem.ended)} ended${mem.comp ? ` · ${n(mem.comp)} complimentary` : ''}</p>
+      <div class="card" style="margin-top:14px"><div class="eyebrow">Funnel · last 30 days</div>${funnel}<p class="tiny muted" style="margin-top:10px">Percentages compare each step with the one above. Views count once per device per day.</p></div>
+      <div class="card" style="margin-top:12px"><div class="row between"><span class="eyebrow">Daily app opens · 30 days</span><span class="tiny muted">${n(ev.app_open.d7)} this week</span></div><svg viewBox="0 0 300 62" style="width:100%;height:80px;margin-top:8px" role="img" aria-label="Daily app opens over 30 days">${bars}</svg></div>
+      <div class="card" style="margin-top:12px"><div class="row between"><span class="eyebrow">Activity</span><span class="eyebrow">7 days · 30 days</span></div>${engagement.map((k) => `<div class="list-item" style="padding:8px 0"><span class="grow small">${esc(ev[k].label)}</span><span class="small" style="font-family:var(--mono)">${n(ev[k].d7)} · ${n(ev[k].d30)}</span></div>`).join('')}</div>
+      <div class="card" style="margin-top:12px"><div class="eyebrow">Invites</div><p class="small" style="margin-top:6px">${n(d.invites.joined)} joined with an invite · ${n(d.invites.paid)} became paying · ${n(d.invites.rewarded)} free months given</p></div>
+      <p class="tiny muted" style="margin-top:12px">Anonymous counts only: no names, emails, device IDs or IP addresses are stored. Updated ${esc(timeAgo(Date.parse(d.generatedAt)))}.</p>
+      <button class="btn ghost block" style="margin-top:12px" data-action="open-stats">Refresh</button>`;
+  }
+
+  function inviteCard() {
+    if (!cloud) return '';
+    if (!isCloud()) return `<div class="card flat small"><div class="label">Invite friends</div><p class="muted">Create an account to get your invite link. Friends get 2 extra weeks free, and you get a free month when they join.</p></div>`;
+    const v = S.invite;
+    return `<div class="card flat small"><div class="row between"><span class="label" style="margin:0">Invite friends</span>${icon('gift', 18)}</div>
+      <p class="muted" style="margin-top:6px">Friends get <strong>3 weeks free</strong> instead of 1. When a friend's membership starts, you get <strong>a free month</strong>.</p>
+      ${v ? `<div class="invite-code" aria-label="Your invite code">${esc(v.code)}</div>
+        <div class="row" style="gap:8px;margin-top:10px"><button class="btn primary sm grow" data-action="invite-share">${icon('share', 16)} Share link</button><button class="btn ghost sm grow" data-action="invite-copy">Copy link</button></div>
+        <p class="tiny muted" style="margin-top:10px">${v.joined ? `${plural(v.joined, 'friend')} joined · ${plural(v.rewarded, 'free month')} earned${v.paid > v.rewarded ? ` · ${v.paid - v.rewarded} waiting for your membership` : ''}.` : 'No friends yet.'} Up to ${v.maxRewards || 12} free months.</p>`
+        : `<button class="btn ghost sm block" style="margin-top:10px" data-action="invite-load">Get my invite link</button>`}
+    </div>`;
+  }
   // Paid access needs a cloud account with an active, trialing or recently past-due membership.
   const memberHasAccess = () => isCloud() && window.YOURS_CLOUD.hasAccess(S.sub);
   const money = (p) => (p ? new Intl.NumberFormat(undefined, { style: 'currency', currency: p.currency.toUpperCase(), minimumFractionDigits: p.amount % 1 ? 2 : 0 }).format(p.amount) : '');
@@ -2003,6 +2242,7 @@
       <div class="top"><div class="wordmark sm">yours.</div><button class="link small" data-action="logout">Sign out</button></div>
       <div class="eyebrow" style="margin-top:22px">${ended && !trial ? 'Welcome back' : 'Your plan is ready'}</div>
       <h1 style="margin-top:6px">${trial ? `${trialDays()} days free.<br>Then it's yours.` : 'Pick up where<br>you left off.'}</h1>
+      ${trial && inviteBonusDays() ? `<p class="tag accent" style="margin-top:10px;gap:6px">${icon('gift', 14)} Friend's invite: 2 extra weeks free</p>` : ''}
       <ul class="phase-list" style="margin-top:16px"><li>Training, meals and steps that change with your cycle</li><li>Suggested weights for every lift and an AI coach</li><li>Food diary with barcode, photo and voice logging</li><li>8-week programs, progress check-ins and the community</li></ul>
       ${t ? `<p class="small muted" style="margin-top:10px">Your targets: ${t.kcal.toLocaleString()} ${calWord()}, ${t.protein} g protein, ${t.steps.toLocaleString()} steps.</p>` : ''}
       ${option('yearly', 'Yearly', y, save > 0 ? `Save ${save}%` : '')}
@@ -2023,6 +2263,7 @@
     if (p.postpartum) rec.push('postpartum');
     if (L.MENO_MODES.includes(p.cycleMode)) rec.push('menopause');
     if (p.goal === 'glutes') rec.push('glutes');
+    if (p.level === 'beginner') rec.push('beginner');
     return rec;
   }
   function programContext() {
@@ -2049,7 +2290,7 @@
     const rec = recommendedPrograms();
     const list = D.PROGRAMS.slice().sort((a, b) => (rec.includes(b.id) ? 1 : 0) - (rec.includes(a.id) ? 1 : 0));
     return `<div class="section-title"><h2>8-week programs</h2></div>
-      <div class="h-scroll">${list.map((pr) => `<button class="poster mini" style="text-align:left" data-action="open-program" data-id="${pr.id}">${backdrop(pr.id === 'menopause' ? 'menopause' : pr.id === 'postpartum' ? 'menstrual' : pr.id === 'pullup' ? 'follicular' : 'ovulation')}<div class="p-row"><span>${esc(pr.kicker)}</span><span>${rec.includes(pr.id) ? 'For you' : `${pr.perWeek}x / week`}</span></div><div class="p-body"><div class="p-title" style="${Math.max(...pr.name.split(' ').map((w) => w.length)) >= 9 ? 'font-size:27px' : ''}">${esc(pr.name)}</div></div></button>`).join('')}</div>`;
+      <div class="h-scroll">${list.map((pr) => `<button class="poster mini" style="text-align:left" data-action="open-program" data-id="${pr.id}">${backdrop({ menopause: 'menopause', postpartum: 'menstrual', pullup: 'follicular', beginner: 'steady', home: 'luteal' }[pr.id] || 'ovulation')}<div class="p-row"><span>${esc(pr.kicker)}</span><span>${rec.includes(pr.id) ? 'For you' : `${pr.perWeek}x / week`}</span></div><div class="p-body"><div class="p-title" style="${Math.max(...pr.name.split(' ').map((w) => w.length)) >= 9 ? 'font-size:27px' : ''}">${esc(pr.name)}</div></div></button>`).join('')}</div>`;
   }
   function programSheet(m) {
     const pr = D.PROGRAMS.find((x) => x.id === m.id);
@@ -2135,18 +2376,32 @@
     </div>`;
   }
 
+  // One exercise in the logger, with suggested weight, last note and empty sets.
+  function loggerEntry(name, reps, rest, sets, u, phase) {
+    const s = L.suggestLoad(name, reps, S.data.workouts, { phase, readiness: readinessToday(), unit: u });
+    const weighted = !!L.parseReps(reps) && !BODYWEIGHT.test(name);
+    const lastNote = (S.data.workouts.slice().reverse().map((w) => (w.detail || []).find((d) => d.name === name && d.note)).find(Boolean) || {}).note || '';
+    return { name, reps, rest, note: '', lastNote, weighted, suggestion: s && !s.first ? s : null, sets: Array.from({ length: sets }, () => ({ weight: s && !s.first ? String(s.weight) : '', reps: '', target: s ? s.reps : '', done: false })) };
+  }
+  // "Machine taken? Swap it": exercises that train the same movement, until a set is logged.
+  function swapPanel(a, ex, ei) {
+    if (ex.sets.some((x) => x.done)) return '';
+    const opts = L.swapOptions(ex.name, a.exercises.map((x) => x.name));
+    if (!opts.length) return '';
+    if (!ex.swapOpen) return `<button class="link small" style="margin-top:8px;margin-right:14px" data-action="swap-toggle" data-ei="${ei}">Swap exercise</button>`;
+    return `<div class="plates-box">
+      <div class="row between"><span class="eyebrow" style="color:var(--text)">Machine taken? Same muscles:</span><button class="link small" data-action="swap-toggle" data-ei="${ei}">Hide</button></div>
+      ${opts.slice(0, 8).map((o) => `<button class="list-item" style="width:100%;text-align:left;padding:9px 0" data-action="swap-pick" data-ei="${ei}" data-name="${esc(o.name)}"><div class="grow"><strong class="small">${esc(o.name)}</strong><div class="tiny muted">${esc(o.group)}</div></div><span class="tag">${esc(o.equipment)}</span></button>`).join('')}
+    </div>`;
+  }
+
   function startWorkout(id) {
     const wk = workoutById(id);
     const c = cyc();
     const u = unit();
     S.data.activeWorkout = {
       templateId: id, name: wk.name, startedAt: Date.now(), unit: u, phase: c.phase,
-      exercises: wk.exercises.map((ex) => {
-        const s = L.suggestLoad(ex.name, ex.reps, S.data.workouts, { phase: c.phase, readiness: readinessToday(), unit: u });
-        const weighted = !!L.parseReps(ex.reps) && !BODYWEIGHT.test(ex.name);
-        const lastNote = (S.data.workouts.slice().reverse().map((w) => (w.detail || []).find((d) => d.name === ex.name && d.note)).find(Boolean) || {}).note || '';
-        return { name: ex.name, reps: ex.reps, rest: L.parseRest(ex.rest), note: '', lastNote, weighted, suggestion: s && !s.first ? s : null, sets: Array.from({ length: adjustSets(ex) }, () => ({ weight: s && !s.first ? String(s.weight) : '', reps: '', target: s ? s.reps : '', done: false })) };
-      }),
+      exercises: wk.exercises.map((ex) => loggerEntry(ex.name, ex.reps, L.parseRest(ex.rest), adjustSets(ex), u, c.phase)),
     };
     save();
     S.modal = { type: 'active' };
@@ -2166,7 +2421,8 @@
         ${ex.suggestion ? `<div class="why" style="margin-top:8px"><strong>${fmtLoad(ex.suggestion.weight, ex.suggestion.unit)} x ${ex.suggestion.reps}</strong> · ${esc(ex.suggestion.reason)}</div>` : ''}
         <div class="set-row tiny muted" style="margin-top:10px"><span>Set</span><span class="center">${ex.weighted ? a.unit : '-'}</span><span class="center">Reps</span><span></span></div>
         ${ex.sets.map((s, si) => `<div class="set-row"><span class="ex-num">${si + 1}</span><input class="input" type="number" inputmode="decimal" placeholder="-" value="${esc(s.weight)}" data-set="${ei}.${si}.weight" aria-label="Weight set ${si + 1}"><input class="input" type="number" inputmode="numeric" placeholder="${esc(s.target || '-')}" value="${esc(s.reps)}" data-set="${ei}.${si}.reps" aria-label="Reps set ${si + 1}"><button class="check ${s.done ? 'on' : ''}" data-action="toggle-set" data-ei="${ei}" data-si="${si}" aria-label="Mark set done">${icon('check', 18, 2.4)}</button></div>`).join('')}
-        ${ex.weighted && L.isBarbell(ex.name) ? platesPanel(a, ex, ei) : ''}
+        ${ex.swappedFrom ? `<p class="tiny muted" style="margin-top:6px">Swapped from ${esc(ex.swappedFrom)}</p>` : ''}
+        ${ex.weighted && L.isBarbell(ex.name) ? platesPanel(a, ex, ei) : ''}${swapPanel(a, ex, ei)}
         ${ex.lastNote ? `<p class="tiny muted" style="margin-top:8px">Last time: ${esc(ex.lastNote)}</p>` : ''}
         ${ex.noteOpen || ex.note ? `<textarea class="input" style="margin-top:8px;height:64px;padding:10px 14px;resize:none" data-note="${ei}" maxlength="300" placeholder="Note for next time, e.g. felt easy, go up 5 lb" aria-label="Note for ${esc(ex.name)}">${esc(ex.note || '')}</textarea>` : `<button class="link small" style="margin-top:8px" data-action="note-open" data-ei="${ei}">Add note</button>`}
       </div>${ei < a.exercises.length - 1 && !(ei && a.exercises[ei - 1].superset) ? `<div class="center" style="margin-top:6px"><button class="link tiny" data-action="superset-toggle" data-ei="${ei}">${ex.superset ? 'Unlink superset' : 'Superset with next'}</button></div>` : ''}`; }).join('')}
@@ -2190,7 +2446,9 @@
     S.data.prs.push(...prs);
     S.data.activeWorkout = null;
     save();
-    S.modal = { type: 'summary', record, prs, volume };
+    logEvent('workout_done');
+    const unlocked = awardBadges(false);
+    S.modal = { type: 'summary', record, prs, volume, badges: unlocked };
     render();
   }
 
@@ -2342,7 +2600,8 @@
 
       <div class="section-title"><h2>Streak</h2>${st.count >= 2 ? '<button class="link" data-action="share-streak">Share</button>' : ''}</div>
       <div class="card row" style="gap:14px"><div class="avatar alt">${icon('flame', 20)}</div><div class="grow"><strong>${plural(st.count, 'day')}</strong><div class="small muted">Training, a check-in, or 60% of your steps all count. One missed day a week is forgiven, because rest is part of the plan.</div></div></div>
-      ${d.prs.length ? `<div class="section-title"><h2>Personal records</h2></div><div class="card">${d.prs.slice(-5).reverse().map((p) => `<div class="list-item"><div class="grow"><strong>${esc(p.name)}</strong><div class="small muted">${shortDate(p.date)}</div></div><strong>${fmtLoad(p.weight, p.unit)} x ${p.reps}</strong><button class="icon-btn" style="width:32px;height:32px" data-action="share-pr" data-date="${p.date}" data-name="${esc(p.name)}" aria-label="Share">${icon('share', 15)}</button></div>`).join('')}</div>` : ''}`;
+      ${d.prs.length ? `<div class="section-title"><h2>Personal records</h2></div><div class="card">${d.prs.slice(-5).reverse().map((p) => `<div class="list-item"><div class="grow"><strong>${esc(p.name)}</strong><div class="small muted">${shortDate(p.date)}</div></div><strong>${fmtLoad(p.weight, p.unit)} x ${p.reps}</strong><button class="icon-btn" style="width:32px;height:32px" data-action="share-pr" data-date="${p.date}" data-name="${esc(p.name)}" aria-label="Share">${icon('share', 15)}</button></div>`).join('')}</div>` : ''}
+      ${badgesSection()}`;
   }
 
   // ---------- progress ----------
@@ -2379,7 +2638,7 @@
         <div class="row" style="margin-top:12px"><button class="btn accent grow" data-action="analyze" ${S.analyzing ? 'disabled' : ''}>${S.analyzing ? 'Analyzing...' : S.compare.length ? `Analyze ${plural(S.compare.length, 'photo')}` : 'Analyze my data'}</button>${S.compare.length ? `<button class="btn ghost" data-action="delete-photos" aria-label="Delete selected">${icon('trash', 18)}</button>` : ''}</div>`
         : `<div class="card empty">Take your first photos front, side and back. Retake every 2-4 weeks in the same cycle phase.</div>
            <button class="btn accent block" style="margin-top:12px" data-action="analyze" ${S.analyzing ? 'disabled' : ''}>${S.analyzing ? 'Analyzing...' : 'Analyze my data'}</button>`}
-      ${S.compare.length === 2 ? compareView() : ''}
+      ${photoCompareCard()}
 
       ${review ? `<div class="card" style="margin-top:16px"><div class="row between"><span class="verdict ${review.verdict}">${verdictLabel[review.verdict] || 'Review'}</span><span class="tiny muted">${shortDate(review.date)}</span></div>
         <div class="rich small" style="margin-top:12px">${rich(review.text)}</div>
@@ -2396,6 +2655,16 @@
       <div class="row" style="margin-top:16px"><button class="btn ghost sm grow" data-action="pin-settings">${icon('lock', 16)} ${S.data.pinHash ? 'Change or remove PIN' : 'Set a PIN and encrypt photos'}</button>${S.data.pinHash ? '<button class="btn ghost sm" data-action="lock-vault">Lock</button>' : ''}</div>`;
   }
 
+  function badgesSection() {
+    const all = L.badges(S.data);
+    const earned = all.filter((b) => b.earned).sort((a, b) => (a.earned < b.earned ? 1 : -1));
+    const next = all.filter((b) => !b.earned).sort((a, b) => b.now / b.goal - a.now / a.goal).slice(0, 4);
+    return `<div class="section-title"><h2>Badges</h2><span>${earned.length} of ${all.length}</span></div>
+      <div class="badge-grid">${earned.map((b) => `<button class="badge-cell" data-action="share-badge" data-id="${b.id}" aria-label="${esc(b.title)}, earned ${esc(shortDate(b.earned))}. Share"><span class="badge-medal earned">${icon(b.icon, 22)}</span><strong class="tiny">${esc(b.title)}</strong><span class="tiny muted">${esc(shortDate(b.earned))}</span></button>`).join('')}
+        ${next.map((b) => `<div class="badge-cell locked" aria-label="${esc(b.title)}: ${b.now} of ${b.goal}"><span class="badge-medal">${icon(b.icon, 22)}</span><strong class="tiny">${esc(b.title)}</strong><span class="badge-meter"><span style="width:${Math.round((b.now / b.goal) * 100)}%"></span></span><span class="tiny muted">${b.now} of ${b.goal}</span></div>`).join('')}</div>
+      ${earned.length ? '<p class="tiny muted" style="margin-top:8px">Tap a badge to share it.</p>' : ''}`;
+  }
+
   function checkinHistory() {
     const list = S.data.reviews.filter((r) => r.photos && Object.keys(r.photos).length).slice(-6).reverse();
     if (!list.length) return '';
@@ -2405,13 +2674,50 @@
         ${r.text ? `<p class="tiny muted" style="margin-top:8px">${esc(r.text.split('\n')[0]).slice(0, 160)}</p>` : ''}</div>`).join('')}</div>`;
   }
 
-  function compareView() {
-    const [a, b] = S.compare.map((id) => S.photos.find((p) => p.id === id));
-    if (!a || !b) return '';
-    const [older, newer] = a.date <= b.date ? [a, b] : [b, a];
-    return `<div class="card" style="margin-top:12px"><div class="eyebrow">Side by side</div><div class="row" style="margin-top:10px;align-items:flex-start">
-      ${[older, newer].map((p) => `<div class="grow"><div class="photo" style="border:none"><img src="${p.data}" alt="${esc(p.pose)} photo from ${esc(p.date)}"></div><div class="tiny muted center" style="margin-top:6px">${fmtDate(parseKey(p.date), { month: 'short', day: 'numeric', year: 'numeric' })}</div></div>`).join('')}
-    </div><p class="small muted center" style="margin-top:8px">${plural(daysBetween(parseKey(older.date), parseKey(newer.date)), 'day')} apart</p></div>`;
+  // Before and after: drag a slider across two photos of the same pose, or view them side by side.
+  // Defaults to the first and latest photo of a pose; two selected photos in the vault take over.
+  function photoCompareCard() {
+    const C = S.cmp;
+    const poses = ['front', 'side', 'back'].filter((pose) => S.photos.filter((ph) => ph.pose === pose).length >= 2);
+    const picked = S.compare.length === 2 ? S.compare.map((id) => S.photos.find((ph) => ph.id === id)).filter(Boolean) : [];
+    if (!poses.length && picked.length < 2) {
+      return S.photos.length ? `<div class="card soft" style="margin-top:12px"><div class="eyebrow">Before and after</div><p class="small" style="margin-top:6px">Take the same pose again in 2-4 weeks and you can slide between them here.</p></div>` : '';
+    }
+    let a, b, list = [];
+    if (picked.length === 2) {
+      [a, b] = picked[0].date <= picked[1].date ? picked : [picked[1], picked[0]];
+    } else {
+      const pose = poses.includes(C.pose) ? C.pose : poses[0];
+      C.pose = pose;
+      list = S.photos.filter((ph) => ph.pose === pose).sort((x, y) => (x.date < y.date ? -1 : x.date > y.date ? 1 : 0));
+      a = list.find((ph) => ph.id === C.a) || list[0];
+      b = list.find((ph) => ph.id === C.b) || list[list.length - 1];
+      if (a === b) b = list.find((ph) => ph !== a);
+    }
+    const day = (ph) => fmtDate(parseKey(ph.date), { month: 'short', day: 'numeric', ...(ph.date.slice(0, 4) === todayKey().slice(0, 4) ? {} : { year: 'numeric' }) });
+    const opt = (ph, cur) => `<option value="${ph.id}" ${ph === cur ? 'selected' : ''}>${esc(day(ph))}${ph.phase && ph.phase !== 'steady' ? ` · ${esc(phaseName(ph.phase))}` : ''}</option>`;
+    const apart = daysBetween(parseKey(a.date), parseKey(b.date));
+    const weightAt = (key) => { const w = S.data.checkins.filter((x) => x.date <= key).slice(-1)[0]; return w && daysBetween(parseKey(w.date), parseKey(key)) <= 7 ? w.kg : null; };
+    const wa = weightAt(a.date), wb = weightAt(b.date);
+    const blur = C.shown ? '' : 'filter:blur(22px)';
+    const alt = (ph, when) => `${esc(ph.pose)} progress photo, ${when}, ${esc(day(ph))}`;
+    return `<div class="card" style="margin-top:12px">
+      <div class="row between"><div class="eyebrow">Before and after</div><div class="chips" style="margin:0">${['slider', 'side'].map((m) => `<button class="chip ${C.mode === m ? 'selected' : ''}" data-action="cmp-mode" data-mode="${m}">${m === 'slider' ? 'Slider' : 'Side by side'}</button>`).join('')}</div></div>
+      ${picked.length === 2 ? '<p class="tiny muted" style="margin-top:6px">Comparing the two photos you selected.</p>' : `
+        <div class="chips" style="margin-top:10px">${poses.map((pose) => `<button class="chip ${C.pose === pose ? 'selected' : ''}" data-action="cmp-pose" data-pose="${pose}">${pose[0].toUpperCase() + pose.slice(1)}</button>`).join('')}</div>
+        <div class="row" style="gap:8px;margin-top:8px"><label class="grow"><span class="label">Before</span><select class="select" data-cmp-pick="a">${list.filter((ph) => ph !== b).map((ph) => opt(ph, a)).join('')}</select></label><label class="grow"><span class="label">After</span><select class="select" data-cmp-pick="b">${list.filter((ph) => ph !== a).map((ph) => opt(ph, b)).join('')}</select></label></div>`}
+      ${C.mode === 'slider' ? `<div class="cmp-slider" style="--pos:${C.pos}%;margin-top:12px">
+          <img src="${b.data}" alt="${alt(b, 'after')}" style="${blur}">
+          <div class="cmp-before"><img src="${a.data}" alt="${alt(a, 'before')}" style="${blur}"></div>
+          ${C.shown ? `<div class="cmp-line" aria-hidden="true"><span>${icon('arrows', 16)}</span></div>` : ''}
+          <span class="cmp-tag l">Before</span><span class="cmp-tag r">After</span>
+          ${C.shown ? `<input type="range" min="0" max="100" value="${C.pos}" data-cmp-range aria-label="Drag to compare before and after">` : `<button class="cmp-reveal" data-action="cmp-show">${icon('eye', 18)} Tap to reveal</button>`}
+        </div>`
+        : `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:12px;position:relative">${[[a, 'Before'], [b, 'After']].map(([ph, t]) => `<div><div class="photo" style="border:none"><img src="${ph.data}" alt="${alt(ph, t.toLowerCase())}" style="${blur}"></div><div class="tiny muted center" style="margin-top:6px">${t} · ${esc(day(ph))}</div></div>`).join('')}
+          ${C.shown ? '' : `<button class="cmp-reveal" data-action="cmp-show">${icon('eye', 18)} Tap to reveal</button>`}</div>`}
+      <p class="small center" style="margin-top:10px"><strong>${plural(apart, 'day')}</strong> apart${wa && wb ? ` · ${(() => { const d = (wb - wa) * (unit() === 'lb' ? 2.20462 : 1); return `${d > 0 ? '+' : ''}${d.toFixed(1)} ${unit()}`; })()}` : ''}</p>
+      <p class="tiny muted center" style="margin-top:2px">Same light, outfit and cycle phase make the fairest comparison.</p>
+    </div>`;
   }
 
   function sparkline(values) {
@@ -2574,11 +2880,14 @@
       return sheet('Workout complete', `<div class="stats">${statTile('Sets', r.sets, '')}${statTile('Minutes', r.minutes, '')}</div>
         ${m.volume ? `<p class="small muted" style="margin-top:10px">Total volume: ${Math.round(m.volume).toLocaleString()} ${r.unit}</p>` : ''}
         ${m.prs.length ? `<div class="card accent" style="margin-top:12px"><div class="eyebrow">New personal records</div>${m.prs.map((p) => `<div class="row between" style="margin-top:8px"><strong>${esc(p.name)}</strong><span>${fmtLoad(p.weight, p.unit)} x ${p.reps}</span></div>`).join('')}</div>` : '<p class="small" style="margin-top:12px">Logged. Your suggested weights for next time are already updated.</p>'}
+        ${(m.badges || []).length ? `<div class="card" style="margin-top:12px;background:var(--green);color:var(--bg);border:none"><div class="eyebrow" style="color:var(--bg);opacity:.75">Badge unlocked</div>${m.badges.map((b) => `<div class="row" style="margin-top:10px;gap:12px"><span class="badge-medal earned">${icon(b.icon, 20)}</span><div class="grow"><strong>${esc(b.title)}</strong><div class="tiny" style="opacity:.8">${esc(b.desc)}</div></div><button class="icon-btn" style="width:34px;height:34px;color:var(--bg);background:transparent;border:1px solid currentColor" data-action="share-badge" data-id="${b.id}" aria-label="Share ${esc(b.title)} badge">${icon('share', 16)}</button></div>`).join('')}</div>` : ''}
         <div class="row" style="margin-top:18px"><button class="btn ghost grow" data-action="share-workout">${icon('share', 18)} Share</button><button class="btn primary grow" data-action="close-modal">Done</button></div>`);
     }
     if (m.type === 'share') {
-      return sheet('Share your progress', `${m.url ? `<img src="${m.url}" alt="Progress card" style="border-radius:16px;border:1px solid var(--line)">` : '<div class="empty">Creating your card...</div>'}
-        <button class="btn primary block" style="margin-top:14px" data-action="share-card" ${m.url ? '' : 'disabled'}>${icon('share', 18)} Share or save</button>`);
+      return sheet('Share your progress', `<div class="segment" style="margin-bottom:12px">${[['post', 'Post 4:5'], ['story', 'Story 9:16']].map(([id, label]) => `<button class="${(m.card.story ? 'story' : 'post') === id ? 'active' : ''}" data-action="share-format" data-value="${id}">${label}</button>`).join('')}</div>
+        ${m.url ? `<img src="${m.url}" alt="Share card: ${esc(m.card.eyebrow)}, ${esc(m.card.big)}" style="border-radius:16px;border:1px solid var(--line);${m.card.story ? 'max-height:58vh;width:auto;display:block;margin:0 auto' : ''}">` : '<div class="empty">Creating your card...</div>'}
+        <button class="btn primary block" style="margin-top:14px" data-action="share-card" ${m.url ? '' : 'disabled'}>${icon('share', 18)} Share or save</button>
+        <p class="tiny muted center" style="margin-top:8px">Stories: save the image, then add it in Instagram.</p>`);
     }
     if (m.type === 'scanner') {
       const recent = S.data.recentFoods || [];
@@ -2772,6 +3081,7 @@
       return sheet(esc(wk.name), `${m.from ? `<button class="link small" style="margin-bottom:8px" data-action="modal-back">Back to program</button>` : ''}<div class="eyebrow">${esc(wk.focus)} · ${wk.minutes} min · ${esc(wk.intensity)}</div><p class="small" style="margin-top:8px">${esc(wk.summary)}</p><div class="divider"></div>${exerciseList(wk, true)}
         <div class="row" style="margin-top:16px"><button class="btn primary grow" data-action="start-workout" data-id="${wk.id}">Start now</button>${isToday ? '' : `<button class="btn ghost" data-action="set-today" data-id="${wk.id}">Make today's</button>`}</div>`);
     }
+    if (m.type === 'stats') return sheet('Owner dashboard', statsSheet(m));
     if (m.type === 'install') {
       const platform = installPlatform();
       if (platform === 'installed') return sheet('You have the app', '<p class="small">YOURS is already on your Home Screen. You are using it right now.</p>');
@@ -2783,9 +3093,13 @@
       const li = (items) => `<ul class="phase-list" style="margin-top:6px">${items.map((x) => `<li class="small"><span>${x}</span></li>`).join('')}</ul>`;
       return sheet('Your data is yours', `
         <div class="card" style="margin:0;background:var(--green);color:var(--bg);border:none"><div class="serif" style="font-size:24px;line-height:1.15">We never sell your data.</div>
-          <p class="small" style="margin-top:8px;opacity:.85">We don't share it with advertisers or data brokers. There are no ads and no tracking or analytics in YOURS. Your cycle, health and body data is never used for advertising.</p></div>
+          <p class="small" style="margin-top:8px;opacity:.85">We don't share it with advertisers or data brokers. There are no ads and no third-party trackers in YOURS. Your cycle, health and body data is never used for advertising.</p></div>
         ${h('What we keep')}
         ${li(['Your name and email, for your account.', 'Your plan and what you log: cycle, check-ins, workouts, food, steps and weight.', 'Your community posts, comments and messages.', 'Whether your membership is active. Your card details stay with Stripe; we never see them.'])}
+        ${h('Anonymous usage counts')}
+        <p class="small" style="margin-top:6px">To see what's working, YOURS counts simple events like "a workout was finished" or "a trial started". Each count is just the event and the date: no name, email, account, device ID, IP address or health details. If your browser is set to Do Not Track or Global Privacy Control, nothing is counted.</p>
+        ${h('Invites')}
+        <p class="small" style="margin-top:6px">If you join with a friend's invite, we note that you were invited so they can get their free month. They only see how many friends joined, never who.</p>
         ${h('Where it lives')}
         ${li(['On your phone, and in your private YOURS account so it syncs across your devices. Other members can never see it; only your posts and messages are shared, with the people you share them with.', 'Progress photos stay on your phone, locked with your PIN. If you turn on backup, they are encrypted on your phone with your passphrase first, so we cannot see them.'])}
         ${h('Services that help run YOURS')}
@@ -2864,6 +3178,8 @@
           <div class="row between" style="margin-top:14px"><span class="small">Had a baby in the last year</span><button class="chip ${S.data.profile.postpartum ? 'selected' : ''}" data-action="toggle-postpartum">${S.data.profile.postpartum ? 'Yes' : 'No'}</button></div></div>
         <div class="card flat"><div class="label">Units</div><div class="segment">${[['imperial', 'lb · ft'], ['metric', 'kg · cm']].map(([v, l]) => `<button class="${(p.units === 'metric' ? 'metric' : 'imperial') === v ? 'active' : ''}" data-action="set-units" data-value="${v}">${l}</button>`).join('')}</div><p class="tiny muted" style="margin-top:8px">Past workouts keep the unit they were logged in. Suggested weights convert automatically.</p></div>
         <div class="card flat"><div class="label">Appearance</div><div class="segment">${['system', 'light', 'dark'].map((x) => `<button class="${theme === x ? 'active' : ''}" data-action="theme" data-value="${x}">${x[0].toUpperCase() + x.slice(1)}</button>`).join('')}</div></div>
+        ${adminHint() ? `<div class="card flat small"><div class="label">Owner dashboard</div><p class="muted">Trials, payments, the sign-up funnel and how members use YOURS. Anonymous counts only.</p><button class="btn ghost sm block" style="margin-top:10px" data-action="open-stats">Open dashboard</button></div>` : ''}
+        ${inviteCard()}
         ${installPlatform() !== 'installed' ? '<div class="card flat small"><div class="label">Get the app</div><p class="muted">Add YOURS to your Home Screen for full screen, one-tap access and reminders.</p><button class="btn ghost sm block" style="margin-top:10px" data-action="open-install">Show me how</button></div>' : ''}
         <div class="card flat small"><div class="label">Coach</div><p class="muted">${S.ai ? 'Live AI coach is connected.' : 'Running the on-device coach. Set ANTHROPIC_API_KEY on the server to enable the live AI coach and photo reviews.'}</p></div>
         ${billingOn() && isCloud() ? `<div class="card flat small"><div class="label">Membership</div><p class="muted">${esc(membershipLine())}</p>${S.sub && S.sub.status && !['none', 'comp'].includes(S.sub.status) ? '<button class="btn ghost sm block" style="margin-top:10px" data-action="billing-portal">Manage membership</button>' : ''}<p class="tiny muted" style="margin-top:8px">Cancel, switch plans or update your card on Stripe's secure page.</p></div>` : ''}
@@ -2885,7 +3201,9 @@
 
   function render() {
     let html;
-    if (!S.session) html = S.screen === 'login' ? viewLogin() : viewWelcome();
+    const landing = showLanding();
+    root.classList.toggle('wide', landing);
+    if (!S.session) html = S.screen === 'login' ? viewLogin() : landing ? viewLanding() : viewWelcome();
     else if (!S.data.onboarded) html = viewOnboarding();
     else if (!S.data.planSeen) html = viewReveal();
     else if (!termsOk()) html = viewAgreement();
@@ -2910,6 +3228,7 @@
   // ---------- session handling ----------
   async function startSession(session) {
     S.session = session;
+    S.invite = null;
     S.authForm = null; // forget what was typed into the sign-up form, including the password
     store.set('yours.session', session);
     loadData();
@@ -2921,7 +3240,7 @@
     S.backupKey = null; S.backupNames = null;
     stopCloudCommunity();
     await loadPhotos();
-    if (session.cloud) { await syncPull(); await refreshSub(); recordConsentIfNeeded(); startCloudCommunity(); cloud.emailPrefs().then((p) => { S.emailWeekly = p.weekly; }).catch(() => {}); }
+    if (session.cloud) { await syncPull(); await refreshSub(); recordConsentIfNeeded(); startCloudCommunity(); cloud.emailPrefs().then((p) => { S.emailWeekly = p.weekly; }).catch(() => {}); claimInvite(); }
   }
   // Keep a local name entry for cloud accounts so the app can greet her offline.
   function rememberCloudUser(email, name) {
@@ -2964,6 +3283,7 @@
     if (await window.YOURS_CLOUD.passwordLeaks(password) > 0) { S.authBusy = false; S.authError = 'A password like this has appeared in a data breach, so it is easy for others to guess. Please choose a different one.'; return render(); }
     try {
       const r = await cloud.signUp(email, password, name);
+      logEvent('account_created');
       rememberCloudUser(email, name);
       // Her guest plan becomes the account's data; it uploads on first sign-in.
       if (S.data && isGuest()) { S.data.planSeen = true; S.data._updated = Date.now(); store.set(`yours.data.${email}`, S.data); }
@@ -3207,7 +3527,7 @@
 
   // ---------- events ----------
   const actions = {
-    start: () => { S.authError = ''; startSession({ kind: 'guest' }).then(render); },
+    start: () => { S.authError = ''; logEvent('signup_start'); startSession({ kind: 'guest' }).then(render); },
     'go-login': () => {
       // Guest progress stays saved on the device; signing in switches to that account's data.
       S.authError = ''; S.modal = null; S.screen = 'login';
@@ -3232,6 +3552,7 @@
     'pay-plan': (el) => { S.payPlan = el.dataset.plan; S.billingError = ''; render(); },
     'pay-start': async () => {
       S.billingBusy = 'opening'; S.billingError = ''; render();
+      logEvent('checkout_start');
       try { location.href = await billingCall('checkout', { plan: S.payPlan || 'yearly' }); }
       catch (e) { S.billingBusy = null; S.billingError = e.message; render(); }
     },
@@ -3260,6 +3581,7 @@
       if (S.data.obStep < OB_STEPS - 1) { S.data.obStep++; save(); render(); window.scrollTo(0, 0); return; }
       const p = S.data.profile;
       if (p.periodStart && !L.STEADY_MODES.includes(p.cycleMode) && !S.data.periods.includes(p.periodStart)) L.addPeriod(S.data, p.periodStart);
+      if (!S.data.onboarded) logEvent('onboarding_done');
       S.data.onboarded = true;
       S.data.obStep = 0;
       if (S.data.editing) { S.data.editing = false; S.data.planSeen = true; toast('Plan updated'); }
@@ -3283,6 +3605,7 @@
       const c = cyc();
       S.data.daily[todayKey()] = { ...f, cycleDay: c.day, phase: c.phase, ts: Date.now() };
       save();
+      awardBadges(true);
       const bleeding = ['light', 'medium', 'heavy'].includes(f.flow);
       const lastPeriod = S.data.periods[S.data.periods.length - 1];
       const recentlyLogged = lastPeriod && daysBetween(parseKey(lastPeriod), today()) < 10;
@@ -3312,6 +3635,8 @@
       S.modal = null;
       save(); render();
       toast(chosen.length ? 'Next week\'s plan is updated' : 'Check-in saved');
+      logEvent('weekly_checkin');
+      setTimeout(() => { awardBadges(true); render(); }, 2600);
     },
 
     'view-workout': (el) => { S.modal = { type: 'workout', id: el.dataset.id, from: S.modal && S.modal.type === 'program' ? S.modal : null }; render(); },
@@ -3325,6 +3650,7 @@
       const m = S.modal;
       const pr = D.PROGRAMS.find((x) => x.id === m.id);
       S.data.program = { id: pr.id, start: todayKey(), days: m.days.slice().sort(), flagged: m.screen.length > 0 };
+      logEvent('program_start');
       if (pr.id === 'postpartum') S.data.profile.postpartum = true;
       delete S.data.overrides[todayKey()];
       S.modal = null;
@@ -3354,6 +3680,21 @@
     'rest-skip': () => { stopRest(); render(); },
     'superset-toggle': (el) => { const ex = S.data.activeWorkout.exercises[el.dataset.ei]; ex.superset = !ex.superset; save(); render(); },
     'note-open': (el) => { S.data.activeWorkout.exercises[el.dataset.ei].noteOpen = true; render(); const t = root.querySelector(`[data-note="${el.dataset.ei}"]`); if (t) t.focus(); },
+    'swap-toggle': (el) => { const ex = S.data.activeWorkout.exercises[el.dataset.ei]; ex.swapOpen = !ex.swapOpen; render(); },
+    'swap-pick': (el) => {
+      const a = S.data.activeWorkout;
+      const ei = Number(el.dataset.ei);
+      const ex = a.exercises[ei];
+      if (!ex || ex.sets.some((x) => x.done) || !L.swapOptions(ex.name).some((o) => o.name === el.dataset.name)) return;
+      const next = loggerEntry(el.dataset.name, ex.reps, ex.rest, ex.sets.length, a.unit, a.phase);
+      a.exercises[ei] = { ...next, superset: ex.superset, swappedFrom: ex.swappedFrom || ex.name };
+      logEvent('exercise_swap');
+      save(); render();
+      toast(`Swapped to ${next.name}`);
+    },
+    'cmp-mode': (el) => { S.cmp.mode = el.dataset.mode; render(); },
+    'cmp-pose': (el) => { S.cmp = { ...S.cmp, pose: el.dataset.pose, a: null, b: null }; render(); },
+    'cmp-show': () => { S.cmp.shown = true; logEvent('photo_compare'); render(); },
     'plates-toggle': (el) => { const ex = S.data.activeWorkout.exercises[el.dataset.ei]; ex.platesOpen = !ex.platesOpen; render(); },
     'plates-bar': (el) => { S.data.activeWorkout.exercises[el.dataset.ei].bar = Number(el.dataset.bar); save(); render(); },
     'finish-workout': () => finishWorkout(),
@@ -3492,6 +3833,18 @@
       openShare(pr ? { art: m.record.phase, eyebrow: 'New personal record', big: fmtLoad(pr.weight, pr.unit), sub: `${pr.name} for ${pr.reps} reps.`, foot: shortDate(m.record.date) } : { art: 'session', eyebrow: 'Session complete', big: `${m.record.sets} sets`, sub: m.record.name, foot: shortDate(m.record.date) });
     },
     'share-card': () => shareCard(),
+    'open-stats': () => openStats(),
+    'invite-load': async () => { await loadInvite(); render(); if (!S.invite) toast('Could not load your invite link. Try again in a moment.'); },
+    'invite-copy': async () => { const link = inviteLink(); if (!link) return; try { await navigator.clipboard.writeText(link); toast('Invite link copied'); } catch { prompt('Copy your invite link', link); } logEvent('invite_shared'); },
+    'invite-share': async () => {
+      const link = inviteLink(); if (!link) return;
+      const text = 'I train with YOURS, strength training that follows your cycle. Use my link for 3 weeks free:';
+      logEvent('invite_shared');
+      if (navigator.share) { try { await navigator.share({ title: 'YOURS', text, url: link }); return; } catch { return; } }
+      try { await navigator.clipboard.writeText(`${text} ${link}`); toast('Invite copied. Paste it in a message.'); } catch { prompt('Copy your invite link', link); }
+    },
+    'share-format': (el) => { const m = S.modal; if (!m || m.type !== 'share') return; openShare({ ...m.card, story: el.dataset.value === 'story' }); },
+    'share-badge': (el) => { const b = L.badges(S.data).find((x) => x.id === el.dataset.id && x.earned); if (b) openShare({ art: cyc().phase, eyebrow: 'Badge unlocked', big: b.short, sub: `${b.title}. ${b.desc}`, foot: shortDate(b.earned) }); },
 
     'photo-tap': (el) => {
       const id = el.dataset.id;
@@ -3519,7 +3872,7 @@
       await rewriteAllPhotos();
       S.data.pinHash = null; S.data.pinSalt = null; S.modal = null; save(); render(); toast('PIN removed. Photos are no longer encrypted.');
     },
-    'lock-vault': () => { S.vaultUnlocked = false; S.photoKey = null; S.backupKey = null; S.photos = []; S.revealed = {}; S.compare = []; render(); },
+    'lock-vault': () => { S.vaultUnlocked = false; S.photoKey = null; S.backupKey = null; S.photos = []; S.revealed = {}; S.compare = []; S.cmp.shown = false; render(); },
 
     'community-view': (el) => { S.communityView = el.dataset.value; S.openThread = null; render(); },
     'post-tag': (el) => { S.postTag = el.dataset.value; const ta = root.querySelector('[data-form="post"] textarea'); const keep = ta ? ta.value : ''; render(); const nt = root.querySelector('[data-form="post"] textarea'); if (nt) nt.value = keep; },
@@ -3634,6 +3987,7 @@
       const box = document.getElementById('food-macros');
       if (box) box.innerHTML = foodMacroTiles(L.foodMacros(S.modal.food, S.modal.amount, 'grams'));
     }
+    if (el.matches('[data-cmp-range]')) { S.cmp.pos = Number(el.value); const box = el.closest('.cmp-slider'); if (box) box.style.setProperty('--pos', `${el.value}%`); return; }
     if (el.dataset.note != null && S.data && S.data.activeWorkout) { const ex = S.data.activeWorkout.exercises[el.dataset.note]; if (ex) { ex.note = el.value.slice(0, 300); save(); } return; }
     if (el.dataset.set && S.data.activeWorkout) {
       const [ei, si, field] = el.dataset.set.split('.');
@@ -3647,6 +4001,7 @@
     const el = ev.target;
     if (el.form && el.form.dataset.form === 'signup' && (el.name === 'agree' || el.name === 'health')) { S.authForm = { ...(S.authForm || {}), [el.name]: el.checked }; return; }
     if (el.dataset.bindUi === 'pose') { S.pose = el.value; return; }
+    if (el.dataset.cmpPick) { S.cmp[el.dataset.cmpPick] = el.value; render(); return; }
     if (el.matches('[data-scan-photo]') && el.files && el.files[0]) { scanPhoto(el.files[0]); return; }
     if (el.dataset.reminderHour && S.data) { const k = el.dataset.reminderHour; S.data.reminders = S.data.reminders || {}; S.data.reminders[k] = { ...(S.data.reminders[k] || { on: true }), hour: Number(el.value) }; S.data.reminders.tz = Intl.DateTimeFormat().resolvedOptions().timeZone; save(); return; }
     if (el.matches('[data-plate-photo]') && el.files && el.files[0]) { handlePlate(el.files[0]); el.value = ''; return; }
@@ -3868,7 +4223,7 @@
   // Opening the camera or photo picker briefly hides the page, so that does not count.
   function lockVault() {
     if (!S.data || !S.data.pinHash || !S.vaultUnlocked) return;
-    S.vaultUnlocked = false; S.photoKey = null; S.backupKey = null; S.backupRaw = null; S.photos = []; S.revealed = {}; S.compare = [];
+    S.vaultUnlocked = false; S.photoKey = null; S.backupKey = null; S.backupRaw = null; S.photos = []; S.revealed = {}; S.compare = []; S.cmp.shown = false;
   }
   document.addEventListener('click', (ev) => { if (ev.target.closest('label') && ev.target.closest('label').querySelector('input[type=file]')) S.pickingFile = Date.now(); }, true);
   document.addEventListener('visibilitychange', () => {
@@ -3881,13 +4236,20 @@
 
   // ---------- installable app ----------
   window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); S.installPrompt = e; if (S.session) render(); });
-  window.addEventListener('appinstalled', () => { S.installPrompt = null; if (S.modal && S.modal.type === 'install') S.modal = null; toast('YOURS is on your Home Screen'); if (S.session) render(); });
+  window.addEventListener('appinstalled', () => { logEvent('install_done'); S.installPrompt = null; if (S.modal && S.modal.type === 'install') S.modal = null; toast('YOURS is on your Home Screen'); if (S.session) render(); });
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
     window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => { /* offline support unavailable */ }));
   }
 
   // ---------- boot ----------
   (async function boot() {
+    const inviteParam = new URLSearchParams(location.search).get('invite');
+    if (inviteParam) {
+      const code = inviteParam.trim().toUpperCase();
+      if (/^[A-HJ-NP-Z2-9]{6}$/.test(code)) { store.set('yours.invite', code); logEvent('invite_opened'); }
+      history.replaceState(null, '', location.pathname);
+    }
+    setTimeout(() => { if (S.data && S.data.onboarded && awardBadges(true).length) render(); }, 4000);
     await Promise.all([initCloud(), loadBilling()]);
     if (S.session) {
       if (S.session.kind === 'user' && !users()[S.session.email]) { S.session = null; store.del('yours.session'); }
@@ -3895,7 +4257,7 @@
         // Show cached data right away; then confirm the account session and sync.
         loadData(); await loadPhotos(); render();
         const u = cloud ? await cloud.init() : null;
-        if (u) { await syncPull(); await refreshSub(); startCloudCommunity(); }
+        if (u) { await syncPull(); await refreshSub(); startCloudCommunity(); claimInvite(); }
         else if (cloud && navigator.onLine) { S.session = null; S.data = null; store.del('yours.session'); S.screen = 'login'; S.authError = 'Please sign in again.'; }
       } else {
         loadData(); await loadPhotos();
@@ -3921,6 +4283,7 @@
       if (billingReturn === 'success' && isCloud()) awaitMembership();
       else if (isCloud()) refreshSub().then(render);
     }
+    if (S.session && S.data && S.data.onboarded) logEvent('app_open');
     checkAI();
     fetch('/api/food').then((r) => r.json()).then((j) => { S.foodApi = !!j.available; }).catch(() => { S.foodApi = false; });
   })();

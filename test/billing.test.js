@@ -34,6 +34,7 @@ function fakeSupabase(rows, users) {
       if (i > -1) rows[i] = { ...rows[i], ...row }; else rows.push({ trial_used: false, ...row });
       return ok(null);
     }
+    if (!opts || !opts.method || opts.method === 'GET') return ok([]); // other tables (referrals): empty
     throw new Error('unexpected ' + url);
   };
 }

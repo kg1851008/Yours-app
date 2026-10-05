@@ -331,3 +331,48 @@ test('workout logger: rest times, barbell detection and plate math', () => {
   assert.equal(L.platesFor(40, 'lb', 45).belowBar, true);
   assert.equal(L.defaultBar('Trap bar deadlift', 'lb'), 60);
 });
+
+test('every program session exists, and the new programs are complete', () => {
+  const ids = new Set(D.WORKOUTS.map((w) => w.id));
+  for (const p of D.PROGRAMS) for (const b of p.blocks) for (const s of b.sessions) assert.ok(ids.has(s), `${p.id} -> ${s}`);
+  for (const id of ['beginner', 'home']) {
+    const p = L.programById(id);
+    assert.ok(p, id);
+    assert.equal(Math.max(...p.blocks.map((b) => b.to)), 8);
+  }
+  // Home strength never needs a machine, cable or barbell.
+  const home = D.WORKOUTS.filter((w) => w.program === 'home').flatMap((w) => w.exercises.map((e) => e.name));
+  assert.deepEqual(home.filter((n) => ['Machine', 'Cable', 'Barbell'].includes(L.equipmentOf(n))), []);
+});
+
+test('exercise swaps offer the same movement and skip what is already in the session', () => {
+  const opts = L.swapOptions('Back squat').map((o) => o.name);
+  assert.ok(opts.includes('Leg press') && opts.includes('Goblet squat'));
+  assert.ok(!opts.includes('Back squat'));
+  assert.ok(!opts.some((n) => /light/i.test(n)), 'no light variants for a heavy lift');
+  assert.ok(!L.swapOptions('Back squat', ['Leg press']).some((o) => o.name === 'Leg press'));
+  assert.equal(L.equipmentOf('Leg press'), 'Machine');
+  assert.equal(L.equipmentOf('Lat pulldown'), 'Cable');
+  assert.equal(L.equipmentOf('Band face pull'), 'Band');
+  assert.equal(L.equipmentOf('Goblet squat'), 'Dumbbell');
+  assert.equal(L.equipmentOf('Barbell hip thrust'), 'Barbell');
+  assert.deepEqual(L.swapOptions('Pelvic floor holds'), []);
+});
+
+test('badges: progress, earning once, and the every-phase badge', () => {
+  const data = { profile: profile(), workouts: [], prs: [], reviews: [], daily: {}, steps: {}, plan: {} };
+  assert.deepEqual(L.newBadges(data).map((b) => b.id), []);
+  data.workouts.push({ date: k(-1), phase: 'menstrual' });
+  assert.deepEqual(L.newBadges(data).map((b) => b.id), ['first-session']);
+  data.badges = { 'first-session': k(-1) };
+  assert.deepEqual(L.newBadges(data).map((b) => b.id), []);
+  ['follicular', 'ovulation', 'luteal'].forEach((ph, i) => data.workouts.push({ date: k(-10 - i), phase: ph }));
+  assert.ok(L.newBadges(data).some((b) => b.id === 'full-cycle'));
+  // Earned badges stay even when progress drops (e.g. a broken streak).
+  data.badges['streak-7'] = k(-30);
+  const s7 = L.badges(data).find((b) => b.id === 'streak-7');
+  assert.ok(s7.earned);
+  // No cycle, no phase badge.
+  const steady = { ...data, profile: profile({ cycleMode: 'hormonal' }), badges: {} };
+  assert.ok(!L.badges(steady).some((b) => b.id === 'full-cycle'));
+});

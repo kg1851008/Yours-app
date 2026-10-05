@@ -733,6 +733,102 @@
       e('Step-down', 3, '8 / side', '60s', 'Slow lowering for knee and balance control.'),
       e('Heel drops', 3, '10', '45s', 'Rise onto toes and drop onto heels: gentle impact for bone. Hold dumbbells when easy.'),
     ]),
+
+    // Beginner foundations: gym machines and dumbbells, one movement pattern at a time
+    pw('bf-1a', 'beginner', 'Foundations: Full body A', 'Squat, push and pull', 40, 'Low-moderate', 'Learn the basic patterns with light weights. Every rep should feel controlled.', [
+      e('Goblet squat', 3, '10', '90s', 'Hold a dumbbell at your chest and sit between your heels.', true),
+      e('Machine chest press', 3, '10', '90s', 'Handles at mid-chest. Press, then lower for 2 seconds.', true),
+      e('Lat pulldown', 3, '10', '75s', 'Pull to the top of your chest, elbows to your sides.'),
+      e('Glute bridge', 2, '12', '60s', 'Squeeze for 2 seconds at the top.'),
+      e('Dead bug', 2, '6 / side', '45s', 'Low back stays heavy on the floor.'),
+    ]),
+    pw('bf-1b', 'beginner', 'Foundations: Full body B', 'Hinge, press and row', 40, 'Low-moderate', 'Learn the hip hinge and build a strong back.', [
+      e('Dumbbell Romanian deadlift', 3, '10', '90s', 'Soft knees, push your hips back, dumbbells close to your legs.', true),
+      e('Seated cable row', 3, '10', '75s', 'Sit tall and pull elbows to your back pockets.', true),
+      e('Leg press', 3, '12', '90s', 'Feet hip-width. Lower until knees reach about 90 degrees.'),
+      e('Seated dumbbell shoulder press', 2, '10', '75s', 'Ribs down, press straight up.'),
+      e('Forearm plank', 2, '20s', '45s', 'Ribs down, glutes on.'),
+    ]),
+    pw('bf-2a', 'beginner', 'Foundations: Build A', 'Lower body and push', 45, 'Moderate', 'Same patterns, a little heavier. Add weight when every set reaches the top of the range.', [
+      e('Goblet squat', 3, '8-12', '90s', 'Heavier than weeks 1-2.', true),
+      e('Dumbbell bench press', 3, '8-12', '90s', 'Shoulder blades pinned back.', true),
+      e('Reverse lunge', 2, '8 / leg', '75s', 'Step back long, hold a wall if needed.'),
+      e('Lat pulldown', 3, '10-12', '75s', 'Control the way up.'),
+      e('Hip thrust', 3, '10-12', '75s', 'Bench behind your shoulders, chin tucked.'),
+    ]),
+    pw('bf-2b', 'beginner', 'Foundations: Build B', 'Hinge and pull', 45, 'Moderate', 'Build the hinge and your back. Most beginners can add weight every week now.', [
+      e('Dumbbell Romanian deadlift', 3, '8-12', '90s', 'Heavier, same clean hinge.', true),
+      e('One-arm dumbbell row', 3, '10 / side', '75s', 'Brace on a bench and pull to your hip.', true),
+      e('Leg press', 3, '10-12', '90s', 'Feet high for more glutes.'),
+      e('Lying leg curl', 2, '12', '60s', 'Slow 3-second lowering.'),
+      e('Pallof press', 2, '10 / side', '45s', 'Resist the twist and breathe out as you press.'),
+    ]),
+    pw('bf-3a', 'beginner', 'Foundations: Progress A', 'Full body strength', 50, 'Moderate', 'Your strongest weeks. In week 8, compare your goblet squat with week 1.', [
+      e('Goblet squat', 4, '8-10', '2 min', 'Week 8: a best set of 10.', true),
+      e('Dumbbell bench press', 3, '8-10', '90s', 'Control the lowering.', true),
+      e('Bulgarian split squat', 2, '8 / leg', '75s', 'Back foot on a bench, lean slightly forward.'),
+      e('Lat pulldown', 3, '8-10', '90s', 'Heavier than block two.'),
+      e('Hip thrust', 3, '10', '75s', 'Pause at the top.'),
+    ]),
+    pw('bf-3b', 'beginner', 'Foundations: Progress B', 'Full body strength', 50, 'Moderate', 'Heavier hinge and rows. Ready for any YOURS program after this.', [
+      e('Dumbbell Romanian deadlift', 4, '8-10', '2 min', 'Week 8: compare with week 1.', true),
+      e('Seated cable row', 3, '8-10', '90s', 'Pause with elbows behind you.', true),
+      e('Leg press', 3, '10', '90s', 'Heavier than block two.'),
+      e('Seated dumbbell shoulder press', 3, '8-10', '75s', 'Ribs down.'),
+      e('Farmer carry', 3, '30 m', '60s', 'Heavy, tall and slow.'),
+    ]),
+
+    // Home strength: dumbbells and a resistance band (a chair or bench helps)
+    pw('hs-1a', 'home', 'Home: Lower body', 'Legs and glutes', 35, 'Moderate', 'Dumbbells only. Pick a weight that makes the last 2 reps hard.', [
+      e('Goblet squat', 3, '10-12', '75s', 'Sit between your heels, chest proud.', true),
+      e('Dumbbell Romanian deadlift', 3, '10-12', '75s', 'Hips back, dumbbells close to your legs.', true),
+      e('Reverse lunge', 3, '8 / leg', '60s', 'Hold dumbbells at your sides.'),
+      e('Dumbbell glute bridge', 3, '12-15', '60s', 'Dumbbell on your hips, 2-second squeeze.'),
+      e('Banded lateral walk', 2, '12 / side', '45s', 'Band above your knees, stay low.'),
+    ]),
+    pw('hs-1b', 'home', 'Home: Upper body', 'Back, chest and arms', 35, 'Moderate', 'Rows and presses with dumbbells and a band.', [
+      e('One-arm dumbbell row', 3, '10-12 / side', '60s', 'Brace a hand on a chair or bench.', true),
+      e('Dumbbell floor press', 3, '10-12', '75s', 'Elbows touch the floor, then press.', true),
+      e('Band pull-apart', 3, '15', '45s', 'Shoulders down and back.'),
+      e('Seated dumbbell shoulder press', 3, '10', '60s', 'On a chair, ribs down.'),
+      e('Dumbbell curl', 2, '12', '45s', 'No swinging.'),
+      e('Push-up', 2, '6-10', '60s', 'From your knees or a counter if needed.'),
+    ]),
+    pw('hs-2a', 'home', 'Home: Legs build', 'Legs and glutes', 40, 'Moderate', 'Single-leg work makes light dumbbells feel heavy.', [
+      e('Bulgarian split squat', 3, '8-10 / leg', '75s', 'Back foot on a chair or sofa.', true),
+      e('Single-leg Romanian deadlift', 3, '8 / leg', '60s', 'Hold a wall if needed. Hips square.', true),
+      e('Goblet squat', 3, '12', '60s', '3 seconds down, 1 second pause at the bottom.'),
+      e('Single-leg hip thrust', 3, '10 / leg', '60s', 'Shoulders on the sofa or a bench.'),
+      e('Calf raise', 3, '15', '45s', 'On a step, full stretch at the bottom.'),
+    ]),
+    pw('hs-2b', 'home', 'Home: Upper build', 'Back, chest and shoulders', 40, 'Moderate', 'More volume and slower lowering for strength at home.', [
+      e('One-arm dumbbell row', 4, '10 / side', '60s', '2-second pause at the top.', true),
+      e('Dumbbell floor press', 4, '10', '75s', '3 seconds down.', true),
+      e('Dumbbell lateral raise', 3, '12-15', '45s', 'Lead with your elbows.'),
+      e('Band face pull', 3, '15', '45s', 'Band anchored in a door at eye level.'),
+      e('Push-up', 3, '6-10', '60s', 'Progress from counter to knees to floor.'),
+    ]),
+    pw('hs-2c', 'home', 'Home: Full body', 'Full body', 40, 'Moderate', 'Big movements with a little more pace.', [
+      e('Dumbbell thruster', 3, '10', '75s', 'Squat, then drive the dumbbells overhead.', true),
+      e('Dumbbell Romanian deadlift', 3, '10', '75s', 'Same weight or heavier than last week.', true),
+      e('Renegade row', 3, '6 / side', '60s', 'From your knees to start. Hips stay still.'),
+      e('Step-up', 3, '8 / leg', '60s', 'On a sturdy chair or stair.'),
+      e('Dead bug', 3, '8 / side', '45s', 'Press your low back down.'),
+    ]),
+    pw('hs-3a', 'home', 'Home: Legs peak', 'Legs and glutes', 45, 'High', 'Hardest leg session. In week 8, compare your split squat with week 3.', [
+      e('Bulgarian split squat', 4, '8 / leg', '90s', 'Heaviest dumbbells you can control.', true),
+      e('Dumbbell Romanian deadlift', 4, '8-10', '90s', 'Pause just below the knee.', true),
+      e('Dumbbell sumo squat', 3, '12', '60s', 'Wide stance, one heavy dumbbell.'),
+      e('Single-leg hip thrust', 3, '12 / leg', '60s', 'Burnout to finish.'),
+      e('Banded lateral walk', 2, '15 / side', '45s', 'Stay low the whole time.'),
+    ]),
+    pw('hs-3b', 'home', 'Home: Upper peak', 'Back, chest and shoulders', 45, 'High', 'Hardest upper session. Slow lowering on every rep.', [
+      e('One-arm dumbbell row', 4, '8 / side', '75s', 'Heaviest dumbbell you have.', true),
+      e('Dumbbell floor press', 4, '8', '90s', '1-second pause on the floor.', true),
+      e('Arnold press', 3, '10', '60s', 'Rotate smoothly.'),
+      e('Band face pull', 3, '15', '45s', 'Pull to eye level and rotate out.'),
+      e('Push-up', 3, 'AMRAP', '60s', 'As many good reps as you can.'),
+    ]),
   ];
 
   const PROGRAMS = [
@@ -784,6 +880,57 @@
       ],
       finish: 'Keep lifting heavy two to three times a week for life. Bone responds over months, so this is the start.',
     },
+    {
+      id: 'beginner', name: 'Beginner foundations', kicker: 'New to lifting', perWeek: 3,
+      tagline: 'Learn the five basic movements, build confidence in the gym, then get stronger every week.',
+      who: 'For anyone new to lifting or coming back after a long break. Uses dumbbells and common gym machines, with simple cues for every exercise.',
+      blocks: [
+        { from: 1, to: 2, title: 'Learn', note: 'Light weights and perfect reps. Leave 3 reps in the tank.', sessions: ['bf-1a', 'bf-1b'] },
+        { from: 3, to: 5, title: 'Build', note: 'Add weight when every set hits the top of the rep range.', sessions: ['bf-2a', 'bf-2b'] },
+        { from: 6, to: 8, title: 'Progress', note: 'Your strongest weeks. Week 8 is a test.', sessions: ['bf-3a', 'bf-3b'] },
+      ],
+      finish: 'Compare your week 8 goblet squat and Romanian deadlift with week 1. You are ready for Glute build, First pull-up or the main YOURS plan.',
+    },
+    {
+      id: 'home', name: 'Home strength', kicker: 'Dumbbells only', perWeek: 3,
+      tagline: 'Real strength training at home with a pair of dumbbells and a resistance band.',
+      who: 'For training at home. You need dumbbells (adjustable ones are ideal) and a resistance band. A sturdy chair or bench helps.',
+      blocks: [
+        { from: 1, to: 2, title: 'Base', note: 'Learn the moves and find your dumbbell weights.', sessions: ['hs-1a', 'hs-1b'] },
+        { from: 3, to: 5, title: 'Build', note: 'Single-leg work and slower lowering make light weights work hard.', sessions: ['hs-2a', 'hs-2b', 'hs-2c'] },
+        { from: 6, to: 8, title: 'Push', note: 'Your hardest weeks. Week 8 is a test.', sessions: ['hs-3a', 'hs-3b', 'hs-2c'] },
+      ],
+      finish: 'Compare your week 8 split squat and row with week 3. When your dumbbells feel light for 15 reps, go heavier or try a gym program.',
+    },
+  ];
+
+  // Member quotes for the landing page. Only add real quotes from real members, with their permission,
+  // e.g. { quote: 'I finally stopped fighting my body on period week.', name: 'Jess', detail: 'Member since 2026' }.
+  // The section stays hidden while this list is empty.
+  const TESTIMONIALS = [];
+
+  // Swap groups: exercises in a group train the same movement and muscles, so any one can stand in for another
+  // ("machine taken? swap it"). An exercise can sit in more than one group.
+  const SWAPS = [
+    { id: 'squat', label: 'Squat', names: ['Back squat', 'Goblet squat', 'Front-loaded squat', 'Leg press', 'Hack squat', 'Dumbbell sumo squat', 'Box squat', 'Goblet squat (light)'] },
+    { id: 'hinge', label: 'Hip hinge', names: ['Romanian deadlift', 'Dumbbell Romanian deadlift', 'Trap bar deadlift', 'Sumo deadlift', 'Kettlebell deadlift', 'Deficit Romanian deadlift', 'Cable pull-through', '45-degree back extension', 'Back extension', 'Light dumbbell Romanian deadlift'] },
+    { id: 'thrust', label: 'Glute bridge', names: ['Barbell hip thrust', 'Hip thrust', 'Dumbbell hip thrust', 'B-stance hip thrust', 'Single-leg hip thrust', 'Dumbbell glute bridge', 'Glute bridge', 'Banded glute bridge', 'Single-leg glute bridge', 'Glute bridge march'] },
+    { id: 'single-leg', label: 'Single leg', names: ['Bulgarian split squat', 'Reverse lunge', 'Walking lunge', 'Step-up', 'Step-up (low box)', 'Supported split squat', 'Single-leg Romanian deadlift'] },
+    { id: 'leg-curl', label: 'Hamstrings', names: ['Lying leg curl', 'Seated leg curl', 'Stability ball leg curl', 'Single-leg Romanian deadlift'] },
+    { id: 'glute-iso', label: 'Glute isolation', names: ['Cable kickback', 'Seated hip abduction', 'Hip abduction', 'Banded lateral walk', 'Frog pump', '45-degree back extension', 'Back extension (glute bias)', '45-degree hip extension'] },
+    { id: 'v-pull', label: 'Vertical pull', names: ['Lat pulldown', 'Pull-up or assisted pull-up', 'Band-assisted pull-up', 'Band lat pulldown', 'Straight-arm cable pulldown'] },
+    { id: 'h-pull', label: 'Row', names: ['Seated cable row', 'Chest-supported row', 'One-arm dumbbell row', 'Inverted row (high bar)', 'Band row', 'Renegade row'] },
+    { id: 'h-press', label: 'Chest press', names: ['Dumbbell bench press', 'Incline dumbbell press', 'Machine chest press', 'Dumbbell floor press', 'Push-up', 'Incline push-up'] },
+    { id: 'v-press', label: 'Overhead press', names: ['Seated dumbbell shoulder press', 'Overhead press', 'Arnold press', 'Push press', 'Dumbbell push press', 'Half-kneeling dumbbell press', 'Machine shoulder press'] },
+    { id: 'lateral', label: 'Side delts', names: ['Cable lateral raise', 'Dumbbell lateral raise', 'Band lateral raise'] },
+    { id: 'rear-delt', label: 'Rear delts', names: ['Face pull', 'Band face pull', 'Band pull-apart', 'Reverse dumbbell fly'] },
+    { id: 'fly', label: 'Chest fly', names: ['Cable fly', 'Dumbbell fly', 'Machine pec deck'] },
+    { id: 'biceps', label: 'Biceps', names: ['Dumbbell curl', 'Hammer curl', 'Cable curl', 'Band curl'] },
+    { id: 'triceps', label: 'Triceps', names: ['Triceps rope pushdown', 'Overhead dumbbell triceps extension', 'Band triceps pushdown', 'Bench dip'] },
+    { id: 'calves', label: 'Calves', names: ['Standing calf raise', 'Calf raise', 'Seated calf raise'] },
+    { id: 'core', label: 'Core', names: ['Pallof press', 'Half-kneeling Pallof press', 'Dead bug', 'Forearm plank', 'Side plank', 'Side plank (knees)', 'Plank', 'Bird dog', 'Hollow body hold'] },
+    { id: 'carry', label: 'Carry', names: ['Farmer carry', 'Suitcase carry', 'Suitcase carry (light)'] },
+    { id: 'power', label: 'Power', names: ['Kettlebell swing', 'Box jump', 'Low box jump', 'Medicine ball slam', 'Dumbbell thruster'] },
   ];
 
   // Everyday foods for talk-to-log when the AI coach is off. Values per unit, approximate (USDA averages).
@@ -854,7 +1001,7 @@
 
   WORKOUTS.push(...PROGRAM_WORKOUTS);
 
-  const api = { PROGRAMS, BASIC_FOODS, RESTAURANTS, STORES, PHASE_COPY, IMAGERY, PHASES, PHASE_ORDER, WORKOUTS, ROTATION, MEALS, FAVORITE_OPTIONS, AVOID_OPTIONS, MEMBERS, SEED_POSTS, AUTO_REPLIES, CYCLE_MODES, SYMPTOMS, MENO_SYMPTOMS, GROCERY };
+  const api = { TESTIMONIALS, SWAPS, PROGRAMS, BASIC_FOODS, RESTAURANTS, STORES, PHASE_COPY, IMAGERY, PHASES, PHASE_ORDER, WORKOUTS, ROTATION, MEALS, FAVORITE_OPTIONS, AVOID_OPTIONS, MEMBERS, SEED_POSTS, AUTO_REPLIES, CYCLE_MODES, SYMPTOMS, MENO_SYMPTOMS, GROCERY };
   if (typeof window !== 'undefined') window.YOURS_DATA = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

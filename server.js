@@ -17,6 +17,9 @@ app.get('/api/food', food);
 app.all('/api/billing', billing);
 app.all('/api/cron', require('./api/cron'));
 app.all('/api/push-test', require('./api/push-test'));
+app.all('/api/referral', require('./api/referral'));
+app.all('/api/event', require('./api/event'));
+app.all('/api/stats', require('./api/stats'));
 app.all('/api/email-unsubscribe', require('./api/email-unsubscribe'));
 
 app.get('*', (req, res) => {
