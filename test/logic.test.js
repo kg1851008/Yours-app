@@ -376,3 +376,8 @@ test('badges: progress, earning once, and the every-phase badge', () => {
   const steady = { ...data, profile: profile({ cycleMode: 'hormonal' }), badges: {} };
   assert.ok(!L.badges(steady).some((b) => b.id === 'full-cycle'));
 });
+
+test('the app never promises a trial without a card', () => {
+  const src = require('fs').readFileSync(require('path').join(__dirname, '../public/app.js'), 'utf8');
+  assert.ok(!/no card|card needed|free plan|without a card|no credit card/i.test(src));
+});
