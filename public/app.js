@@ -1363,7 +1363,20 @@
   let toastTimer;
   // Anonymous usage counts (see logEventNow below). Never blocks or throws.
   function logEvent(name) { try { logEventNow(name); } catch { /* analytics never breaks the app */ } }
-  function logEventNow() { /* replaced by analytics */ }
+  // Anonymous counts only: an event name, nothing about her. Views are counted once a day per device,
+  // funnel steps once per device. Browsers set to Do Not Track or Global Privacy Control send nothing.
+  const ONCE_A_DAY = ['app_open', 'landing_view'];
+  const ONCE_EVER = ['signup_start', 'onboarding_done', 'account_created', 'checkout_start', 'invite_opened', 'invite_claimed', 'install_done'];
+  function logEventNow(name) {
+    if (navigator.doNotTrack === '1' || window.doNotTrack === '1' || navigator.globalPrivacyControl) return;
+    if (/^(localhost|127\.)/.test(location.hostname) && !window.YOURS_TRACK_LOCAL) return;
+    const sent = store.get('yours.ev', {});
+    const key = ONCE_A_DAY.includes(name) ? `${name}:${todayKey()}` : ONCE_EVER.includes(name) ? name : null;
+    if (key && sent[key]) return;
+    if (key) { sent[key] = 1; Object.keys(sent).forEach((k) => { if (k.includes(':') && !k.endsWith(todayKey())) delete sent[k]; }); store.set('yours.ev', sent); }
+    const body = new Blob([JSON.stringify({ name })], { type: 'application/json' });
+    if (!(navigator.sendBeacon && navigator.sendBeacon('/api/event', body))) fetch('/api/event', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }), keepalive: true }).catch(() => {});
+  }
 
   // Record newly reached badges (earned once, kept forever). Returns the new ones.
   function awardBadges(announce) {
@@ -1999,6 +2012,46 @@
     await loadInvite();
     render();
   }
+  // ---------- owner dashboard (/api/stats; server allows ADMIN_EMAILS only) ----------
+  const adminHint = () => isCloud() && S.session && ((window.YOURS_CONFIG || {}).adminEmails || []).map((x) => String(x).toLowerCase()).includes(String(S.session.email).toLowerCase());
+  async function openStats() {
+    S.modal = { type: 'stats', data: null, error: '' };
+    render();
+    try {
+      const token = await cloud.accessToken();
+      const r = await fetch('/api/stats', { headers: { Authorization: `Bearer ${token}` } });
+      const j = await r.json().catch(() => ({}));
+      if (!S.modal || S.modal.type !== 'stats') return;
+      if (r.ok) S.modal.data = j; else S.modal.error = r.status === 404 ? 'This account is not on the owner list (ADMIN_EMAILS in Vercel).' : j.error || 'Could not load stats.';
+    } catch { if (S.modal && S.modal.type === 'stats') S.modal.error = 'Could not load stats. Check your connection.'; }
+    render();
+  }
+  function statsSheet(m) {
+    if (m.error) return `<p class="error">${esc(m.error)}</p>`;
+    const d = m.data;
+    if (!d) return '<div class="empty">Loading...</div>';
+    const ev = d.events;
+    const n = (x) => Number(x || 0).toLocaleString();
+    const pct = (a, b) => (b ? `${Math.round((a / b) * 100)}%` : '-');
+    const top = Math.max(1, ...d.funnel.map((k) => ev[k].d30));
+    const funnel = d.funnel.map((k, i) => {
+      const prev = i ? ev[d.funnel[i - 1]].d30 : null;
+      return `<div style="margin-top:10px"><div class="row between tiny"><span>${esc(ev[k].label)}</span><span><strong>${n(ev[k].d30)}</strong>${prev != null ? ` <span class="muted">· ${pct(ev[k].d30, prev)}</span>` : ''}</span></div><div class="stat-bar"><span style="width:${(ev[k].d30 / top) * 100}%"></span></div></div>`;
+    }).join('');
+    const maxDay = Math.max(1, ...d.days.map((x) => x.app_open));
+    const bars = d.days.map((x, i) => `<rect x="${i * 10 + 1}" y="${60 - (x.app_open / maxDay) * 56}" width="8" height="${Math.max(1, (x.app_open / maxDay) * 56)}" rx="2" fill="var(--accent)"><title>${x.day}: ${x.app_open} opens, ${x.workout_done} workouts</title></rect>`).join('');
+    const mem = d.members;
+    const engagement = ['workout_done', 'weekly_checkin', 'program_start', 'exercise_swap', 'photo_compare', 'badge_earned', 'share_card', 'install_done', 'invite_shared', 'invite_opened', 'invite_claimed', 'membership_canceled'];
+    return `<div class="stats">${statTile('Paying', n(mem.active), '')}${statTile('In trial', n(mem.trialing), '')}</div>
+      <p class="tiny muted" style="margin-top:8px">${n(mem.yearly)} yearly · ${n(mem.monthly)} monthly · ${n(mem.cancelling)} set to cancel · ${n(mem.pastDue)} card failing · ${n(mem.ended)} ended${mem.comp ? ` · ${n(mem.comp)} complimentary` : ''}</p>
+      <div class="card" style="margin-top:14px"><div class="eyebrow">Funnel · last 30 days</div>${funnel}<p class="tiny muted" style="margin-top:10px">Percentages compare each step with the one above. Views count once per device per day.</p></div>
+      <div class="card" style="margin-top:12px"><div class="row between"><span class="eyebrow">Daily app opens · 30 days</span><span class="tiny muted">${n(ev.app_open.d7)} this week</span></div><svg viewBox="0 0 300 62" style="width:100%;height:80px;margin-top:8px" role="img" aria-label="Daily app opens over 30 days">${bars}</svg></div>
+      <div class="card" style="margin-top:12px"><div class="row between"><span class="eyebrow">Activity</span><span class="eyebrow">7 days · 30 days</span></div>${engagement.map((k) => `<div class="list-item" style="padding:8px 0"><span class="grow small">${esc(ev[k].label)}</span><span class="small" style="font-family:var(--mono)">${n(ev[k].d7)} · ${n(ev[k].d30)}</span></div>`).join('')}</div>
+      <div class="card" style="margin-top:12px"><div class="eyebrow">Invites</div><p class="small" style="margin-top:6px">${n(d.invites.joined)} joined with an invite · ${n(d.invites.paid)} became paying · ${n(d.invites.rewarded)} free months given</p></div>
+      <p class="tiny muted" style="margin-top:12px">Anonymous counts only: no names, emails, device IDs or IP addresses are stored. Updated ${esc(timeAgo(Date.parse(d.generatedAt)))}.</p>
+      <button class="btn ghost block" style="margin-top:12px" data-action="open-stats">Refresh</button>`;
+  }
+
   function inviteCard() {
     if (!cloud) return '';
     if (!isCloud()) return `<div class="card flat small"><div class="label">Invite friends</div><p class="muted">Create an account to get your invite link. Friends get 2 extra weeks free, and you get a free month when they join.</p></div>`;
@@ -2920,6 +2973,7 @@
       return sheet(esc(wk.name), `${m.from ? `<button class="link small" style="margin-bottom:8px" data-action="modal-back">Back to program</button>` : ''}<div class="eyebrow">${esc(wk.focus)} · ${wk.minutes} min · ${esc(wk.intensity)}</div><p class="small" style="margin-top:8px">${esc(wk.summary)}</p><div class="divider"></div>${exerciseList(wk, true)}
         <div class="row" style="margin-top:16px"><button class="btn primary grow" data-action="start-workout" data-id="${wk.id}">Start now</button>${isToday ? '' : `<button class="btn ghost" data-action="set-today" data-id="${wk.id}">Make today's</button>`}</div>`);
     }
+    if (m.type === 'stats') return sheet('Owner dashboard', statsSheet(m));
     if (m.type === 'install') {
       const platform = installPlatform();
       if (platform === 'installed') return sheet('You have the app', '<p class="small">YOURS is already on your Home Screen. You are using it right now.</p>');
@@ -2931,9 +2985,13 @@
       const li = (items) => `<ul class="phase-list" style="margin-top:6px">${items.map((x) => `<li class="small"><span>${x}</span></li>`).join('')}</ul>`;
       return sheet('Your data is yours', `
         <div class="card" style="margin:0;background:var(--green);color:var(--bg);border:none"><div class="serif" style="font-size:24px;line-height:1.15">We never sell your data.</div>
-          <p class="small" style="margin-top:8px;opacity:.85">We don't share it with advertisers or data brokers. There are no ads and no tracking or analytics in YOURS. Your cycle, health and body data is never used for advertising.</p></div>
+          <p class="small" style="margin-top:8px;opacity:.85">We don't share it with advertisers or data brokers. There are no ads and no third-party trackers in YOURS. Your cycle, health and body data is never used for advertising.</p></div>
         ${h('What we keep')}
         ${li(['Your name and email, for your account.', 'Your plan and what you log: cycle, check-ins, workouts, food, steps and weight.', 'Your community posts, comments and messages.', 'Whether your membership is active. Your card details stay with Stripe; we never see them.'])}
+        ${h('Anonymous usage counts')}
+        <p class="small" style="margin-top:6px">To see what's working, YOURS counts simple events like "a workout was finished" or "a trial started". Each count is just the event and the date: no name, email, account, device ID, IP address or health details. If your browser is set to Do Not Track or Global Privacy Control, nothing is counted.</p>
+        ${h('Invites')}
+        <p class="small" style="margin-top:6px">If you join with a friend's invite, we note that you were invited so they can get their free month. They only see how many friends joined, never who.</p>
         ${h('Where it lives')}
         ${li(['On your phone, and in your private YOURS account so it syncs across your devices. Other members can never see it; only your posts and messages are shared, with the people you share them with.', 'Progress photos stay on your phone, locked with your PIN. If you turn on backup, they are encrypted on your phone with your passphrase first, so we cannot see them.'])}
         ${h('Services that help run YOURS')}
@@ -3012,6 +3070,7 @@
           <div class="row between" style="margin-top:14px"><span class="small">Had a baby in the last year</span><button class="chip ${S.data.profile.postpartum ? 'selected' : ''}" data-action="toggle-postpartum">${S.data.profile.postpartum ? 'Yes' : 'No'}</button></div></div>
         <div class="card flat"><div class="label">Units</div><div class="segment">${[['imperial', 'lb · ft'], ['metric', 'kg · cm']].map(([v, l]) => `<button class="${(p.units === 'metric' ? 'metric' : 'imperial') === v ? 'active' : ''}" data-action="set-units" data-value="${v}">${l}</button>`).join('')}</div><p class="tiny muted" style="margin-top:8px">Past workouts keep the unit they were logged in. Suggested weights convert automatically.</p></div>
         <div class="card flat"><div class="label">Appearance</div><div class="segment">${['system', 'light', 'dark'].map((x) => `<button class="${theme === x ? 'active' : ''}" data-action="theme" data-value="${x}">${x[0].toUpperCase() + x.slice(1)}</button>`).join('')}</div></div>
+        ${adminHint() ? `<div class="card flat small"><div class="label">Owner dashboard</div><p class="muted">Trials, payments, the sign-up funnel and how members use YOURS. Anonymous counts only.</p><button class="btn ghost sm block" style="margin-top:10px" data-action="open-stats">Open dashboard</button></div>` : ''}
         ${inviteCard()}
         ${installPlatform() !== 'installed' ? '<div class="card flat small"><div class="label">Get the app</div><p class="muted">Add YOURS to your Home Screen for full screen, one-tap access and reminders.</p><button class="btn ghost sm block" style="margin-top:10px" data-action="open-install">Show me how</button></div>' : ''}
         <div class="card flat small"><div class="label">Coach</div><p class="muted">${S.ai ? 'Live AI coach is connected.' : 'Running the on-device coach. Set ANTHROPIC_API_KEY on the server to enable the live AI coach and photo reviews.'}</p></div>
@@ -3114,6 +3173,7 @@
     if (await window.YOURS_CLOUD.passwordLeaks(password) > 0) { S.authBusy = false; S.authError = 'A password like this has appeared in a data breach, so it is easy for others to guess. Please choose a different one.'; return render(); }
     try {
       const r = await cloud.signUp(email, password, name);
+      logEvent('account_created');
       rememberCloudUser(email, name);
       // Her guest plan becomes the account's data; it uploads on first sign-in.
       if (S.data && isGuest()) { S.data.planSeen = true; S.data._updated = Date.now(); store.set(`yours.data.${email}`, S.data); }
@@ -3357,7 +3417,7 @@
 
   // ---------- events ----------
   const actions = {
-    start: () => { S.authError = ''; startSession({ kind: 'guest' }).then(render); },
+    start: () => { S.authError = ''; logEvent('signup_start'); startSession({ kind: 'guest' }).then(render); },
     'go-login': () => {
       // Guest progress stays saved on the device; signing in switches to that account's data.
       S.authError = ''; S.modal = null; S.screen = 'login';
@@ -3382,6 +3442,7 @@
     'pay-plan': (el) => { S.payPlan = el.dataset.plan; S.billingError = ''; render(); },
     'pay-start': async () => {
       S.billingBusy = 'opening'; S.billingError = ''; render();
+      logEvent('checkout_start');
       try { location.href = await billingCall('checkout', { plan: S.payPlan || 'yearly' }); }
       catch (e) { S.billingBusy = null; S.billingError = e.message; render(); }
     },
@@ -3410,6 +3471,7 @@
       if (S.data.obStep < OB_STEPS - 1) { S.data.obStep++; save(); render(); window.scrollTo(0, 0); return; }
       const p = S.data.profile;
       if (p.periodStart && !L.STEADY_MODES.includes(p.cycleMode) && !S.data.periods.includes(p.periodStart)) L.addPeriod(S.data, p.periodStart);
+      if (!S.data.onboarded) logEvent('onboarding_done');
       S.data.onboarded = true;
       S.data.obStep = 0;
       if (S.data.editing) { S.data.editing = false; S.data.planSeen = true; toast('Plan updated'); }
@@ -3478,6 +3540,7 @@
       const m = S.modal;
       const pr = D.PROGRAMS.find((x) => x.id === m.id);
       S.data.program = { id: pr.id, start: todayKey(), days: m.days.slice().sort(), flagged: m.screen.length > 0 };
+      logEvent('program_start');
       if (pr.id === 'postpartum') S.data.profile.postpartum = true;
       delete S.data.overrides[todayKey()];
       S.modal = null;
@@ -3660,6 +3723,7 @@
       openShare(pr ? { art: m.record.phase, eyebrow: 'New personal record', big: fmtLoad(pr.weight, pr.unit), sub: `${pr.name} for ${pr.reps} reps.`, foot: shortDate(m.record.date) } : { art: 'session', eyebrow: 'Session complete', big: `${m.record.sets} sets`, sub: m.record.name, foot: shortDate(m.record.date) });
     },
     'share-card': () => shareCard(),
+    'open-stats': () => openStats(),
     'invite-load': async () => { await loadInvite(); render(); if (!S.invite) toast('Could not load your invite link. Try again in a moment.'); },
     'invite-copy': async () => { const link = inviteLink(); if (!link) return; try { await navigator.clipboard.writeText(link); toast('Invite link copied'); } catch { prompt('Copy your invite link', link); } logEvent('invite_shared'); },
     'invite-share': async () => {
@@ -4062,7 +4126,7 @@
 
   // ---------- installable app ----------
   window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); S.installPrompt = e; if (S.session) render(); });
-  window.addEventListener('appinstalled', () => { S.installPrompt = null; if (S.modal && S.modal.type === 'install') S.modal = null; toast('YOURS is on your Home Screen'); if (S.session) render(); });
+  window.addEventListener('appinstalled', () => { logEvent('install_done'); S.installPrompt = null; if (S.modal && S.modal.type === 'install') S.modal = null; toast('YOURS is on your Home Screen'); if (S.session) render(); });
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
     window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => { /* offline support unavailable */ }));
   }
@@ -4109,6 +4173,7 @@
       if (billingReturn === 'success' && isCloud()) awaitMembership();
       else if (isCloud()) refreshSub().then(render);
     }
+    if (S.session && S.data && S.data.onboarded) logEvent('app_open');
     checkAI();
     fetch('/api/food').then((r) => r.json()).then((j) => { S.foodApi = !!j.available; }).catch(() => { S.foodApi = false; });
   })();

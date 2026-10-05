@@ -506,3 +506,5 @@ a.link { text-decoration: none; overflow-wrap: anywhere; }
 
 /* Invite friends */
 .invite-code { margin-top: 12px; padding: 12px; border-radius: 14px; border: 1.5px dashed var(--line); text-align: center; font: 500 26px/1 var(--mono); letter-spacing: 8px; color: var(--text); }
+.stat-bar { height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; margin-top: 5px; }
+.stat-bar span { display: block; height: 100%; background: var(--accent-ink); border-radius: 4px; }
