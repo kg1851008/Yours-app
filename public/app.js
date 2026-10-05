@@ -1472,6 +1472,7 @@
     ];
     return `<div class="lp">
       <header class="lp-top"><div class="wordmark sm">yours.</div><div class="row" style="gap:10px"><button class="link small" data-action="go-login">Sign in</button>${paid ? '' : '<button class="btn soft xs" data-action="demo">Demo</button>'}</div></header>
+      ${regionBlocked() ? `<div class="banner lp-wrap" style="margin-top:8px" role="status">${icon('shield', 18)}<div class="grow small"><strong>YOURS is only available in the United States right now.</strong> We hope to come to you soon.</div></div>` : ''}
       ${pendingInvite() && !regionBlocked() ? `<div class="banner lp-wrap" style="margin-top:8px">${icon('gift', 18)}<div class="grow small"><strong>A friend invited you.</strong> Your free trial is 3 weeks instead of 1.</div></div>` : ''}
       <section class="lp-hero lp-wrap">
         <div class="lp-hero-copy">
@@ -1479,7 +1480,7 @@
           <h1 class="lp-h1">Train with your cycle, not against&nbsp;it.</h1>
           <p class="lp-lead">YOURS plans your workouts, food and steps around your cycle or life stage, suggests the weight for every lift, and adapts every week.</p>
           <div class="lp-cta">${cta()}<button class="btn ghost" data-action="go-login">I have an account</button></div>
-          <p class="tiny muted" style="margin-top:12px">${paid ? `${days} days free, then ${money(m)} a month or ${money(y)} a year. Cancel anytime.` : 'Free to try. No card needed.'}${regionBlocked() ? ' <strong>Currently available in the United States only.</strong>' : ''}</p>
+          <p class="tiny muted" style="margin-top:12px">${paid ? `${days} days free, then ${money(m)} a month or ${money(y)} a year. Cancel anytime.` : 'Free to try. No card needed.'}</p>
         </div>
         <div class="lp-hero-phone">${phone('home', 'YOURS home screen: day 10 of the cycle, follicular phase, rising energy')}</div>
       </section>
