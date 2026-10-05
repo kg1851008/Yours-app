@@ -518,6 +518,38 @@
     return { count, todayDone };
   }
 
+  // ---------- badges ----------
+  // Small wins. Each badge is earned once and kept (data.badges = { id: dateKey }), so a broken streak
+  // never takes a badge away. progress() returns [now, goal] for the locked-badge meter.
+  const PHASES4 = ['menstrual', 'follicular', 'ovulation', 'luteal'];
+  const BADGES = [
+    { id: 'first-session', icon: 'workouts', title: 'First session', desc: 'Logged your first workout.', short: '1st', progress: (d) => [(d.workouts || []).length, 1] },
+    { id: 'sessions-10', icon: 'workouts', title: '10 sessions', desc: 'Ten workouts logged.', short: '10', progress: (d) => [(d.workouts || []).length, 10] },
+    { id: 'sessions-25', icon: 'workouts', title: '25 sessions', desc: 'Twenty-five workouts. This is a habit now.', short: '25', progress: (d) => [(d.workouts || []).length, 25] },
+    { id: 'sessions-50', icon: 'workouts', title: '50 sessions', desc: 'Fifty workouts logged.', short: '50', progress: (d) => [(d.workouts || []).length, 50] },
+    { id: 'sessions-100', icon: 'workouts', title: '100 sessions', desc: 'One hundred workouts. Strong for life.', short: '100', progress: (d) => [(d.workouts || []).length, 100] },
+    { id: 'streak-7', icon: 'flame', title: '7-day streak', desc: 'Moved, trained or checked in seven days running.', short: '7d', progress: (d, x) => [x.streak, 7] },
+    { id: 'streak-30', icon: 'flame', title: '30-day streak', desc: 'A full month of showing up.', short: '30d', progress: (d, x) => [x.streak, 30] },
+    { id: 'streak-100', icon: 'flame', title: '100-day streak', desc: 'One hundred days in a row.', short: '100d', progress: (d, x) => [x.streak, 100] },
+    { id: 'first-pr', icon: 'trend', title: 'First PR', desc: 'Your first personal record.', short: 'PR', progress: (d) => [(d.prs || []).length, 1] },
+    { id: 'prs-10', icon: 'trend', title: '10 PRs', desc: 'Ten personal records.', short: '10 PR', progress: (d) => [(d.prs || []).length, 10] },
+    { id: 'prs-25', icon: 'trend', title: '25 PRs', desc: 'Twenty-five personal records.', short: '25 PR', progress: (d) => [(d.prs || []).length, 25] },
+    { id: 'full-cycle', icon: 'calendar', title: 'Every phase', desc: 'Trained in all four phases of your cycle.', short: '4/4', when: (d) => !STEADY_MODES.includes((d.profile || {}).cycleMode), progress: (d) => [PHASES4.filter((ph) => (d.workouts || []).some((w) => w.phase === ph)).length, 4] },
+    { id: 'checkins-4', icon: 'list', title: 'Month of check-ins', desc: 'Four weekly check-ins done.', short: '4wk', progress: (d) => [(d.reviews || []).length, 4] },
+    { id: 'checkins-12', icon: 'list', title: '12 check-ins', desc: 'Three months of weekly check-ins.', short: '12wk', progress: (d) => [(d.reviews || []).length, 12] },
+    { id: 'program-done', icon: 'award', title: 'Program finished', desc: 'Completed an 8-week program.', short: '8wk', progress: (d) => { const pg = d.program && programDay(d); const pr = pg && programProgress(d); return [pg && pg.complete && pr && pr.done >= pr.planned * 0.75 ? 1 : 0, 1]; } },
+  ];
+  function badges(data) {
+    const got = data.badges || {};
+    const ctx = { streak: streak(data).count };
+    return BADGES.filter((b) => !b.when || b.when(data) || got[b.id]).map((b) => {
+      const [now, goal] = b.progress(data, ctx);
+      return { id: b.id, icon: b.icon, title: b.title, desc: b.desc, short: b.short, earned: got[b.id] || null, now: Math.min(now, goal), goal };
+    });
+  }
+  // Badges reached but not yet recorded. The caller records them with today's date.
+  const newBadges = (data) => badges(data).filter((b) => !b.earned && b.now >= b.goal);
+
   // ---------- weekly check-in ----------
   function weeklyStats(data, now) {
     now = now || today();
@@ -832,7 +864,7 @@
     learnCycle, addPeriod, cycleInfo, targets, readiness, readinessLabel, patterns,
     workoutById, plannedWorkout, workoutFor, programById, programDay, programProgress, adjustSets, parseReps, e1rm, suggestLoad, detectPRs, strengthByPhase, exerciseHistory,
     mealOptions, mealFor, proteinFor, aisleFor, storeLink, buildTotals, macrosFor, parseOFF, foodMacros, validBarcode, recipeTotals, recipeFood, groceryList, parseFoodText, usualRequest, usualMeal, cleanEstimates, estimateFood, parseRest, isBarbell, platesFor, defaultBar, BARS, streak, weeklyStats, weeklyAdjust, applyAdjustments, weeklyDue,
-    equipmentOf, swapOptions,
+    equipmentOf, swapOptions, BADGES, badges, newBadges,
   };
   if (typeof window !== 'undefined') window.YOURS_LOGIC = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

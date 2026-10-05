@@ -493,3 +493,13 @@ a.link { text-decoration: none; overflow-wrap: anywhere; }
 .cmp-slider input[type=range]:focus-visible { opacity: .01; }
 .cmp-slider:has(input:focus-visible) { outline: 3px solid var(--accent-ink); outline-offset: 2px; }
 .cmp-reveal { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: inline-flex; gap: 8px; align-items: center; padding: 12px 18px; border-radius: 999px; background: rgba(20,22,16,.72); color: #fff; font-weight: 600; font-size: 14px; }
+
+/* Badges */
+.badge-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.badge-cell { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 14px 6px 12px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); text-align: center; color: inherit; }
+.badge-cell.locked { opacity: .85; }
+.badge-cell.locked strong { color: var(--muted); }
+.badge-medal { width: 44px; height: 44px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--surface-2); color: var(--muted); flex: none; }
+.badge-medal.earned { background: var(--accent); color: var(--accent-text, #1E2412); }
+.badge-meter { width: 70%; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; margin-top: 2px; }
+.badge-meter span { display: block; height: 100%; background: var(--accent-ink); }

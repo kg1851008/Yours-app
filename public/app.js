@@ -841,7 +841,7 @@
     luteal: ['#9A8466', '#3E3127', '#CDB89A'], steady: ['#B9AD9C', '#5C5145', '#EDE6DA'], menopause: ['#8B7A8C', '#3A2F3B', '#D9C6D3'], session: ['#2F3720', '#121409', '#6A7A48'],
   };
   async function makeCard(card) {
-    const W = 1080, H = 1350;
+    const W = 1080, H = card.story ? 1920 : 1350;
     const c = document.createElement('canvas');
     c.width = W; c.height = H;
     const g = c.getContext('2d');
@@ -896,14 +896,23 @@
     g.globalAlpha = 1;
     g.font = '900 64px Archivo, "Arial Black", sans-serif';
     g.fillText('yours.', 64, H - 64);
+    // Where to find YOURS (and her invite code, when she has one).
+    g.font = '500 24px "DM Mono", monospace';
+    g.globalAlpha = 0.85;
+    const where = card.invite ? `${location.host} · code ${card.invite}` : location.host;
+    g.fillText(where, W - 70 - g.measureText(where).width, H - 76);
+    g.globalAlpha = 1;
     return c.toDataURL('image/png');
   }
   async function openShare(card) {
+    card = { ...card, invite: card.invite || myInviteCode() };
     S.modal = { type: 'share', card, url: null };
     render();
-    S.modal.url = await makeCard(card);
-    render();
+    const url = await makeCard(card);
+    if (S.modal && S.modal.type === 'share' && S.modal.card === card) { S.modal.url = url; render(); }
+    logEvent('share_card');
   }
+  function myInviteCode() { return null; }
   async function shareCard() {
     const url = S.modal && S.modal.url;
     if (!url) return;
@@ -1356,6 +1365,19 @@
   // Anonymous usage counts (see logEventNow below). Never blocks or throws.
   function logEvent(name) { try { logEventNow(name); } catch { /* analytics never breaks the app */ } }
   function logEventNow() { /* replaced by analytics */ }
+
+  // Record newly reached badges (earned once, kept forever). Returns the new ones.
+  function awardBadges(announce) {
+    if (!S.data || !S.data.onboarded) return [];
+    let fresh = [];
+    try { fresh = L.newBadges(S.data); } catch { return []; }
+    if (!fresh.length) return [];
+    S.data.badges = { ...(S.data.badges || {}) };
+    fresh.forEach((b) => { S.data.badges[b.id] = todayKey(); logEvent('badge_earned'); });
+    save();
+    if (announce) toast(`Badge unlocked: ${fresh[fresh.length - 1].title}`);
+    return fresh;
+  }
 
   function toast(msg) {
     let el = document.querySelector('.toast');
@@ -2215,7 +2237,9 @@
     S.data.prs.push(...prs);
     S.data.activeWorkout = null;
     save();
-    S.modal = { type: 'summary', record, prs, volume };
+    logEvent('workout_done');
+    const unlocked = awardBadges(false);
+    S.modal = { type: 'summary', record, prs, volume, badges: unlocked };
     render();
   }
 
@@ -2367,7 +2391,8 @@
 
       <div class="section-title"><h2>Streak</h2>${st.count >= 2 ? '<button class="link" data-action="share-streak">Share</button>' : ''}</div>
       <div class="card row" style="gap:14px"><div class="avatar alt">${icon('flame', 20)}</div><div class="grow"><strong>${plural(st.count, 'day')}</strong><div class="small muted">Training, a check-in, or 60% of your steps all count. One missed day a week is forgiven, because rest is part of the plan.</div></div></div>
-      ${d.prs.length ? `<div class="section-title"><h2>Personal records</h2></div><div class="card">${d.prs.slice(-5).reverse().map((p) => `<div class="list-item"><div class="grow"><strong>${esc(p.name)}</strong><div class="small muted">${shortDate(p.date)}</div></div><strong>${fmtLoad(p.weight, p.unit)} x ${p.reps}</strong><button class="icon-btn" style="width:32px;height:32px" data-action="share-pr" data-date="${p.date}" data-name="${esc(p.name)}" aria-label="Share">${icon('share', 15)}</button></div>`).join('')}</div>` : ''}`;
+      ${d.prs.length ? `<div class="section-title"><h2>Personal records</h2></div><div class="card">${d.prs.slice(-5).reverse().map((p) => `<div class="list-item"><div class="grow"><strong>${esc(p.name)}</strong><div class="small muted">${shortDate(p.date)}</div></div><strong>${fmtLoad(p.weight, p.unit)} x ${p.reps}</strong><button class="icon-btn" style="width:32px;height:32px" data-action="share-pr" data-date="${p.date}" data-name="${esc(p.name)}" aria-label="Share">${icon('share', 15)}</button></div>`).join('')}</div>` : ''}
+      ${badgesSection()}`;
   }
 
   // ---------- progress ----------
@@ -2419,6 +2444,16 @@
         <p class="tiny muted" style="margin-top:8px">Weigh in at the same time of day. Compare across the same cycle phase.</p>
       </div>
       <div class="row" style="margin-top:16px"><button class="btn ghost sm grow" data-action="pin-settings">${icon('lock', 16)} ${S.data.pinHash ? 'Change or remove PIN' : 'Set a PIN and encrypt photos'}</button>${S.data.pinHash ? '<button class="btn ghost sm" data-action="lock-vault">Lock</button>' : ''}</div>`;
+  }
+
+  function badgesSection() {
+    const all = L.badges(S.data);
+    const earned = all.filter((b) => b.earned).sort((a, b) => (a.earned < b.earned ? 1 : -1));
+    const next = all.filter((b) => !b.earned).sort((a, b) => b.now / b.goal - a.now / a.goal).slice(0, 4);
+    return `<div class="section-title"><h2>Badges</h2><span>${earned.length} of ${all.length}</span></div>
+      <div class="badge-grid">${earned.map((b) => `<button class="badge-cell" data-action="share-badge" data-id="${b.id}" aria-label="${esc(b.title)}, earned ${esc(shortDate(b.earned))}. Share"><span class="badge-medal earned">${icon(b.icon, 22)}</span><strong class="tiny">${esc(b.title)}</strong><span class="tiny muted">${esc(shortDate(b.earned))}</span></button>`).join('')}
+        ${next.map((b) => `<div class="badge-cell locked" aria-label="${esc(b.title)}: ${b.now} of ${b.goal}"><span class="badge-medal">${icon(b.icon, 22)}</span><strong class="tiny">${esc(b.title)}</strong><span class="badge-meter"><span style="width:${Math.round((b.now / b.goal) * 100)}%"></span></span><span class="tiny muted">${b.now} of ${b.goal}</span></div>`).join('')}</div>
+      ${earned.length ? '<p class="tiny muted" style="margin-top:8px">Tap a badge to share it.</p>' : ''}`;
   }
 
   function checkinHistory() {
@@ -2636,11 +2671,14 @@
       return sheet('Workout complete', `<div class="stats">${statTile('Sets', r.sets, '')}${statTile('Minutes', r.minutes, '')}</div>
         ${m.volume ? `<p class="small muted" style="margin-top:10px">Total volume: ${Math.round(m.volume).toLocaleString()} ${r.unit}</p>` : ''}
         ${m.prs.length ? `<div class="card accent" style="margin-top:12px"><div class="eyebrow">New personal records</div>${m.prs.map((p) => `<div class="row between" style="margin-top:8px"><strong>${esc(p.name)}</strong><span>${fmtLoad(p.weight, p.unit)} x ${p.reps}</span></div>`).join('')}</div>` : '<p class="small" style="margin-top:12px">Logged. Your suggested weights for next time are already updated.</p>'}
+        ${(m.badges || []).length ? `<div class="card" style="margin-top:12px;background:var(--green);color:var(--bg);border:none"><div class="eyebrow" style="color:var(--bg);opacity:.75">Badge unlocked</div>${m.badges.map((b) => `<div class="row" style="margin-top:10px;gap:12px"><span class="badge-medal earned">${icon(b.icon, 20)}</span><div class="grow"><strong>${esc(b.title)}</strong><div class="tiny" style="opacity:.8">${esc(b.desc)}</div></div><button class="icon-btn" style="width:34px;height:34px;color:var(--bg);background:transparent;border:1px solid currentColor" data-action="share-badge" data-id="${b.id}" aria-label="Share ${esc(b.title)} badge">${icon('share', 16)}</button></div>`).join('')}</div>` : ''}
         <div class="row" style="margin-top:18px"><button class="btn ghost grow" data-action="share-workout">${icon('share', 18)} Share</button><button class="btn primary grow" data-action="close-modal">Done</button></div>`);
     }
     if (m.type === 'share') {
-      return sheet('Share your progress', `${m.url ? `<img src="${m.url}" alt="Progress card" style="border-radius:16px;border:1px solid var(--line)">` : '<div class="empty">Creating your card...</div>'}
-        <button class="btn primary block" style="margin-top:14px" data-action="share-card" ${m.url ? '' : 'disabled'}>${icon('share', 18)} Share or save</button>`);
+      return sheet('Share your progress', `<div class="segment" style="margin-bottom:12px">${[['post', 'Post 4:5'], ['story', 'Story 9:16']].map(([id, label]) => `<button class="${(m.card.story ? 'story' : 'post') === id ? 'active' : ''}" data-action="share-format" data-value="${id}">${label}</button>`).join('')}</div>
+        ${m.url ? `<img src="${m.url}" alt="Share card: ${esc(m.card.eyebrow)}, ${esc(m.card.big)}" style="border-radius:16px;border:1px solid var(--line);${m.card.story ? 'max-height:58vh;width:auto;display:block;margin:0 auto' : ''}">` : '<div class="empty">Creating your card...</div>'}
+        <button class="btn primary block" style="margin-top:14px" data-action="share-card" ${m.url ? '' : 'disabled'}>${icon('share', 18)} Share or save</button>
+        <p class="tiny muted center" style="margin-top:8px">Stories: save the image, then add it in Instagram.</p>`);
     }
     if (m.type === 'scanner') {
       const recent = S.data.recentFoods || [];
@@ -3345,6 +3383,7 @@
       const c = cyc();
       S.data.daily[todayKey()] = { ...f, cycleDay: c.day, phase: c.phase, ts: Date.now() };
       save();
+      awardBadges(true);
       const bleeding = ['light', 'medium', 'heavy'].includes(f.flow);
       const lastPeriod = S.data.periods[S.data.periods.length - 1];
       const recentlyLogged = lastPeriod && daysBetween(parseKey(lastPeriod), today()) < 10;
@@ -3374,6 +3413,8 @@
       S.modal = null;
       save(); render();
       toast(chosen.length ? 'Next week\'s plan is updated' : 'Check-in saved');
+      logEvent('weekly_checkin');
+      setTimeout(() => { awardBadges(true); render(); }, 2600);
     },
 
     'view-workout': (el) => { S.modal = { type: 'workout', id: el.dataset.id, from: S.modal && S.modal.type === 'program' ? S.modal : null }; render(); },
@@ -3569,6 +3610,8 @@
       openShare(pr ? { art: m.record.phase, eyebrow: 'New personal record', big: fmtLoad(pr.weight, pr.unit), sub: `${pr.name} for ${pr.reps} reps.`, foot: shortDate(m.record.date) } : { art: 'session', eyebrow: 'Session complete', big: `${m.record.sets} sets`, sub: m.record.name, foot: shortDate(m.record.date) });
     },
     'share-card': () => shareCard(),
+    'share-format': (el) => { const m = S.modal; if (!m || m.type !== 'share') return; openShare({ ...m.card, story: el.dataset.value === 'story' }); },
+    'share-badge': (el) => { const b = L.badges(S.data).find((x) => x.id === el.dataset.id && x.earned); if (b) openShare({ art: cyc().phase, eyebrow: 'Badge unlocked', big: b.short, sub: `${b.title}. ${b.desc}`, foot: shortDate(b.earned) }); },
 
     'photo-tap': (el) => {
       const id = el.dataset.id;
@@ -3967,6 +4010,7 @@
 
   // ---------- boot ----------
   (async function boot() {
+    setTimeout(() => { if (S.data && S.data.onboarded && awardBadges(true).length) render(); }, 4000);
     await Promise.all([initCloud(), loadBilling()]);
     if (S.session) {
       if (S.session.kind === 'user' && !users()[S.session.email]) { S.session = null; store.del('yours.session'); }

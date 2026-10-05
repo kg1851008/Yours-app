@@ -358,3 +358,21 @@ test('exercise swaps offer the same movement and skip what is already in the ses
   assert.equal(L.equipmentOf('Barbell hip thrust'), 'Barbell');
   assert.deepEqual(L.swapOptions('Pelvic floor holds'), []);
 });
+
+test('badges: progress, earning once, and the every-phase badge', () => {
+  const data = { profile: profile(), workouts: [], prs: [], reviews: [], daily: {}, steps: {}, plan: {} };
+  assert.deepEqual(L.newBadges(data).map((b) => b.id), []);
+  data.workouts.push({ date: k(-1), phase: 'menstrual' });
+  assert.deepEqual(L.newBadges(data).map((b) => b.id), ['first-session']);
+  data.badges = { 'first-session': k(-1) };
+  assert.deepEqual(L.newBadges(data).map((b) => b.id), []);
+  ['follicular', 'ovulation', 'luteal'].forEach((ph, i) => data.workouts.push({ date: k(-10 - i), phase: ph }));
+  assert.ok(L.newBadges(data).some((b) => b.id === 'full-cycle'));
+  // Earned badges stay even when progress drops (e.g. a broken streak).
+  data.badges['streak-7'] = k(-30);
+  const s7 = L.badges(data).find((b) => b.id === 'streak-7');
+  assert.ok(s7.earned);
+  // No cycle, no phase badge.
+  const steady = { ...data, profile: profile({ cycleMode: 'hormonal' }), badges: {} };
+  assert.ok(!L.badges(steady).some((b) => b.id === 'full-cycle'));
+});
