@@ -328,3 +328,10 @@ create table if not exists public.events (
 create index if not exists events_day_idx on public.events (day, name);
 alter table public.events enable row level security;
 revoke all on public.events from anon, authenticated;
+
+-- ---------- Owner account ----------
+-- The owner's account (yoursfitapp@gmail.com) gets a complimentary membership as soon as it signs up.
+create or replace function public.grant_owner_comp() returns trigger language plpgsql security definer set search_path = public as 'begin if lower(new.email) = ''yoursfitapp@gmail.com'' then insert into public.subscriptions (user_id, status, trial_used, updated_at) values (new.id, ''comp'', false, now()) on conflict (user_id) do update set status = ''comp'', updated_at = now(); end if; return new; end';
+revoke execute on function public.grant_owner_comp() from public, anon, authenticated;
+drop trigger if exists owner_comp_on_signup on auth.users;
+create trigger owner_comp_on_signup after insert on auth.users for each row execute function public.grant_owner_comp();
