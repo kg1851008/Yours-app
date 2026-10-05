@@ -381,3 +381,25 @@ test('the app never promises a trial without a card', () => {
   const src = require('fs').readFileSync(require('path').join(__dirname, '../public/app.js'), 'utf8');
   assert.ok(!/no card|card needed|free plan|without a card|no credit card/i.test(src));
 });
+
+test('exercise library: every exercise has a guide, records come from logged sets', () => {
+  const all = L.allExercises();
+  assert.ok(all.length > 120);
+  for (const x of all) assert.ok(x.guide, `${x.name} has no guide`);
+  assert.equal(L.guideFor('Machine chest press').id, 'press');
+  assert.equal(L.guideFor('Barbell hip thrust').muscles.p[0], 'glutes');
+  const workouts = [
+    { date: '2026-09-01', unit: 'lb', phase: 'follicular', detail: [{ name: 'Hip thrust', sets: [{ weight: 135, reps: 10 }, { weight: 135, reps: 8 }] }] },
+    { date: '2026-09-08', unit: 'lb', phase: 'ovulation', detail: [{ name: 'Hip thrust', sets: [{ weight: 155, reps: 6 }, { weight: 95, reps: 15 }] }] },
+    { date: '2026-09-10', unit: 'lb', detail: [{ name: 'Goblet squat', sets: [{ weight: 40, reps: 10 }] }] },
+  ];
+  const s = L.liftStats(workouts, 'Hip thrust', 'lb');
+  assert.equal(s.sessions.length, 2);
+  assert.deepEqual(s.records.maxWeight, { value: 155, date: '2026-09-08' });
+  assert.deepEqual(s.records.mostReps, { reps: 15, weight: 95, date: '2026-09-08' });
+  assert.deepEqual(s.records.volume, { value: 2430, date: '2026-09-01' }); // 135x10 + 135x8 beats 155x6 + 95x15
+  assert.ok(s.records.e1rm.value > 170 && s.records.e1rm.value < 190);
+  const kg = L.liftStats(workouts, 'Hip thrust', 'kg');
+  assert.equal(kg.records.maxWeight.value, 70.5);
+  assert.equal(L.liftStats(workouts, 'Back squat', 'lb').records, null);
+});

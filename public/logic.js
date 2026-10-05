@@ -518,6 +518,42 @@
     return { count, todayDone };
   }
 
+  // ---------- exercise library ----------
+  const guideFor = (name) => (D.GUIDES || []).find((x) => x.match.test(String(name || ''))) || null;
+  // Every exercise in the app (sessions, programs and swap options), with its muscles and equipment.
+  function allExercises() {
+    const names = new Set();
+    (D.WORKOUTS || []).forEach((w) => w.exercises.forEach((e) => names.add(e.name)));
+    (D.SWAPS || []).forEach((grp) => grp.names.forEach((n) => names.add(n)));
+    return [...names].sort((a, b) => a.localeCompare(b)).map((name) => {
+      const gd = guideFor(name);
+      return { name, guide: gd ? gd.id : null, primary: gd ? gd.muscles.p : [], secondary: gd ? gd.muscles.s : [], equipment: equipmentOf(name) };
+    });
+  }
+  // Records and history for one exercise, with weights shown in her current unit.
+  function liftStats(workouts, name, unit) {
+    unit = unit || 'kg';
+    const show = (w, from) => Math.round(fromKg(toKg(w, from || 'kg'), unit) * 2) / 2;
+    const sessions = exerciseHistory(workouts, name).map((h) => {
+      const sets = h.ex.sets.filter((x) => x.weight > 0 && x.reps > 0).map((x) => ({ weight: show(x.weight, h.unit), reps: x.reps }));
+      const est = bestE1rm(h.ex, h.unit);
+      return { date: h.date, phase: h.phase, sets, top: Math.max(...sets.map((x) => x.weight)), e1rm: Math.round(fromKg(est, unit) * 2) / 2, volume: Math.round(sets.reduce((n, x) => n + x.weight * x.reps, 0)) };
+    });
+    const best = (key) => sessions.reduce((a, b) => (!a || b[key] > a[key] ? b : a), null);
+    let mostReps = null;
+    sessions.forEach((x) => x.sets.forEach((st) => { if (!mostReps || st.reps > mostReps.reps || (st.reps === mostReps.reps && st.weight > mostReps.weight)) mostReps = { reps: st.reps, weight: st.weight, date: x.date }; }));
+    const heaviest = best('top'), strongest = best('e1rm'), biggest = best('volume');
+    return {
+      unit, sessions,
+      records: sessions.length ? {
+        maxWeight: { value: heaviest.top, date: heaviest.date },
+        e1rm: { value: strongest.e1rm, date: strongest.date },
+        mostReps,
+        volume: { value: biggest.volume, date: biggest.date },
+      } : null,
+    };
+  }
+
   // ---------- badges ----------
   // Small wins. Each badge is earned once and kept (data.badges = { id: dateKey }), so a broken streak
   // never takes a badge away. progress() returns [now, goal] for the locked-badge meter.
@@ -842,7 +878,7 @@
     if (/machine|leg press|hack squat|pec deck|leg curl|hip abduction|seated calf|smith/.test(n)) return 'Machine';
     if (/cable|pulldown|pushdown|face pull(?!.*band)|pull-through|seated cable/.test(n) && !/band/.test(n)) return 'Cable';
     if (/band/.test(n)) return 'Band';
-    if (/dumbbell|goblet|kettlebell|farmer|suitcase|arnold|renegade|thruster|hammer curl|step-up/.test(n)) return 'Dumbbell';
+    if (/dumbbell|goblet|kettlebell|farmer|suitcase|arnold|renegade|thruster|hammer curl|step-up|lunge|split squat/.test(n)) return 'Dumbbell';
     if (/barbell|back squat|front-loaded|trap bar|sumo deadlift|^romanian|deficit romanian|overhead press|push press|hip thrust|box squat/.test(n)) return 'Barbell';
     return 'Bodyweight';
   }
@@ -864,7 +900,7 @@
     learnCycle, addPeriod, cycleInfo, targets, readiness, readinessLabel, patterns,
     workoutById, plannedWorkout, workoutFor, programById, programDay, programProgress, adjustSets, parseReps, e1rm, suggestLoad, detectPRs, strengthByPhase, exerciseHistory,
     mealOptions, mealFor, proteinFor, aisleFor, storeLink, buildTotals, macrosFor, parseOFF, foodMacros, validBarcode, recipeTotals, recipeFood, groceryList, parseFoodText, usualRequest, usualMeal, cleanEstimates, estimateFood, parseRest, isBarbell, platesFor, defaultBar, BARS, streak, weeklyStats, weeklyAdjust, applyAdjustments, weeklyDue,
-    equipmentOf, swapOptions, BADGES, badges, newBadges,
+    equipmentOf, swapOptions, BADGES, badges, newBadges, guideFor, allExercises, liftStats,
   };
   if (typeof window !== 'undefined') window.YOURS_LOGIC = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
