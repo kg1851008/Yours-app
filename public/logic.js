@@ -171,7 +171,15 @@
   }
 
   // ---------- workouts ----------
-  const workoutById = (id) => D.WORKOUTS.find((w) => w.id === id);
+  // Her own workouts (data.customWorkouts) are registered here so every screen can find them by id.
+  let CUSTOM = [];
+  function customToWorkout(c) {
+    const exercises = (c.exercises || []).map((e, i) => ({ name: e.name, sets: clamp(Number(e.sets) || 3, 1, 10), reps: String(e.reps || '8-12'), rest: e.rest || '90s', cue: e.note || '', main: i < 2 && !!parseReps(e.reps || '8-12') }));
+    const minutes = Math.max(10, Math.round(exercises.reduce((n, e) => n + e.sets * 2.5, 0) / 5) * 5);
+    return { id: c.id, phase: 'custom', custom: true, name: c.name || 'My workout', focus: c.focus || 'Your workout', minutes, intensity: 'Your plan', summary: c.notes || 'Your own workout. Suggested weights still come from your history.', exercises };
+  }
+  function setCustomWorkouts(list) { CUSTOM = (list || []).filter((c) => c && c.id && (c.exercises || []).length).map(customToWorkout); return CUSTOM; }
+  const workoutById = (id) => D.WORKOUTS.find((w) => w.id === id) || CUSTOM.find((w) => w.id === id);
   function plannedWorkout(data, date) {
     const cyc = cycleInfo(data.profile, date);
     const rot = D.ROTATION[cyc.phase];
@@ -277,8 +285,13 @@
     const inc = increment(name, top, unit);
     if (converted) top = roundLoad(top, inc); // only snap to the plate grid when switching units
 
+    // How hard it felt last time (1-10, optional) fine-tunes the jump.
+    const rpes = sets.filter((s) => s.weight === top && Number.isFinite(s.rpe)).map((s) => s.rpe);
+    const effort = rpes.length ? Math.max(...rpes) : null;
     let weight = top, reps, reason;
-    if (minReps >= target.hi) { weight = top + inc; reps = target.lo; reason = 'You hit the top of the rep range last time, so add weight.'; }
+    if (minReps >= target.hi && effort != null && effort >= 10) { reps = target.hi; reason = 'You hit the top of the range but rated it all-out. Same weight until it feels a little easier.'; }
+    else if (minReps >= target.hi) { weight = top + inc; reps = target.lo; reason = 'You hit the top of the rep range last time, so add weight.'; }
+    else if (minReps >= target.lo && effort != null && effort <= 7) { weight = top + inc; reps = target.lo; reason = 'Last time felt easy (effort 7 or less), so add weight.'; }
     else if (minReps >= target.lo) { reps = Math.min(minReps + 1, target.hi); reason = 'Same weight, beat last time by a rep.'; }
     else {
       const prev = hist[hist.length - 2];
@@ -535,7 +548,7 @@
     unit = unit || 'kg';
     const show = (w, from) => Math.round(fromKg(toKg(w, from || 'kg'), unit) * 2) / 2;
     const sessions = exerciseHistory(workouts, name).map((h) => {
-      const sets = h.ex.sets.filter((x) => x.weight > 0 && x.reps > 0).map((x) => ({ weight: show(x.weight, h.unit), reps: x.reps }));
+      const sets = h.ex.sets.filter((x) => x.weight > 0 && x.reps > 0).map((x) => ({ weight: show(x.weight, h.unit), reps: x.reps, ...(Number.isFinite(x.rpe) ? { rpe: x.rpe } : {}) }));
       const est = bestE1rm(h.ex, h.unit);
       return { date: h.date, phase: h.phase, sets, top: Math.max(...sets.map((x) => x.weight)), e1rm: Math.round(fromKg(est, unit) * 2) / 2, volume: Math.round(sets.reduce((n, x) => n + x.weight * x.reps, 0)) };
     });
@@ -551,6 +564,87 @@
         mostReps,
         volume: { value: biggest.volume, date: biggest.date },
       } : null,
+    };
+  }
+
+  // ---------- warm-up sets ----------
+  // Lighter ramp-up sets before a heavy working weight. Not logged; just a guide.
+  function warmupSets(name, weight, unit) {
+    weight = Number(weight) || 0;
+    unit = unit || 'kg';
+    if (!weight) return [];
+    const snap = (x, step) => Math.round(x / step) * step;
+    if (isBarbell(name)) {
+      const bar = defaultBar(name, unit);
+      if (weight < bar * 1.4) return [];
+      const step = unit === 'kg' ? 2.5 : 5;
+      const out = [{ weight: bar, reps: 10, label: 'Empty bar' }];
+      [[0.5, 6], [0.7, 4], [0.85, 2]].forEach(([pct, reps]) => {
+        const w = snap(weight * pct, step);
+        if (w > out[out.length - 1].weight && w < weight) out.push({ weight: w, reps, label: `${Math.round(pct * 100)}%` });
+      });
+      return out.slice(0, 4);
+    }
+    if (weight < (unit === 'kg' ? 10 : 20)) return [];
+    const step = unit === 'kg' ? 2 : 5;
+    const out = [];
+    [[0.5, 8], [0.75, 4]].forEach(([pct, reps]) => {
+      const w = snap(weight * pct, step);
+      if (w > 0 && w < weight && !out.some((x) => x.weight === w)) out.push({ weight: w, reps, label: `${Math.round(pct * 100)}%` });
+    });
+    return out;
+  }
+
+  // ---------- body measurements ----------
+  // data.measurements = [{ date, phase, waist, hips, glutes, thighs, arms }] in centimetres.
+  const MEASURE_SITES = [['waist', 'Waist'], ['hips', 'Hips'], ['glutes', 'Glutes'], ['thighs', 'Thigh'], ['arms', 'Arm']];
+  function measurementSummary(list, site) {
+    const rows = (list || []).filter((m) => Number(m[site]) > 0).sort((a, b) => (a.date < b.date ? -1 : 1));
+    if (!rows.length) return null;
+    const first = rows[0], last = rows[rows.length - 1];
+    const byPhase = {};
+    rows.forEach((m) => { if (D.PHASE_ORDER.includes(m.phase)) (byPhase[m.phase] = byPhase[m.phase] || []).push(Number(m[site])); });
+    const avg = Object.fromEntries(Object.entries(byPhase).map(([k, v]) => [k, v.reduce((a, b) => a + b, 0) / v.length]));
+    return { values: rows.map((m) => ({ date: m.date, value: Number(m[site]), phase: m.phase })), first: Number(first[site]), last: Number(last[site]), change: Number(last[site]) - Number(first[site]), since: first.date, byPhase: avg };
+  }
+  // A gentle explanation when her waist reads bigger in the luteal phase (bloating), so she compares like with like.
+  function measurementPhaseNote(list) {
+    const w = measurementSummary(list, 'waist');
+    if (!w || w.byPhase.luteal == null) return null;
+    const other = ['follicular', 'ovulation'].map((p) => w.byPhase[p]).filter((x) => x != null);
+    if (!other.length) return null;
+    const diff = w.byPhase.luteal - Math.min(...other);
+    return diff >= 1 ? { cm: Math.round(diff * 10) / 10 } : null;
+  }
+
+  // ---------- strength level ----------
+  // Estimated 1-rep max as a multiple of bodyweight, for women. Levels: Beginner, Novice, Intermediate, Advanced, Elite.
+  // Ratios follow commonly published women's standards (e.g. Stronger, Strength Level); hip thrust uses the more
+  // conservative published values. Only lifts with reliable standards are rated.
+  const STRENGTH_LEVELS = ['Beginner', 'Novice', 'Intermediate', 'Advanced', 'Elite'];
+  const STRENGTH_STANDARDS = [
+    { lift: 'Squat', match: /^back squat$/i, ratios: [0.5, 0.75, 1.25, 1.75, 2.25] },
+    { lift: 'Deadlift', match: /^(trap bar deadlift|sumo deadlift|deadlift)$/i, ratios: [0.65, 0.95, 1.5, 2.0, 2.5] },
+    { lift: 'Hip thrust', match: /^(barbell hip thrust|hip thrust)$/i, ratios: [0.5, 1.0, 1.5, 2.2, 3.0] },
+    { lift: 'Overhead press', match: /^overhead press$/i, ratios: [0.2, 0.3, 0.55, 0.75, 1.0] },
+    { lift: 'Bench press', match: /^(barbell )?bench press$/i, ratios: [0.3, 0.45, 0.75, 1.15, 1.5] },
+  ];
+  const strengthStandard = (name) => STRENGTH_STANDARDS.find((x) => x.match.test(String(name || '').trim())) || null;
+  function strengthLevel(name, e1rmKg, bodyKg) {
+    const std = strengthStandard(name);
+    if (!std || !(e1rmKg > 0) || !(bodyKg > 0)) return null;
+    const ratio = e1rmKg / bodyKg;
+    let idx = -1;
+    std.ratios.forEach((r, i) => { if (ratio >= r) idx = i; });
+    const nextIdx = idx + 1;
+    const from = idx >= 0 ? std.ratios[idx] : 0;
+    const to = nextIdx < std.ratios.length ? std.ratios[nextIdx] : null;
+    return {
+      lift: std.lift, ratio: Math.round(ratio * 100) / 100,
+      level: idx >= 0 ? STRENGTH_LEVELS[idx] : 'Getting started', index: idx,
+      next: to ? { level: STRENGTH_LEVELS[nextIdx], kg: to * bodyKg } : null,
+      progress: to ? clamp((ratio - from) / (to - from), 0, 1) : 1,
+      ratios: std.ratios,
     };
   }
 
@@ -901,6 +995,7 @@
     workoutById, plannedWorkout, workoutFor, programById, programDay, programProgress, adjustSets, parseReps, e1rm, suggestLoad, detectPRs, strengthByPhase, exerciseHistory,
     mealOptions, mealFor, proteinFor, aisleFor, storeLink, buildTotals, macrosFor, parseOFF, foodMacros, validBarcode, recipeTotals, recipeFood, groceryList, parseFoodText, usualRequest, usualMeal, cleanEstimates, estimateFood, parseRest, isBarbell, platesFor, defaultBar, BARS, streak, weeklyStats, weeklyAdjust, applyAdjustments, weeklyDue,
     equipmentOf, swapOptions, BADGES, badges, newBadges, guideFor, allExercises, liftStats,
+    setCustomWorkouts, customToWorkout, warmupSets, MEASURE_SITES, measurementSummary, measurementPhaseNote, STRENGTH_LEVELS, STRENGTH_STANDARDS, strengthStandard, strengthLevel, toKg, fromKg,
   };
   if (typeof window !== 'undefined') window.YOURS_LOGIC = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

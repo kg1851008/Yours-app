@@ -98,3 +98,31 @@ test('hourly job needs the secret and never sends the same reminder twice', asyn
   assert.equal(s2.push, 0);
   assert.equal(pushes[0].title, "Log today's food");
 });
+
+test('cycle heads-up: two days before a predicted period, never for steady modes', () => {
+  const d = base();
+  const t = L.today();
+  // Period predicted in 2 days: start was len-2 days ago, so day = 27 of 28.
+  d.profile.periodStart = L.dateKey(L.addDays(t, -26));
+  assert.equal(N.due('cycle', d, t), true);
+  d.profile.periodStart = L.dateKey(L.addDays(t, -20));
+  assert.equal(N.due('cycle', d, t), false);
+  d.profile.periodStart = L.dateKey(L.addDays(t, -26)); d.profile.cycleMode = 'hormonal';
+  assert.equal(N.due('cycle', d, t), false);
+  assert.ok(!/period|cycle|bleed/i.test(N.REMINDERS.cycle.title + N.REMINDERS.cycle.body), 'lock-screen text stays discreet');
+});
+
+test('trial reminder: once, 24-48 hours before the trial ends, not if she cancelled', () => {
+  const now = new Date('2026-10-05T12:00:00Z');
+  const row = { status: 'trialing', cancel_at_period_end: false, trial_end: '2026-10-07T06:00:00Z' };
+  const data = { workouts: [{}, {}, {}], prs: [{}] };
+  const r = N.trialReminder(row, data, now);
+  assert.equal(r.title, 'Your free trial ends in 2 days');
+  assert.match(r.body, /3 workouts and 1 personal record/);
+  assert.match(r.body, /cancel anytime/);
+  assert.equal(r.period, '2026-10-07');
+  assert.equal(N.trialReminder({ ...row, cancel_at_period_end: true }, data, now), null);
+  assert.equal(N.trialReminder({ ...row, trial_end: '2026-10-06T06:00:00Z' }, data, now), null); // under 24h
+  assert.equal(N.trialReminder({ ...row, status: 'active' }, data, now), null);
+  assert.match(N.trialReminder(row, { workouts: [] }, now).body, /^Keep going/);
+});
