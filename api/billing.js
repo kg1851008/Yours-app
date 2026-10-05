@@ -5,6 +5,7 @@
 // POST needs the member's Supabase session token as "Authorization: Bearer <token>".
 
 const B = require('../lib/billing');
+const R = require('../lib/referral');
 
 let priceCache = null;
 async function prices() {
@@ -76,18 +77,22 @@ module.exports = async function handler(req, res) {
       await B.saveRow(row);
     }
     const trial = !row.trial_used; // one free trial per member
+    // Invited by a friend: 2 extra weeks of trial. Invites she earned as an inviter become account credit now.
+    const referral = trial ? await R.referralOf(user.id).catch(() => null) : null;
+    const trialDays = R.trialDaysFor(referral);
+    await R.applyEarned(user.id, row.customer_id).catch((e) => console.error('referral credit', e && e.message));
     const session = await s.checkout.sessions.create({
       mode: 'subscription',
       customer: row.customer_id,
       client_reference_id: user.id,
       line_items: [{ price: plan === 'yearly' ? process.env.STRIPE_PRICE_YEARLY : process.env.STRIPE_PRICE_MONTHLY, quantity: 1 }],
       payment_method_collection: 'always',
-      subscription_data: { metadata: { user_id: user.id }, ...(trial ? { trial_period_days: B.TRIAL_DAYS, trial_settings: { end_behavior: { missing_payment_method: 'cancel' } } } : {}) },
+      subscription_data: { metadata: { user_id: user.id }, ...(trial ? { trial_period_days: trialDays, trial_settings: { end_behavior: { missing_payment_method: 'cancel' } } } : {}) },
       allow_promotion_codes: true,
       success_url: `${origin}/?billing=success`,
       cancel_url: `${origin}/?billing=cancel`,
     });
-    return res.status(200).json({ url: session.url, trial });
+    return res.status(200).json({ url: session.url, trial, trialDays: trial ? trialDays : 0 });
   } catch (e) {
     console.error('billing error', e && e.message);
     return res.status(502).json({ error: 'Could not reach payments. Try again in a moment.' });

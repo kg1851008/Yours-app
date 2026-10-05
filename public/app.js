@@ -912,7 +912,6 @@
     if (S.modal && S.modal.type === 'share' && S.modal.card === card) { S.modal.url = url; render(); }
     logEvent('share_card');
   }
-  function myInviteCode() { return null; }
   async function shareCard() {
     const url = S.modal && S.modal.url;
     if (!url) return;
@@ -1413,6 +1412,7 @@
         <div class="script-sig">for your body</div>
       </div>
       <div class="stack">
+        ${pendingInvite() && !regionBlocked() ? `<div class="banner" style="margin-bottom:12px">${icon('gift', 18)}<div class="grow small"><strong>A friend invited you.</strong> Your free trial is 3 weeks instead of 1.</div></div>` : ''}
         <button class="btn primary block" data-action="start">Get started</button>
         <button class="btn ghost block" data-action="go-login">I have an account</button>
         ${billingOn() ? '' : '<button class="btn soft block" data-action="demo">Try the demo</button>'}
@@ -1963,7 +1963,54 @@
   // ---------- membership (Stripe via /api/billing; status mirrored in Supabase) ----------
   const billingOn = () => !!(S.billing && S.billing.enabled && cloud);
   const regionBlocked = () => !!(S.billing && S.billing.region && S.billing.region.allowed === false);
-  const trialDays = () => (S.billing && S.billing.trialDays) || 7;
+  const trialDays = () => ((S.billing && S.billing.trialDays) || 7) + inviteBonusDays();
+
+  // ---------- invite friends (/api/referral) ----------
+  // An invite link (?invite=CODE) is remembered on this device until she has an account, then claimed once.
+  // The friend gets 2 extra trial weeks; the inviter gets a free month when the friend's first payment goes through.
+  const INVITE_BONUS = 14;
+  const pendingInvite = () => store.get('yours.invite', null);
+  function inviteBonusDays() {
+    if (S.sub && S.sub.trial_used) return 0;
+    if (S.invite && isCloud()) return S.invite.bonusDays || 0;
+    return pendingInvite() ? INVITE_BONUS : 0;
+  }
+  function myInviteCode() { return (S.invite && S.invite.code) || null; }
+  const inviteLink = () => (myInviteCode() ? `${location.origin}/?invite=${myInviteCode()}` : '');
+  async function referralCall(body) {
+    const token = await cloud.accessToken();
+    const r = await fetch('/api/referral', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    return { ok: r.ok, status: r.status, ...j };
+  }
+  async function loadInvite() {
+    if (!isCloud()) { S.invite = null; return; }
+    try { const j = await referralCall({ action: 'me' }); if (j.ok && j.code) S.invite = j; } catch { /* offline: try again later */ }
+  }
+  async function claimInvite() {
+    const code = pendingInvite();
+    if (!isCloud()) return;
+    if (!code) { await loadInvite(); render(); return; }
+    try {
+      const j = await referralCall({ action: 'claim', code });
+      if (j.ok) { store.del('yours.invite'); logEvent('invite_claimed'); toast(`Invite applied: your free trial is ${7 + (j.bonusDays || INVITE_BONUS)} days`); }
+      else if (j.status === 400) store.del('yours.invite'); // not usable (own code, already used, not a new account)
+    } catch { /* offline: keep it and try next time */ }
+    await loadInvite();
+    render();
+  }
+  function inviteCard() {
+    if (!cloud) return '';
+    if (!isCloud()) return `<div class="card flat small"><div class="label">Invite friends</div><p class="muted">Create an account to get your invite link. Friends get 2 extra weeks free, and you get a free month when they join.</p></div>`;
+    const v = S.invite;
+    return `<div class="card flat small"><div class="row between"><span class="label" style="margin:0">Invite friends</span>${icon('gift', 18)}</div>
+      <p class="muted" style="margin-top:6px">Friends get <strong>3 weeks free</strong> instead of 1. When a friend's membership starts, you get <strong>a free month</strong>.</p>
+      ${v ? `<div class="invite-code" aria-label="Your invite code">${esc(v.code)}</div>
+        <div class="row" style="gap:8px;margin-top:10px"><button class="btn primary sm grow" data-action="invite-share">${icon('share', 16)} Share link</button><button class="btn ghost sm grow" data-action="invite-copy">Copy link</button></div>
+        <p class="tiny muted" style="margin-top:10px">${v.joined ? `${plural(v.joined, 'friend')} joined · ${plural(v.rewarded, 'free month')} earned${v.paid > v.rewarded ? ` · ${v.paid - v.rewarded} waiting for your membership` : ''}.` : 'No friends yet.'} Up to ${v.maxRewards || 12} free months.</p>`
+        : `<button class="btn ghost sm block" style="margin-top:10px" data-action="invite-load">Get my invite link</button>`}
+    </div>`;
+  }
   // Paid access needs a cloud account with an active, trialing or recently past-due membership.
   const memberHasAccess = () => isCloud() && window.YOURS_CLOUD.hasAccess(S.sub);
   const money = (p) => (p ? new Intl.NumberFormat(undefined, { style: 'currency', currency: p.currency.toUpperCase(), minimumFractionDigits: p.amount % 1 ? 2 : 0 }).format(p.amount) : '');
@@ -2034,6 +2081,7 @@
       <div class="top"><div class="wordmark sm">yours.</div><button class="link small" data-action="logout">Sign out</button></div>
       <div class="eyebrow" style="margin-top:22px">${ended && !trial ? 'Welcome back' : 'Your plan is ready'}</div>
       <h1 style="margin-top:6px">${trial ? `${trialDays()} days free.<br>Then it's yours.` : 'Pick up where<br>you left off.'}</h1>
+      ${trial && inviteBonusDays() ? `<p class="tag accent" style="margin-top:10px;gap:6px">${icon('gift', 14)} Friend's invite: 2 extra weeks free</p>` : ''}
       <ul class="phase-list" style="margin-top:16px"><li>Training, meals and steps that change with your cycle</li><li>Suggested weights for every lift and an AI coach</li><li>Food diary with barcode, photo and voice logging</li><li>8-week programs, progress check-ins and the community</li></ul>
       ${t ? `<p class="small muted" style="margin-top:10px">Your targets: ${t.kcal.toLocaleString()} ${calWord()}, ${t.protein} g protein, ${t.steps.toLocaleString()} steps.</p>` : ''}
       ${option('yearly', 'Yearly', y, save > 0 ? `Save ${save}%` : '')}
@@ -2964,6 +3012,7 @@
           <div class="row between" style="margin-top:14px"><span class="small">Had a baby in the last year</span><button class="chip ${S.data.profile.postpartum ? 'selected' : ''}" data-action="toggle-postpartum">${S.data.profile.postpartum ? 'Yes' : 'No'}</button></div></div>
         <div class="card flat"><div class="label">Units</div><div class="segment">${[['imperial', 'lb · ft'], ['metric', 'kg · cm']].map(([v, l]) => `<button class="${(p.units === 'metric' ? 'metric' : 'imperial') === v ? 'active' : ''}" data-action="set-units" data-value="${v}">${l}</button>`).join('')}</div><p class="tiny muted" style="margin-top:8px">Past workouts keep the unit they were logged in. Suggested weights convert automatically.</p></div>
         <div class="card flat"><div class="label">Appearance</div><div class="segment">${['system', 'light', 'dark'].map((x) => `<button class="${theme === x ? 'active' : ''}" data-action="theme" data-value="${x}">${x[0].toUpperCase() + x.slice(1)}</button>`).join('')}</div></div>
+        ${inviteCard()}
         ${installPlatform() !== 'installed' ? '<div class="card flat small"><div class="label">Get the app</div><p class="muted">Add YOURS to your Home Screen for full screen, one-tap access and reminders.</p><button class="btn ghost sm block" style="margin-top:10px" data-action="open-install">Show me how</button></div>' : ''}
         <div class="card flat small"><div class="label">Coach</div><p class="muted">${S.ai ? 'Live AI coach is connected.' : 'Running the on-device coach. Set ANTHROPIC_API_KEY on the server to enable the live AI coach and photo reviews.'}</p></div>
         ${billingOn() && isCloud() ? `<div class="card flat small"><div class="label">Membership</div><p class="muted">${esc(membershipLine())}</p>${S.sub && S.sub.status && !['none', 'comp'].includes(S.sub.status) ? '<button class="btn ghost sm block" style="margin-top:10px" data-action="billing-portal">Manage membership</button>' : ''}<p class="tiny muted" style="margin-top:8px">Cancel, switch plans or update your card on Stripe's secure page.</p></div>` : ''}
@@ -3010,6 +3059,7 @@
   // ---------- session handling ----------
   async function startSession(session) {
     S.session = session;
+    S.invite = null;
     S.authForm = null; // forget what was typed into the sign-up form, including the password
     store.set('yours.session', session);
     loadData();
@@ -3021,7 +3071,7 @@
     S.backupKey = null; S.backupNames = null;
     stopCloudCommunity();
     await loadPhotos();
-    if (session.cloud) { await syncPull(); await refreshSub(); recordConsentIfNeeded(); startCloudCommunity(); cloud.emailPrefs().then((p) => { S.emailWeekly = p.weekly; }).catch(() => {}); }
+    if (session.cloud) { await syncPull(); await refreshSub(); recordConsentIfNeeded(); startCloudCommunity(); cloud.emailPrefs().then((p) => { S.emailWeekly = p.weekly; }).catch(() => {}); claimInvite(); }
   }
   // Keep a local name entry for cloud accounts so the app can greet her offline.
   function rememberCloudUser(email, name) {
@@ -3610,6 +3660,15 @@
       openShare(pr ? { art: m.record.phase, eyebrow: 'New personal record', big: fmtLoad(pr.weight, pr.unit), sub: `${pr.name} for ${pr.reps} reps.`, foot: shortDate(m.record.date) } : { art: 'session', eyebrow: 'Session complete', big: `${m.record.sets} sets`, sub: m.record.name, foot: shortDate(m.record.date) });
     },
     'share-card': () => shareCard(),
+    'invite-load': async () => { await loadInvite(); render(); if (!S.invite) toast('Could not load your invite link. Try again in a moment.'); },
+    'invite-copy': async () => { const link = inviteLink(); if (!link) return; try { await navigator.clipboard.writeText(link); toast('Invite link copied'); } catch { prompt('Copy your invite link', link); } logEvent('invite_shared'); },
+    'invite-share': async () => {
+      const link = inviteLink(); if (!link) return;
+      const text = 'I train with YOURS, strength training that follows your cycle. Use my link for 3 weeks free:';
+      logEvent('invite_shared');
+      if (navigator.share) { try { await navigator.share({ title: 'YOURS', text, url: link }); return; } catch { return; } }
+      try { await navigator.clipboard.writeText(`${text} ${link}`); toast('Invite copied. Paste it in a message.'); } catch { prompt('Copy your invite link', link); }
+    },
     'share-format': (el) => { const m = S.modal; if (!m || m.type !== 'share') return; openShare({ ...m.card, story: el.dataset.value === 'story' }); },
     'share-badge': (el) => { const b = L.badges(S.data).find((x) => x.id === el.dataset.id && x.earned); if (b) openShare({ art: cyc().phase, eyebrow: 'Badge unlocked', big: b.short, sub: `${b.title}. ${b.desc}`, foot: shortDate(b.earned) }); },
 
@@ -4010,6 +4069,12 @@
 
   // ---------- boot ----------
   (async function boot() {
+    const inviteParam = new URLSearchParams(location.search).get('invite');
+    if (inviteParam) {
+      const code = inviteParam.trim().toUpperCase();
+      if (/^[A-HJ-NP-Z2-9]{6}$/.test(code)) { store.set('yours.invite', code); logEvent('invite_opened'); }
+      history.replaceState(null, '', location.pathname);
+    }
     setTimeout(() => { if (S.data && S.data.onboarded && awardBadges(true).length) render(); }, 4000);
     await Promise.all([initCloud(), loadBilling()]);
     if (S.session) {
@@ -4018,7 +4083,7 @@
         // Show cached data right away; then confirm the account session and sync.
         loadData(); await loadPhotos(); render();
         const u = cloud ? await cloud.init() : null;
-        if (u) { await syncPull(); await refreshSub(); startCloudCommunity(); }
+        if (u) { await syncPull(); await refreshSub(); startCloudCommunity(); claimInvite(); }
         else if (cloud && navigator.onLine) { S.session = null; S.data = null; store.del('yours.session'); S.screen = 'login'; S.authError = 'Please sign in again.'; }
       } else {
         loadData(); await loadPhotos();

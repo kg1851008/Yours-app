@@ -3,6 +3,7 @@
 // trial started, paid, card failed, cancelled, renewed. Every request is verified with STRIPE_WEBHOOK_SECRET.
 
 const B = require('../lib/billing');
+const R = require('../lib/referral');
 
 const HANDLED = ['checkout.session.completed', 'customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted', 'customer.subscription.paused', 'customer.subscription.resumed'];
 
@@ -48,6 +49,8 @@ async function handler(req, res) {
       return res.status(200).json({ received: true, note: 'stale subscription ignored' });
     }
     await B.saveRow({ user_id: userId, ...next });
+    // Her first real payment: thank whoever invited her (once; safe on retries).
+    if (next.status === 'active') await R.onFriendPaid(userId).catch((e) => console.error('referral reward', e && e.message));
     return res.status(200).json({ received: true });
   } catch (e) {
     console.error('webhook error', e && e.message);

@@ -503,3 +503,6 @@ a.link { text-decoration: none; overflow-wrap: anywhere; }
 .badge-medal.earned { background: var(--accent); color: var(--accent-text, #1E2412); }
 .badge-meter { width: 70%; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; margin-top: 2px; }
 .badge-meter span { display: block; height: 100%; background: var(--accent-ink); }
+
+/* Invite friends */
+.invite-code { margin-top: 12px; padding: 12px; border-radius: 14px; border: 1.5px dashed var(--line); text-align: center; font: 500 26px/1 var(--mono); letter-spacing: 8px; color: var(--text); }
