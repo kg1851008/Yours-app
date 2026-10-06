@@ -413,7 +413,7 @@
       planAdjustments: S.data.plan,
       todaysWorkout: { id: wk.id, name: wk.name, completed: loggedOn(todayKey()).length > 0, suggestedLoads: todaysLoads() },
       program: programContext(),
-      workoutCatalog: D.WORKOUTS.filter((w) => w.phase !== 'program' || (S.data.program && w.program === S.data.program.id)).map((w) => ({ id: w.id, name: w.name, phase: w.phase, intensity: w.intensity })),
+      workoutCatalog: D.WORKOUTS.filter((w) => w.phase !== 'program' || (S.data.program && w.program === S.data.program.id)).concat(L.setCustomWorkouts(S.data.customWorkouts)).map((w) => ({ id: w.id, name: w.name, phase: w.phase, intensity: w.intensity })),
       recentWorkouts: S.data.workouts.slice(-10).map((w) => ({ date: w.date, name: w.name, minutes: w.minutes, phase: w.phase })),
       recentPRs: S.data.prs.slice(-5),
       proteinTodayG: L.proteinFor(S.data, todayKey()),
@@ -2140,22 +2140,23 @@
     if (m.error) return `<p class="error">${esc(m.error)}</p>`;
     const d = m.data;
     if (!d) return '<div class="empty">Loading...</div>';
-    const ev = d.events;
+    const ev = d.events || {};
     const n = (x) => Number(x || 0).toLocaleString();
     const pct = (a, b) => (b ? `${Math.round((a / b) * 100)}%` : '-');
-    const top = Math.max(1, ...d.funnel.map((k) => ev[k].d30));
-    const funnel = d.funnel.map((k, i) => {
-      const prev = i ? ev[d.funnel[i - 1]].d30 : null;
+    const steps = (d.funnel || []).filter((k) => ev[k]);
+    const top = Math.max(1, ...steps.map((k) => ev[k].d30));
+    const funnel = steps.map((k, i) => {
+      const prev = i ? ev[steps[i - 1]].d30 : null;
       return `<div style="margin-top:10px"><div class="row between tiny"><span>${esc(ev[k].label)}</span><span><strong>${n(ev[k].d30)}</strong>${prev != null ? ` <span class="muted">· ${pct(ev[k].d30, prev)}</span>` : ''}</span></div><div class="stat-bar"><span style="width:${(ev[k].d30 / top) * 100}%"></span></div></div>`;
     }).join('');
     const maxDay = Math.max(1, ...d.days.map((x) => x.app_open));
     const bars = d.days.map((x, i) => `<rect x="${i * 10 + 1}" y="${60 - (x.app_open / maxDay) * 56}" width="8" height="${Math.max(1, (x.app_open / maxDay) * 56)}" rx="2" fill="var(--accent)"><title>${x.day}: ${x.app_open} opens, ${x.workout_done} workouts</title></rect>`).join('');
     const mem = d.members;
-    const engagement = ['workout_done', 'weekly_checkin', 'program_start', 'library_open', 'exercise_view', 'workout_created', 'measurement_logged', 'exercise_swap', 'photo_compare', 'badge_earned', 'share_card', 'install_done', 'invite_shared', 'invite_opened', 'invite_claimed', 'membership_canceled'];
+    const engagement = ['workout_done', 'weekly_checkin', 'program_start', 'library_open', 'exercise_view', 'workout_created', 'measurement_logged', 'exercise_swap', 'photo_compare', 'badge_earned', 'share_card', 'install_done', 'invite_shared', 'invite_opened', 'invite_claimed', 'membership_canceled'].filter((k) => ev[k]);
     return `<div class="stats">${statTile('Paying', n(mem.active), '')}${statTile('In trial', n(mem.trialing), '')}</div>
       <p class="tiny muted" style="margin-top:8px">${n(mem.yearly)} yearly · ${n(mem.monthly)} monthly · ${n(mem.cancelling)} set to cancel · ${n(mem.pastDue)} card failing · ${n(mem.ended)} ended${mem.comp ? ` · ${n(mem.comp)} complimentary` : ''}</p>
       <div class="card" style="margin-top:14px"><div class="eyebrow">Funnel · last 30 days</div>${funnel}<p class="tiny muted" style="margin-top:10px">Percentages compare each step with the one above. Views count once per device per day.</p></div>
-      <div class="card" style="margin-top:12px"><div class="row between"><span class="eyebrow">Daily app opens · 30 days</span><span class="tiny muted">${n(ev.app_open.d7)} this week</span></div><svg viewBox="0 0 300 62" style="width:100%;height:80px;margin-top:8px" role="img" aria-label="Daily app opens over 30 days">${bars}</svg></div>
+      <div class="card" style="margin-top:12px"><div class="row between"><span class="eyebrow">Daily app opens · 30 days</span><span class="tiny muted">${n((ev.app_open || {}).d7)} this week</span></div><svg viewBox="0 0 300 62" style="width:100%;height:80px;margin-top:8px" role="img" aria-label="Daily app opens over 30 days">${bars}</svg></div>
       <div class="card" style="margin-top:12px"><div class="row between"><span class="eyebrow">Activity</span><span class="eyebrow">7 days · 30 days</span></div>${engagement.map((k) => `<div class="list-item" style="padding:8px 0"><span class="grow small">${esc(ev[k].label)}</span><span class="small" style="font-family:var(--mono)">${n(ev[k].d7)} · ${n(ev[k].d30)}</span></div>`).join('')}</div>
       <div class="card" style="margin-top:12px"><div class="eyebrow">Invites</div><p class="small" style="margin-top:6px">${n(d.invites.joined)} joined with an invite · ${n(d.invites.paid)} became paying · ${n(d.invites.rewarded)} free months given</p></div>
       <p class="tiny muted" style="margin-top:12px">Anonymous counts only: no names, emails, device IDs or IP addresses are stored. Updated ${esc(timeAgo(Date.parse(d.generatedAt)))}.</p>
@@ -3405,7 +3406,7 @@
     }
     if (m.type === 'swap') {
       const c = cyc();
-      const list = D.WORKOUTS.filter((w) => w.phase === 'program' ? !!(S.data.program && w.program === S.data.program.id) : c.steady || w.phase === c.phase || w.phase === 'any');
+      const list = D.WORKOUTS.filter((w) => w.phase === 'program' ? !!(S.data.program && w.program === S.data.program.id) : c.steady || w.phase === c.phase || w.phase === 'any').concat(L.setCustomWorkouts(S.data.customWorkouts));
       return sheet('Choose today\'s workout', `<p class="small muted" style="margin-bottom:14px">${c.steady ? 'Any session works in steady mode.' : `Options that suit your ${phaseName(c.phase).toLowerCase()} phase.`}</p><div class="options">${list.map((w) => `<button class="option ${todaysWorkout().id === w.id ? 'selected' : ''}" data-action="set-today" data-id="${w.id}"><strong>${esc(w.name)}</strong><span>${w.minutes} min · ${esc(w.intensity)} · ${esc(w.focus)}</span></button>`).join('')}</div>
         <button class="btn ghost block" style="margin-top:12px" data-action="reset-today">Use the recommended plan</button>`);
     }
@@ -4308,6 +4309,7 @@
     const el = ev.target;
     if (el.form && el.form.dataset.form === 'signup' && (el.name === 'agree' || el.name === 'health')) { S.authForm = { ...(S.authForm || {}), [el.name]: el.checked }; return; }
     if (el.dataset.bindUi === 'pose') { S.pose = el.value; return; }
+    if (el.dataset.bfield && S.modal && S.modal.type === 'builder') { const [i, f] = el.dataset.bfield.split('.'); if (S.modal.exercises[i]) S.modal.exercises[i][f] = el.value; return; }
     if (el.dataset.cmpPick) { S.cmp[el.dataset.cmpPick] = el.value; render(); return; }
     if (el.matches('[data-scan-photo]') && el.files && el.files[0]) { scanPhoto(el.files[0]); return; }
     if (el.dataset.reminderHour && S.data) { const k = el.dataset.reminderHour; S.data.reminders = S.data.reminders || {}; S.data.reminders[k] = { ...(S.data.reminders[k] || { on: true }), hour: Number(el.value) }; S.data.reminders.tz = Intl.DateTimeFormat().resolvedOptions().timeZone; save(); return; }

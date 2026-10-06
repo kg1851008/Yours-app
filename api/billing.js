@@ -50,8 +50,13 @@ module.exports = async function handler(req, res) {
     let row = await B.getRow(user.id);
     if (body.action === 'portal') {
       if (!row || !row.customer_id) return res.status(400).json({ error: 'No membership yet' });
-      const portal = await s.billingPortal.sessions.create({ customer: row.customer_id, return_url: `${origin}/?billing=portal` });
-      return res.status(200).json({ url: portal.url });
+      try {
+        const portal = await s.billingPortal.sessions.create({ customer: row.customer_id, return_url: `${origin}/?billing=portal` });
+        return res.status(200).json({ url: portal.url });
+      } catch (e) {
+        console.error('portal error', e && e.message);
+        return res.status(502).json({ error: 'Membership settings are not available right now. Email yoursfitapp@gmail.com to cancel or change your card.' });
+      }
     }
     if (body.action === 'cancel_for_delete') {
       // Account deletion: end any membership right away so she is never charged again.
