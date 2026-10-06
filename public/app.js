@@ -413,6 +413,7 @@
       planAdjustments: S.data.plan,
       todaysWorkout: { id: wk.id, name: wk.name, completed: loggedOn(todayKey()).length > 0, suggestedLoads: todaysLoads() },
       program: programContext(),
+      trainsAt: atHome() ? 'home (dumbbells, band, chair; no machines or barbells)' : 'gym',
       workoutCatalog: D.WORKOUTS.filter((w) => w.phase !== 'program' || (S.data.program && w.program === S.data.program.id)).concat(L.setCustomWorkouts(S.data.customWorkouts)).map((w) => ({ id: w.id, name: w.name, phase: w.phase, intensity: w.intensity })),
       recentWorkouts: S.data.workouts.slice(-10).map((w) => ({ date: w.date, name: w.name, minutes: w.minutes, phase: w.phase })),
       recentPRs: S.data.prs.slice(-5),
@@ -1400,6 +1401,9 @@
   }
 
   // ---------- posters ----------
+  // Gym or home: home swaps each planned session for its dumbbell-and-band version.
+  const atHome = () => L.trainsAtHome(S.data);
+  const trainAtSegment = () => `<div class="segment" style="margin-bottom:12px" role="group" aria-label="Where you train">${[['gym', 'Gym'], ['home', 'At home']].map(([v, l]) => `<button class="${(atHome() ? 'home' : 'gym') === v ? 'active' : ''}" data-action="set-train-at" data-value="${v}" aria-pressed="${(atHome() ? 'home' : 'gym') === v}">${l}</button>`).join('')}</div>`;
   function backdrop(kind) {
     const img = D.IMAGERY[kind];
     return img ? `<img class="poster-img" src="${esc(img)}" alt=""><div class="shade"></div>` : `<div class="art art-${kind}"></div><div class="shade"></div>`;
@@ -1915,6 +1919,7 @@
       ${programSection()}
 
       <div class="section-title"><h2>${S.data.program && L.programDay(S.data, today()) && !L.programDay(S.data, today()).complete ? 'Today in your program' : 'Recommended today'}</h2><span class="tag">${esc(wk.intensity)}</span></div>
+      ${S.data.program && L.programDay(S.data, today()) && !L.programDay(S.data, today()).complete ? '' : trainAtSegment()}
       ${poster(wk.phase === 'any' ? 'steady' : wk.phase === 'program' ? (c.steady ? 'steady' : c.phase) : wk.phase, `
         <div class="p-row"><span>${esc(wk.focus)}</span><span>${wk.minutes} min</span></div>
         <div class="p-body"><div class="p-serif">${esc(wk.summary.split('.')[0])}.</div><div class="p-title">${esc(wk.name)}</div><div class="p-cap">${esc(copyFor(c.phase).cap)}</div></div>`, 'short')}
@@ -1934,8 +1939,8 @@
       ${myWorkoutsSection()}
       <button class="card lib-entry" data-action="open-library"><div class="row between"><div><div class="eyebrow">Exercise library</div><strong style="display:block;margin-top:4px">Every exercise, with form guides and your records</strong><div class="tiny muted" style="margin-top:4px">Muscles worked, how to do it, common mistakes, strength charts and history.</div></div>${icon('search', 22)}</div></button>
       <div class="section-title"><h2>Workout library</h2></div>
-      <div class="chips">${D.PHASE_ORDER.concat(['menopause']).map((p) => `<button class="chip ${lib === p ? 'selected' : ''}" data-action="lib-phase" data-phase="${p}"><span class="dot" style="background:var(--${p})"></span>${phaseName(p)}</button>`).join('')}</div>
-      <div class="h-scroll" style="margin-top:14px">${D.WORKOUTS.filter((w) => w.phase === lib).map((w) => `<button class="poster mini" data-action="view-workout" data-id="${w.id}">${backdrop(lib)}<div class="p-row"><span>${w.minutes} min</span><span>${esc(w.intensity)}</span></div><div class="p-body"><div class="p-title">${esc(w.name)}</div><div class="p-cap" style="letter-spacing:.2em">${esc(w.focus)}</div></div></button>`).join('')}</div>
+      <div class="chips">${D.PHASE_ORDER.concat(['menopause']).map((p) => `<button class="chip ${lib === p ? 'selected' : ''}" data-action="lib-phase" data-phase="${p}"><span class="dot" style="background:var(--${p})"></span>${phaseName(p)}</button>`).join('')}<button class="chip ${lib === 'home' ? 'selected' : ''}" data-action="lib-phase" data-phase="home">${icon('home', 14)}At home</button></div>
+      <div class="h-scroll" style="margin-top:14px">${D.WORKOUTS.filter((w) => (lib === 'home' ? w.home : w.phase === lib && !w.home)).map((w) => `<button class="poster mini" data-action="view-workout" data-id="${w.id}">${backdrop(lib === 'home' ? (w.phase === 'any' ? 'steady' : w.phase) : lib)}<div class="p-row"><span>${w.minutes} min</span><span>${esc(w.intensity)}</span></div><div class="p-body"><div class="p-title">${esc(w.name)}</div><div class="p-cap" style="letter-spacing:.2em">${esc(w.focus)}</div></div></button>`).join('')}</div>
     </div>`;
   }
 
@@ -2152,7 +2157,7 @@
     const maxDay = Math.max(1, ...d.days.map((x) => x.app_open));
     const bars = d.days.map((x, i) => `<rect x="${i * 10 + 1}" y="${60 - (x.app_open / maxDay) * 56}" width="8" height="${Math.max(1, (x.app_open / maxDay) * 56)}" rx="2" fill="var(--accent)"><title>${x.day}: ${x.app_open} opens, ${x.workout_done} workouts</title></rect>`).join('');
     const mem = d.members;
-    const engagement = ['workout_done', 'weekly_checkin', 'program_start', 'library_open', 'exercise_view', 'workout_created', 'measurement_logged', 'exercise_swap', 'photo_compare', 'badge_earned', 'share_card', 'install_done', 'invite_shared', 'invite_opened', 'invite_claimed', 'membership_canceled'].filter((k) => ev[k]);
+    const engagement = ['workout_done', 'weekly_checkin', 'program_start', 'library_open', 'exercise_view', 'workout_created', 'home_mode', 'measurement_logged', 'exercise_swap', 'photo_compare', 'badge_earned', 'share_card', 'install_done', 'invite_shared', 'invite_opened', 'invite_claimed', 'membership_canceled'].filter((k) => ev[k]);
     return `<div class="stats">${statTile('Paying', n(mem.active), '')}${statTile('In trial', n(mem.trialing), '')}</div>
       <p class="tiny muted" style="margin-top:8px">${n(mem.yearly)} yearly · ${n(mem.monthly)} monthly · ${n(mem.cancelling)} set to cancel · ${n(mem.pastDue)} card failing · ${n(mem.ended)} ended${mem.comp ? ` · ${n(mem.comp)} complimentary` : ''}</p>
       <div class="card" style="margin-top:14px"><div class="eyebrow">Funnel · last 30 days</div>${funnel}<p class="tiny muted" style="margin-top:10px">Percentages compare each step with the one above. Views count once per device per day.</p></div>
@@ -2637,11 +2642,13 @@
   // "Machine taken? Swap it": exercises that train the same movement, until a set is logged.
   function swapPanel(a, ex, ei) {
     if (ex.sets.some((x) => x.done)) return '';
-    const opts = L.swapOptions(ex.name, a.exercises.map((x) => x.name));
+    const homeOk = (o) => ['Dumbbell', 'Band', 'Bodyweight'].includes(o.equipment);
+    let opts = L.swapOptions(ex.name, a.exercises.map((x) => x.name));
+    if (atHome()) opts = opts.filter(homeOk).concat(opts.filter((o) => !homeOk(o)));
     if (!opts.length) return '';
     if (!ex.swapOpen) return `<button class="link small" style="margin-top:8px;margin-right:14px" data-action="swap-toggle" data-ei="${ei}">Swap exercise</button>`;
     return `<div class="plates-box">
-      <div class="row between"><span class="eyebrow" style="color:var(--text)">Machine taken? Same muscles:</span><button class="link small" data-action="swap-toggle" data-ei="${ei}">Hide</button></div>
+      <div class="row between"><span class="eyebrow" style="color:var(--text)">${atHome() ? 'Same muscles, home-friendly first:' : 'Machine taken? Same muscles:'}</span><button class="link small" data-action="swap-toggle" data-ei="${ei}">Hide</button></div>
       ${opts.slice(0, 8).map((o) => `<button class="list-item" style="width:100%;text-align:left;padding:9px 0" data-action="swap-pick" data-ei="${ei}" data-name="${esc(o.name)}"><div class="grow"><strong class="small">${esc(o.name)}</strong><div class="tiny muted">${esc(o.group)}</div></div><span class="tag">${esc(o.equipment)}</span></button>`).join('')}
     </div>`;
   }
@@ -3406,8 +3413,9 @@
     }
     if (m.type === 'swap') {
       const c = cyc();
-      const list = D.WORKOUTS.filter((w) => w.phase === 'program' ? !!(S.data.program && w.program === S.data.program.id) : c.steady || w.phase === c.phase || w.phase === 'any').concat(L.setCustomWorkouts(S.data.customWorkouts));
-      return sheet('Choose today\'s workout', `<p class="small muted" style="margin-bottom:14px">${c.steady ? 'Any session works in steady mode.' : `Options that suit your ${phaseName(c.phase).toLowerCase()} phase.`}</p><div class="options">${list.map((w) => `<button class="option ${todaysWorkout().id === w.id ? 'selected' : ''}" data-action="set-today" data-id="${w.id}"><strong>${esc(w.name)}</strong><span>${w.minutes} min · ${esc(w.intensity)} · ${esc(w.focus)}</span></button>`).join('')}</div>
+      const home = (m.where || (atHome() ? 'home' : 'gym')) === 'home';
+      const list = D.WORKOUTS.filter((w) => (w.phase === 'program' ? !!(S.data.program && w.program === S.data.program.id) : (c.steady || w.phase === c.phase || w.phase === 'any') && (w.id === 'rest' || !!w.home === home))).concat(L.setCustomWorkouts(S.data.customWorkouts));
+      return sheet('Choose today\'s workout', `<div class="segment" style="margin-bottom:12px" role="group" aria-label="Show workouts for">${[['gym', 'Gym'], ['home', 'At home']].map(([v, l]) => `<button class="${(home ? 'home' : 'gym') === v ? 'active' : ''}" data-action="swap-where" data-value="${v}" aria-pressed="${(home ? 'home' : 'gym') === v}">${l}</button>`).join('')}</div><p class="small muted" style="margin-bottom:14px">${c.steady ? 'Any session works in steady mode.' : `Options that suit your ${phaseName(c.phase).toLowerCase()} phase.`}</p><div class="options">${list.map((w) => `<button class="option ${todaysWorkout().id === w.id ? 'selected' : ''}" data-action="set-today" data-id="${w.id}"><strong>${esc(w.name)}</strong><span>${w.minutes} min · ${esc(w.intensity)} · ${esc(w.focus)}</span></button>`).join('')}</div>
         <button class="btn ghost block" style="margin-top:12px" data-action="reset-today">Use the recommended plan</button>`);
     }
     if (m.type === 'steps') {
@@ -3435,6 +3443,7 @@
         <div class="card flat"><div class="label">Weekly check-in day</div><div class="chips">${WEEKDAYS.map((w, i) => `<button class="chip ${L.checkinDay(S.data) === i ? 'selected' : ''}" data-action="set-checkin-day" data-value="${i}">${w.slice(0, 3)}</button>`).join('')}</div>
           <div class="row between" style="margin-top:14px"><span class="small">Daily weigh-in prompt</span><button class="chip ${S.data.weighDaily === false ? '' : 'selected'}" data-action="toggle-weigh">${S.data.weighDaily === false ? 'Off' : 'On'}</button></div>
           <div class="row between" style="margin-top:14px"><span class="small">Had a baby in the last year</span><button class="chip ${S.data.profile.postpartum ? 'selected' : ''}" data-action="toggle-postpartum">${S.data.profile.postpartum ? 'Yes' : 'No'}</button></div></div>
+        <div class="card flat"><div class="label">Where you train</div>${trainAtSegment()}<p class="tiny muted">At home, your plan uses dumbbells, a band and a chair instead of gym machines.</p></div>
         <div class="card flat"><div class="label">Units</div><div class="segment">${[['imperial', 'lb · ft'], ['metric', 'kg · cm']].map(([v, l]) => `<button class="${(p.units === 'metric' ? 'metric' : 'imperial') === v ? 'active' : ''}" data-action="set-units" data-value="${v}">${l}</button>`).join('')}</div><p class="tiny muted" style="margin-top:8px">Past workouts keep the unit they were logged in. Suggested weights convert automatically.</p></div>
         <div class="card flat"><div class="label">Appearance</div><div class="segment">${['system', 'light', 'dark'].map((x) => `<button class="${theme === x ? 'active' : ''}" data-action="theme" data-value="${x}">${x[0].toUpperCase() + x.slice(1)}</button>`).join('')}</div></div>
         ${adminHint() ? `<div class="card flat small"><div class="label">Owner dashboard</div><p class="muted">Trials, payments, the sign-up funnel and how members use YOURS. Anonymous counts only.</p><button class="btn ghost sm block" style="margin-top:10px" data-action="open-stats">Open dashboard</button></div>` : ''}
@@ -4229,6 +4238,13 @@
     'close-thread': () => { S.openThread = null; render(); },
 
     theme: (el) => { applyTheme(el.dataset.value); render(); },
+    'swap-where': (el) => { if (S.modal) { S.modal.where = el.dataset.value; render(); } },
+    'set-train-at': (el) => {
+      S.data.profile.trainAt = el.dataset.value === 'home' ? 'home' : 'gym';
+      if (S.modal && S.modal.type === 'swap') S.modal.where = S.data.profile.trainAt;
+      save(); render(); toast(atHome() ? 'Your plan now uses home workouts' : 'Your plan now uses gym workouts');
+      if (atHome()) logEvent('home_mode');
+    },
     'set-units': (el) => { S.data.profile.units = el.dataset.value; save(); render(); toast(`Weights now in ${unit() === 'lb' ? 'pounds' : 'kilograms'}`); },
     'open-install': () => { S.modal = { type: 'install' }; render(); },
     'install-copy': async () => { try { await navigator.clipboard.writeText(location.origin); toast('Link copied. Paste it into Safari.'); } catch { prompt('Copy this link:', location.origin); } },

@@ -936,7 +936,7 @@
       ['Bar on your upper back, hands just outside your shoulders, feet about shoulder-width.', 'Brace your core and breathe in.', 'Sit down and back between your heels, knees tracking over your toes.', 'Drive up through the middle of your foot, keeping your chest up.'],
       ['Knees caving inward on the way up.', 'Heels lifting off the floor.', 'Losing your brace and rounding at the bottom.'],
       ['Squat to a box or bench first to learn your depth.', 'Film one set from the side to check your bar path.']),
-    g('goblet-squat', /goblet squat|front-loaded squat|sumo squat|sit-to-stand/i, ['quads', 'glutes'], ['adductors', 'core', 'upper-back'],
+    g('goblet-squat', /goblet squat|front-loaded squat|sumo squat|bodyweight squat|sit-to-stand/i, ['quads', 'glutes'], ['adductors', 'core', 'upper-back'],
       ['Hold a dumbbell or kettlebell at your chest, elbows pointing down.', 'Feet shoulder-width or a little wider, toes slightly out.', 'Sit down between your heels with your chest proud.', 'Stand up by pushing the floor away.'],
       ['Letting the weight pull you forward.', 'Rising onto your toes.', 'Cutting depth as the weight gets heavier.'],
       ['Elbows brushing the inside of your knees at the bottom is a good depth check.', 'A 3-second lowering makes light weights work hard.']),
@@ -1020,7 +1020,7 @@
       ['Hands just wider than shoulders, body in a straight line.', 'Lower your chest toward the floor, elbows about 45 degrees from your body.', 'Push back up, keeping hips and shoulders moving together.'],
       ['Hips sagging or piking.', 'Elbows flaring straight out.', 'Partial reps.'],
       ['Elevate your hands (wall, counter, bench) to make it easier, then lower them over time.', 'Breathe out as you push.']),
-    g('rear-delt', /face pull|pull-apart|reverse dumbbell fly/i, ['rear-delts', 'upper-back'], ['side-delts'],
+    g('rear-delt', /face pull|pull-apart|reverse dumbbell fly|y-raise/i, ['rear-delts', 'upper-back'], ['side-delts'],
       ['Hold the rope or band at chest to eye height.', 'Pull your hands apart and back, finishing with your elbows high and hands by your ears.', 'Return slowly.'],
       ['Leaning back to move more weight.', 'Shrugging.'],
       ['Great for posture after a day at a desk.', 'Pause and squeeze your shoulder blades together.']),
@@ -1173,9 +1173,116 @@
     { id: 'amazonfresh', name: 'Amazon Fresh', search: 'https://www.amazon.com/s?i=amazonfresh&k=' },
   ];
 
+  // Home workouts: dumbbells, a band and a chair (or nothing at all). Each one fits a cycle phase,
+  // and HOME_SWAP turns the gym rotation into the home rotation when she trains at home.
+  const hw = (id, phase, name, focus, minutes, intensity, summary, exercises) => ({ id, phase, home: true, name, focus, minutes, intensity, summary, exercises });
+  const HOME_WORKOUTS = [
+    hw('h-m-easy', 'menstrual', 'Home: Easy Full Body', 'Full body', 30, 'Low-moderate', 'Light dumbbells at RPE 6. Keeps you strong without draining you.', [
+      e('Goblet squat', 3, '10', '60s', 'Elbows inside knees, chest proud.', true),
+      e('Dumbbell Romanian deadlift', 3, '10', '60s', 'Soft knees, hinge until you feel the hamstrings.', true),
+      e('One-arm dumbbell row', 3, '10 / side', '60s', 'Brace a hand on a chair.'),
+      e('Push-up', 2, '6-10', '60s', 'From a counter or your knees is fine.'),
+      e('Dead bug', 3, '8 / side', '30s', 'Press your low back into the floor.'),
+    ]),
+    hw('h-m-core', 'menstrual', 'Home: Glutes and Core', 'Glutes and core', 30, 'Low', 'Gentle glute work and core strength on the floor. Easy on the body, still lifting.', [
+      e('Dumbbell glute bridge', 3, '12', '60s', 'Pause for 2 seconds at the top.', true),
+      e('Banded lateral walk', 2, '12 / side', '45s', 'Band above your knees, stay low.'),
+      e('Single-leg glute bridge', 2, '10 / leg', '45s', 'Push through the heel, hips level.'),
+      e('Bird dog', 3, '8 / side', '30s', 'Keep hips square and core braced.'),
+      e('Side plank', 2, '20s / side', '30s', 'Stack hips and keep a long line.'),
+    ]),
+    hw('h-f-lower', 'follicular', 'Home: Lower Body Strength', 'Quads, glutes, hamstrings', 45, 'High', 'Your strongest phase. Single-leg work and slow lowering make dumbbells feel heavy.', [
+      e('Bulgarian split squat', 4, '8 / leg', '90s', 'Back foot on a chair or sofa.', true),
+      e('Dumbbell Romanian deadlift', 4, '8-10', '90s', 'Hips back, dumbbells close to your legs.', true),
+      e('Goblet squat', 3, '10', '75s', '3 seconds down, then stand tall.'),
+      e('Single-leg hip thrust', 3, '10 / leg', '60s', 'Shoulders on the sofa.'),
+      e('Calf raise', 3, '15', '45s', 'On a step, full stretch at the bottom.'),
+    ]),
+    hw('h-f-upper', 'follicular', 'Home: Upper Push and Pull', 'Back, chest, shoulders', 40, 'High', 'Rows and presses with dumbbells and a band. Push the weight while energy is high.', [
+      e('One-arm dumbbell row', 4, '8-10 / side', '75s', 'Pull to the hip, pause at the top.', true),
+      e('Dumbbell floor press', 4, '8-10', '90s', 'Elbows touch the floor, then press.', true),
+      e('Seated dumbbell shoulder press', 3, '10', '75s', 'On a chair, ribs down.'),
+      e('Band pull-apart', 3, '15', '45s', 'Shoulders down and back.'),
+      e('Dumbbell lateral raise', 3, '12-15', '45s', 'Lead with your elbows.'),
+      e('Push-up', 2, 'AMRAP', '60s', 'As many good reps as you can.'),
+    ]),
+    hw('h-f-full', 'follicular', 'Home: Full Body Strength', 'Full body', 45, 'High', 'Big movements with dumbbells. A little more pace, still lifting heavy for you.', [
+      e('Dumbbell thruster', 3, '10', '75s', 'Squat, then drive the dumbbells overhead.', true),
+      e('Reverse lunge', 3, '10 / leg', '75s', 'Hold dumbbells at your sides.', true),
+      e('Renegade row', 3, '6 / side', '60s', 'From your knees to start. Hips stay still.'),
+      e('Dumbbell hip thrust', 3, '12', '60s', 'Shoulders on the sofa, 1-second squeeze.'),
+      e('Dumbbell swing', 3, '12', '60s', 'Snap the hips, arms just guide the weight.'),
+      e('Dead bug', 3, '8 / side', '30s', 'Press your low back into the floor.'),
+    ]),
+    hw('h-o-glute', 'ovulation', 'Home: Glute Builder', 'Glutes', 45, 'High', 'Peak energy for glute work. Heaviest dumbbell you have on hip thrusts.', [
+      e('Dumbbell hip thrust', 4, '10-12', '90s', 'Heaviest dumbbell on your hips, own the lockout.', true),
+      e('Dumbbell sumo squat', 3, '12', '75s', 'Wide stance, one heavy dumbbell.', true),
+      e('Single-leg Romanian deadlift', 3, '8 / leg', '60s', 'Hold a wall if needed. Hips square.'),
+      e('Reverse lunge', 3, '10 / leg', '60s', 'Lean slightly forward for more glutes.'),
+      e('Banded lateral walk', 3, '15 / side', '45s', 'Stay low the whole time.'),
+      e('Banded kickback', 3, '12 / leg', '45s', 'Squeeze the glute, not the low back.'),
+    ]),
+    hw('h-o-full', 'ovulation', 'Home: Power Day', 'Strength and power', 40, 'High', 'Fast, strong reps while you feel your best. Try to beat last time on split squats.', [
+      e('Dumbbell push press', 4, '6', '90s', 'Dip and drive, then lock out overhead.', true),
+      e('Bulgarian split squat', 4, '6-8 / leg', '90s', 'Heaviest you can control.', true),
+      e('Squat jump', 3, '6', '60s', 'Land softly. Swap for fast bodyweight squats if jumping does not feel right.'),
+      e('One-arm dumbbell row', 3, '8 / side', '60s', 'Heavy and controlled.'),
+      e('Push-up', 3, 'AMRAP', '60s', 'As many good reps as you can.'),
+    ]),
+    hw('h-l-lower', 'luteal', 'Home: Steady Lower Body', 'Lower body', 40, 'Moderate', 'Moderate weights and slower reps. Steady work that suits lower energy.', [
+      e('Goblet squat', 3, '10-12', '75s', 'Tempo 3-1-1.', true),
+      e('Dumbbell hip thrust', 3, '12', '75s', 'Hold the top for 1 second.', true),
+      e('Single-leg Romanian deadlift', 3, '10 / leg', '60s', 'Square hips and reach long.'),
+      e('Step-up', 3, '8 / leg', '60s', 'On a sturdy chair or stair.'),
+      e('Forearm plank', 3, '40s', '30s', 'Breathe behind the brace.'),
+    ]),
+    hw('h-l-upper', 'luteal', 'Home: Upper Body Sculpt', 'Upper body', 40, 'Moderate', 'Higher reps with dumbbells and a band. Strong, without a heavy grind.', [
+      e('One-arm dumbbell row', 3, '12 / side', '60s', 'Pull to the hip.', true),
+      e('Dumbbell floor press', 3, '12', '60s', 'Slow lowering.', true),
+      e('Arnold press', 3, '10', '60s', 'Rotate smoothly.'),
+      e('Band face pull', 3, '15', '45s', 'Band anchored in a door at eye level.'),
+      e('Dumbbell curl', 3, '12', '45s', 'No swinging.'),
+      e('Overhead dumbbell triceps extension', 3, '12', '45s', 'Elbows point forward, slow down.'),
+    ]),
+    hw('h-l-core', 'luteal', 'Home: Glute and Core Sculpt', 'Glutes and core', 35, 'Low-moderate', 'Glutes and core with a band and one dumbbell. Good for low-energy days.', [
+      e('Dumbbell hip thrust', 3, '12', '60s', 'Hold the top for 1 second.', true),
+      e('Banded kickback', 3, '12 / leg', '45s', 'Squeeze the glute, not the low back.'),
+      e('Banded lateral walk', 2, '15 / side', '45s', 'Stay low the whole time.'),
+      e('Dead bug', 3, '8 / side', '30s', 'Press your low back into the floor.'),
+      e('Side plank', 2, '20s / side', '30s', 'Stack hips and keep a long line.'),
+    ]),
+    hw('h-mp-strength', 'menopause', 'Home: Bone-Building Strength', 'Full body strength', 45, 'High', 'Heavy-for-you dumbbell work for bone and muscle.', [
+      e('Goblet squat', 4, '8', '90s', 'Sit between your heels, chest proud.', true),
+      e('Dumbbell Romanian deadlift', 4, '8', '90s', 'Hips back, long spine.', true),
+      e('Dumbbell floor press', 3, '8-10', '90s', 'Elbows touch the floor, then press.'),
+      e('One-arm dumbbell row', 3, '10 / side', '60s', 'Pull to the hip.'),
+      e('Step-up', 3, '8 / leg', '60s', 'On a sturdy stair, control the way down.'),
+      e('Farmer carry', 3, '30 m', '60s', 'Walk the hallway: heavy, tall and slow.'),
+    ]),
+    hw('h-mp-power', 'menopause', 'Home: Power and Balance', 'Power, bone density, balance', 30, 'Moderate', 'Quick, strong reps and balance work for bones and steadiness.', [
+      e('Fast step-up', 4, '5 / leg', '60s', 'Drive up quickly, step down slowly.'),
+      e('Dumbbell swing', 4, '12', '60s', 'Snap the hips, arms just guide the weight.', true),
+      e('Dumbbell push press', 3, '8', '60s', 'Dip and drive, then lock out overhead.'),
+      e('Single-leg balance reach', 3, '6 / leg', '30s', 'Slow and steady. Hold a wall if needed.'),
+    ]),
+    hw('h-bw', 'any', 'No-Equipment Full Body', 'Full body', 30, 'Moderate', 'Nothing but you and the floor. Good for travel days.', [
+      e('Bodyweight squat', 3, '15', '60s', '3 seconds down.'),
+      e('Single-leg glute bridge', 3, '12 / leg', '45s', 'Push through the heel, hips level.'),
+      e('Bodyweight reverse lunge', 3, '10 / leg', '60s', 'Step back long and stay tall.'),
+      e('Push-up', 3, '6-12', '60s', 'From a counter or your knees is fine.'),
+      e('Prone Y-raise', 2, '12', '30s', 'Thumbs up, lift from the upper back.'),
+      e('Forearm plank', 3, '30s', '30s', 'Ribs down, glutes on.'),
+    ]),
+  ];
+  const HOME_SWAP = {
+    'm-light': 'h-m-easy', 'm-walk': 'h-m-core', 'f-lower': 'h-f-lower', 'f-upper': 'h-f-upper', 'f-hiit': 'h-f-full',
+    'o-glute': 'h-o-glute', 'o-power': 'h-o-full', 'l-steady': 'h-l-lower', 'l-upper': 'h-l-upper', 'l-pilates': 'h-l-core',
+    'mp-strength': 'h-mp-strength', 'mp-power': 'h-mp-power',
+  };
+  WORKOUTS.push(...HOME_WORKOUTS);
   WORKOUTS.push(...PROGRAM_WORKOUTS);
 
-  const api = { MUSCLES, MUSCLE_GROUPS, GUIDES, TESTIMONIALS, SWAPS, PROGRAMS, BASIC_FOODS, RESTAURANTS, STORES, PHASE_COPY, IMAGERY, PHASES, PHASE_ORDER, WORKOUTS, ROTATION, MEALS, FAVORITE_OPTIONS, AVOID_OPTIONS, MEMBERS, SEED_POSTS, AUTO_REPLIES, CYCLE_MODES, SYMPTOMS, MENO_SYMPTOMS, GROCERY };
+  const api = { MUSCLES, MUSCLE_GROUPS, GUIDES, TESTIMONIALS, SWAPS, PROGRAMS, BASIC_FOODS, RESTAURANTS, STORES, PHASE_COPY, IMAGERY, PHASES, PHASE_ORDER, WORKOUTS, HOME_SWAP, ROTATION, MEALS, FAVORITE_OPTIONS, AVOID_OPTIONS, MEMBERS, SEED_POSTS, AUTO_REPLIES, CYCLE_MODES, SYMPTOMS, MENO_SYMPTOMS, GROCERY };
   if (typeof window !== 'undefined') window.YOURS_DATA = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();
