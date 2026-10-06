@@ -459,3 +459,19 @@ test('strength level uses women\'s bodyweight ratios for lifts with standards', 
   assert.equal(L.strengthLevel('Goblet squat', 30, 60), null);
   assert.equal(L.strengthLevel('Back squat', 0, 60), null);
 });
+
+test('home training swaps every gym session for a home one, and back', () => {
+  const data = { profile: { lastPeriod: k(-3), cycleLength: 28, periodLength: 5, trainAt: 'home' }, overrides: {} };
+  for (let i = 0; i < 35; i++) {
+    const w = L.workoutFor(data, L.addDays(T, i));
+    assert.ok(w.home || ['rest', 'm-restore'].includes(w.id), `gym session ${w.id} on a home day`);
+    for (const ex of w.exercises) if (w.home) assert.ok(!['Machine', 'Cable', 'Barbell'].includes(L.equipmentOf(ex.name)), `${ex.name} needs gym kit`);
+  }
+  data.profile.trainAt = 'gym';
+  for (let i = 0; i < 35; i++) assert.ok(!L.workoutFor(data, L.addDays(T, i)).home);
+  // Every home swap points at a real home workout in the same phase.
+  for (const [gym, home] of Object.entries(D.HOME_SWAP)) {
+    const a = L.workoutById(gym); const b = L.workoutById(home);
+    assert.ok(a && b && b.home && a.phase === b.phase, `${gym} -> ${home}`);
+  }
+});

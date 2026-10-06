@@ -179,11 +179,13 @@
     return { id: c.id, phase: 'custom', custom: true, name: c.name || 'My workout', focus: c.focus || 'Your workout', minutes, intensity: 'Your plan', summary: c.notes || 'Your own workout. Suggested weights still come from your history.', exercises };
   }
   function setCustomWorkouts(list) { CUSTOM = (list || []).filter((c) => c && c.id && (c.exercises || []).length).map(customToWorkout); return CUSTOM; }
+  const trainsAtHome = (data) => !!(data && data.profile && data.profile.trainAt === 'home');
   const workoutById = (id) => D.WORKOUTS.find((w) => w.id === id) || CUSTOM.find((w) => w.id === id);
   function plannedWorkout(data, date) {
     const cyc = cycleInfo(data.profile, date);
     const rot = D.ROTATION[cyc.phase];
-    return workoutById(rot[cyc.dayInPhase % rot.length]);
+    const id = rot[cyc.dayInPhase % rot.length];
+    return workoutById(trainsAtHome(data) && D.HOME_SWAP && D.HOME_SWAP[id] ? D.HOME_SWAP[id] : id);
   }
   function workoutFor(data, date) {
     const ov = (data.overrides || {})[dateKey(date)];
@@ -968,7 +970,7 @@
   // What a lift needs, from its name. Used to label swap options ("machine taken? swap it").
   function equipmentOf(name) {
     const n = String(name || '').toLowerCase();
-    if (/single-leg hip thrust|single-leg glute bridge/.test(n)) return 'Bodyweight';
+    if (/^bodyweight|single-leg hip thrust|single-leg glute bridge/.test(n)) return 'Bodyweight';
     if (/machine|leg press|hack squat|pec deck|leg curl|hip abduction|seated calf|smith/.test(n)) return 'Machine';
     if (/cable|pulldown|pushdown|face pull(?!.*band)|pull-through|seated cable/.test(n) && !/band/.test(n)) return 'Cable';
     if (/band/.test(n)) return 'Band';
@@ -995,7 +997,7 @@
     workoutById, plannedWorkout, workoutFor, programById, programDay, programProgress, adjustSets, parseReps, e1rm, suggestLoad, detectPRs, strengthByPhase, exerciseHistory,
     mealOptions, mealFor, proteinFor, aisleFor, storeLink, buildTotals, macrosFor, parseOFF, foodMacros, validBarcode, recipeTotals, recipeFood, groceryList, parseFoodText, usualRequest, usualMeal, cleanEstimates, estimateFood, parseRest, isBarbell, platesFor, defaultBar, BARS, streak, weeklyStats, weeklyAdjust, applyAdjustments, weeklyDue,
     equipmentOf, swapOptions, BADGES, badges, newBadges, guideFor, allExercises, liftStats,
-    setCustomWorkouts, customToWorkout, warmupSets, MEASURE_SITES, measurementSummary, measurementPhaseNote, STRENGTH_LEVELS, STRENGTH_STANDARDS, strengthStandard, strengthLevel, toKg, fromKg,
+    setCustomWorkouts, customToWorkout, trainsAtHome, warmupSets, MEASURE_SITES, measurementSummary, measurementPhaseNote, STRENGTH_LEVELS, STRENGTH_STANDARDS, strengthStandard, strengthLevel, toKg, fromKg,
   };
   if (typeof window !== 'undefined') window.YOURS_LOGIC = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
