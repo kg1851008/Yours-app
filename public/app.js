@@ -2223,7 +2223,10 @@
   function trialEndingBanner() {
     const sub = S.sub;
     if (!billingOn() || !sub || sub.status !== 'trialing' || sub.cancel_at_period_end || !sub.trial_end) return '';
-    const days = Math.ceil((new Date(sub.trial_end).getTime() - Date.now()) / 864e5);
+    // Calendar days in her time zone, so a trial ending tonight reads "today", not "tomorrow".
+    const end = new Date(sub.trial_end);
+    if (end.getTime() <= Date.now()) return '';
+    const days = L.daysBetween(L.parseKey(todayKey()), L.parseKey(L.dateKey(end)));
     if (days > 2) return '';
     return `<div class="banner" style="margin-bottom:12px">${icon('flame', 18)}<div class="grow small">Your free trial ends ${days <= 0 ? 'today' : days === 1 ? 'tomorrow' : `in ${days} days`}. Your membership then continues at ${money(priceFor(sub.plan))} ${sub.plan === 'yearly' ? 'a year' : 'a month'}.</div><button class="link small" data-action="billing-portal">Manage</button></div>`;
   }
@@ -2655,6 +2658,7 @@
 
   function startWorkout(id) {
     const wk = workoutById(id);
+    if (!wk) { toast('That workout is no longer available'); return; }
     const c = cyc();
     const u = unit();
     S.data.activeWorkout = {
@@ -3338,6 +3342,7 @@
     }
     if (m.type === 'workout') {
       const wk = workoutById(m.id);
+      if (!wk) { S.modal = null; return ''; } // deleted (e.g. on another device) while the sheet was open
       const isToday = todaysWorkout().id === wk.id;
       return sheet(esc(wk.name), `${m.from ? `<button class="link small" style="margin-bottom:8px" data-action="modal-back">Back to program</button>` : ''}<div class="eyebrow">${esc(wk.focus)} · ${wk.minutes} min · ${esc(wk.intensity)}</div><p class="small" style="margin-top:8px">${esc(wk.summary)}</p><div class="divider"></div>${exerciseList(wk, true)}
         <div class="row" style="margin-top:16px"><button class="btn primary grow" data-action="start-workout" data-id="${wk.id}">Start now</button>${isToday ? '' : `<button class="btn ghost" data-action="set-today" data-id="${wk.id}">Make today's</button>`}</div>
@@ -3468,7 +3473,11 @@
   }
 
   function render() {
-    if (S.data) L.setCustomWorkouts(S.data.customWorkouts);
+    if (S.data) {
+      // Drop broken entries (an interrupted sync, an old version) so one bad workout never breaks the tab.
+      if (Array.isArray(S.data.customWorkouts)) S.data.customWorkouts = S.data.customWorkouts.filter((c) => c && c.id && Array.isArray(c.exercises) && c.exercises.length);
+      L.setCustomWorkouts(S.data.customWorkouts);
+    }
     let html;
     const landing = showLanding();
     root.classList.toggle('wide', landing);
