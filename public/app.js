@@ -1372,7 +1372,7 @@
     if (navigator.doNotTrack === '1' || window.doNotTrack === '1' || navigator.globalPrivacyControl) return;
     if (/^(localhost|127\.)/.test(location.hostname) && !window.YOURS_TRACK_LOCAL) return;
     const sent = store.get('yours.ev', {});
-    const key = ONCE_A_DAY.includes(name) ? `${name}:${todayKey()}` : ONCE_EVER.includes(name) ? name : null;
+    const key = ONCE_A_DAY.includes(name) || name.startsWith('lp_') ? `${name}:${todayKey()}` : ONCE_EVER.includes(name) || name.startsWith('start_') ? name : null;
     if (key && sent[key]) return;
     if (key) { sent[key] = 1; Object.keys(sent).forEach((k) => { if (k.includes(':') && !k.endsWith(todayKey())) delete sent[k]; }); store.set('yours.ev', sent); }
     const body = new Blob([JSON.stringify({ name })], { type: 'application/json' });
@@ -1441,15 +1441,36 @@
   }
 
   // ---------- landing page (first visit in a browser; the installed app opens straight to the welcome screen) ----------
+  // Audience pages: yoursapp/postpartum, /menopause, /beginner, /home (or ?for=...). Same app, a headline and
+  // program that speak to her. The audience is remembered so her plan starts in the right place after sign-up.
+  const AUDIENCES = {
+    postpartum: { program: 'postpartum', eyebrow: 'Strength training after baby', h1: 'Your body did something incredible. Now rebuild it, gently.', lead: 'A step-by-step return to lifting after birth: breath and pelvic floor first, then real strength. Sessions of 25 to 40 minutes, three times a week.', cta: 'Start my comeback', note: 'Start once your doctor or midwife has cleared you for exercise, usually at your 6-week check or later.' },
+    menopause: { program: 'menopause', eyebrow: 'Perimenopause and menopause', h1: 'Your body is changing. Your strength doesn\'t have to fade.', lead: 'Heavy-for-you lifting for bone and muscle, a plan that follows your symptoms instead of a cycle, and protein targets that fit this stage.', cta: 'Get stronger through menopause' },
+    beginner: { program: 'beginner', eyebrow: 'New to lifting? Start here', h1: 'The weights section doesn\'t have to feel scary.', lead: 'Learn the five basic lifts in 8 weeks, with simple cues for every move and the exact weight to pick up. No experience needed.', cta: 'Start my first program' },
+    home: { program: 'home', eyebrow: 'Strength training at home', h1: 'No gym? Get strong at home with just dumbbells.', lead: 'Cycle-synced home workouts with dumbbells, a band and a chair, plus an 8-week home program. The weight for every set, suggested for you.', cta: 'Start training at home' },
+  };
+  function landingAudience() {
+    const m = location.pathname.match(/^\/(postpartum|menopause|beginner|home)\/?$/);
+    const q = new URLSearchParams(location.search).get('for');
+    const a = (m && m[1]) || (AUDIENCES[q] ? q : null);
+    if (a) store.set('yours.aud', a);
+    return a;
+  }
   const showLanding = () => !S.session && S.screen !== 'login' && !isStandalone();
   function viewLanding() {
     logEvent('landing_view');
+    const aud = landingAudience();
+    const A = AUDIENCES[aud];
+    if (aud) logEvent(`lp_${aud}`);
+    const prog = A && D.PROGRAMS.find((x) => x.id === A.program);
     const paid = billingOn();
     const days = trialDays();
     const m = priceFor('monthly'), y = priceFor('yearly');
     const save = m && y ? Math.round((1 - y.amount / (m.amount * 12)) * 100) : 0;
-    const cta = (cls) => `<button class="btn primary ${cls || ''}" data-action="start">${paid ? `Start your ${days}-day free trial` : 'Build my plan'}</button>`;
-    const phone = (img, alt) => `<div class="lp-phone"><img src="img/landing/${img}.jpg" alt="${esc(alt)}" width="390" height="844" loading="lazy"></div>`;
+    // Invited friends see their gift on the button; everyone else sees who they are becoming.
+    const ctaText = paid && pendingInvite() && !regionBlocked() ? `Start my ${days}-day free trial` : A ? A.cta : 'Start training with my cycle';
+    const cta = (cls) => `<button class="btn primary ${cls || ''}" data-action="start">${esc(ctaText)}</button>`;
+    const phone = (img, alt) => `<div class="lp-phone"><img src="/img/landing/${img}.jpg" alt="${esc(alt)}" width="390" height="844" loading="lazy"></div>`;
     const phases = [
       ['menstrual', 'Period week', 'Lighter lifts, mobility and more rest. Iron-rich meals and gentle movement for cramps.'],
       ['follicular', 'Follicular', 'Energy climbs. Your best window to add weight and learn new lifts.'],
@@ -1480,14 +1501,23 @@
       ${pendingInvite() && !regionBlocked() ? `<div class="banner lp-wrap" style="margin-top:8px">${icon('gift', 18)}<div class="grow small"><strong>A friend invited you.</strong> Your free trial is 3 weeks instead of 1.</div></div>` : ''}
       <section class="lp-hero lp-wrap">
         <div class="lp-hero-copy">
-          <div class="eyebrow">Strength training for women</div>
-          <h1 class="lp-h1">Train with your cycle, not against&nbsp;it.</h1>
-          <p class="lp-lead">YOURS plans your workouts, food and steps around your cycle or life stage, suggests the weight for every lift, and adapts every week.</p>
+          <div class="eyebrow">${A ? esc(A.eyebrow) : 'Train with your cycle, not against it'}</div>
+          <h1 class="lp-h1">${A ? esc(A.h1) : 'Some weeks you feel unstoppable. Some weeks you&nbsp;don\'t.'}</h1>
+          <p class="lp-lead">${A ? esc(A.lead) : 'That isn\'t a lack of discipline. It\'s your cycle. YOURS plans every workout, weight and meal around it, so you get stronger in every phase.'}</p>
           <div class="lp-cta">${cta()}<button class="btn ghost" data-action="go-login">I have an account</button></div>
           <p class="tiny muted" style="margin-top:12px">${paid ? `${days} days free, then ${money(m)} a month or ${money(y)} a year. Cancel anytime.` : 'Your plan in about 2 minutes.'}</p>
         </div>
         <div class="lp-hero-phone">${phone('home', 'YOURS home screen: day 10 of the cycle, follicular phase, rising energy')}</div>
       </section>
+${prog ? `
+      <section class="lp-wrap lp-sec">
+        <div class="eyebrow">Your program</div>
+        <h2 class="lp-h2">${esc(prog.name)}</h2>
+        <p class="lp-lead" style="margin-top:8px">${esc(prog.tagline)}</p>
+        <ol class="lp-steps">${prog.blocks.map((b, i) => `<li><span class="lp-num">0${i + 1}</span><div><h3>${esc(b.title)} <span class="tiny muted" style="font-weight:400">· ${b.from === b.to ? `Week ${b.from}` : `Weeks ${b.from}-${b.to}`}</span></h3><p class="small muted">${esc(b.note)}</p></div></li>`).join('')}</ol>
+        <p class="small muted" style="margin-top:12px">${prog.perWeek} sessions a week. ${esc(A.note || prog.who)}</p>
+        <div style="margin-top:16px">${cta()}</div>
+      </section>` : ''}
 
       <section class="lp-wrap lp-sec">
         <h2 class="lp-h2">Four phases. One plan that moves with them.</h2>
@@ -2157,7 +2187,7 @@
     const maxDay = Math.max(1, ...d.days.map((x) => x.app_open));
     const bars = d.days.map((x, i) => `<rect x="${i * 10 + 1}" y="${60 - (x.app_open / maxDay) * 56}" width="8" height="${Math.max(1, (x.app_open / maxDay) * 56)}" rx="2" fill="var(--accent)"><title>${x.day}: ${x.app_open} opens, ${x.workout_done} workouts</title></rect>`).join('');
     const mem = d.members;
-    const engagement = ['workout_done', 'weekly_checkin', 'program_start', 'library_open', 'exercise_view', 'workout_created', 'home_mode', 'measurement_logged', 'exercise_swap', 'photo_compare', 'badge_earned', 'share_card', 'install_done', 'invite_shared', 'invite_opened', 'invite_claimed', 'membership_canceled'].filter((k) => ev[k]);
+    const engagement = ['workout_done', 'weekly_checkin', 'program_start', 'library_open', 'exercise_view', 'workout_created', 'home_mode', 'measurement_logged', 'lp_postpartum', 'start_postpartum', 'lp_menopause', 'start_menopause', 'lp_beginner', 'start_beginner', 'lp_home', 'start_home', 'exercise_swap', 'photo_compare', 'badge_earned', 'share_card', 'install_done', 'invite_shared', 'invite_opened', 'invite_claimed', 'membership_canceled'].filter((k) => ev[k]);
     return `<div class="stats">${statTile('Paying', n(mem.active), '')}${statTile('In trial', n(mem.trialing), '')}</div>
       <p class="tiny muted" style="margin-top:8px">${n(mem.yearly)} yearly · ${n(mem.monthly)} monthly · ${n(mem.cancelling)} set to cancel · ${n(mem.pastDue)} card failing · ${n(mem.ended)} ended${mem.comp ? ` · ${n(mem.comp)} complimentary` : ''}</p>
       <div class="card" style="margin-top:14px"><div class="eyebrow">Funnel · last 30 days</div>${funnel}<p class="tiny muted" style="margin-top:10px">Percentages compare each step with the one above. Views count once per device per day.</p></div>
@@ -2505,7 +2535,9 @@
     if (L.MENO_MODES.includes(p.cycleMode)) rec.push('menopause');
     if (p.goal === 'glutes') rec.push('glutes');
     if (p.level === 'beginner') rec.push('beginner');
-    return rec;
+    if (p.trainAt === 'home') rec.push('home');
+    const from = AUDIENCES[S.data.audience] && AUDIENCES[S.data.audience].program;
+    return from ? [from].concat(rec.filter((x) => x !== from)) : rec;
   }
   function programContext() {
     const pg = L.programDay(S.data, today());
@@ -2529,7 +2561,8 @@
         </div>`;
     }
     const rec = recommendedPrograms();
-    const list = D.PROGRAMS.slice().sort((a, b) => (rec.includes(b.id) ? 1 : 0) - (rec.includes(a.id) ? 1 : 0));
+    const rank = (id) => (rec.includes(id) ? rec.indexOf(id) : rec.length);
+    const list = D.PROGRAMS.slice().sort((a, b) => rank(a.id) - rank(b.id));
     return `<div class="section-title"><h2>8-week programs</h2></div>
       <div class="h-scroll">${list.map((pr) => `<button class="poster mini" style="text-align:left" data-action="open-program" data-id="${pr.id}">${backdrop({ menopause: 'menopause', postpartum: 'menstrual', pullup: 'follicular', beginner: 'steady', home: 'luteal' }[pr.id] || 'ovulation')}<div class="p-row"><span>${esc(pr.kicker)}</span><span>${rec.includes(pr.id) ? 'For you' : `${pr.perWeek}x / week`}</span></div><div class="p-body"><div class="p-title" style="${Math.max(...pr.name.split(' ').map((w) => w.length)) >= 9 ? 'font-size:27px' : ''}">${esc(pr.name)}</div></div></button>`).join('')}</div>`;
   }
@@ -3805,7 +3838,7 @@
 
   // ---------- events ----------
   const actions = {
-    start: () => { S.authError = ''; logEvent('signup_start'); startSession({ kind: 'guest' }).then(render); },
+    start: () => { S.authError = ''; logEvent('signup_start'); const aud = store.get('yours.aud', null); if (AUDIENCES[aud]) logEvent(`start_${aud}`); startSession({ kind: 'guest' }).then(render); },
     'go-login': () => {
       // Guest progress stays saved on the device; signing in switches to that account's data.
       S.authError = ''; S.modal = null; S.screen = 'login';
@@ -3859,7 +3892,14 @@
       if (S.data.obStep < OB_STEPS - 1) { S.data.obStep++; save(); render(); window.scrollTo(0, 0); return; }
       const p = S.data.profile;
       if (p.periodStart && !L.STEADY_MODES.includes(p.cycleMode) && !S.data.periods.includes(p.periodStart)) L.addPeriod(S.data, p.periodStart);
-      if (!S.data.onboarded) logEvent('onboarding_done');
+      if (!S.data.onboarded) {
+        logEvent('onboarding_done');
+        // Came from an audience page: start her plan in the right place (she can change both in Settings).
+        const aud = store.get('yours.aud', null);
+        if (aud === 'postpartum') p.postpartum = true;
+        if (aud === 'home' && !p.trainAt) p.trainAt = 'home';
+        if (AUDIENCES[aud]) S.data.audience = aud;
+      }
       S.data.onboarded = true;
       S.data.obStep = 0;
       if (S.data.editing) { S.data.editing = false; S.data.planSeen = true; toast('Plan updated'); }
