@@ -1,6 +1,9 @@
 {
   "buildCommand": "",
   "outputDirectory": "public",
+  "rewrites": [
+    { "source": "/:aud(postpartum|menopause|beginner|home)", "destination": "/index.html" }
+  ],
   "headers": [
     {
       "source": "/(.*)",
