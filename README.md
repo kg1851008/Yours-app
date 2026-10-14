@@ -130,6 +130,7 @@ Vercel environment variables:
 
 - Set `ANTHROPIC_API_KEY` in your Vercel project, or in your shell for local runs, to turn on AI plate photos and photo reviews. `ANTHROPIC_MODEL` is optional and defaults to `claude-sonnet-5-5` (cheaper); set `claude-opus-5-5` for the most capable model.
 - Live coach chat costs the most per use, so it stays off (the on-device coach answers) until you set `AI_COACH=on`.
+- Progress photos are never sent to the AI unless you set `AI_PHOTO_REVIEW=on`. Without it, the PIN-locked photo vault, the before/after slider and the data-based progress review all work as normal.
 - Daily limits per member keep the bill predictable: `AI_FOOD_DAILY` (default 20 food estimates), `AI_CHAT_DAILY` (30 coach messages), `AI_REVIEW_DAILY` (3 photo reviews). Counts live in the `ai_usage` table. Also set a monthly spend limit in the Anthropic console.
 - Typed or spoken meals try the free on-device parser first and only ask the AI about foods it could not match.
 - Without a key, the app uses a built-in on-device coach. It gives phase-aware answers and reviews progress from logged data. Photo review and plate photos need the live coach; talk to log falls back to the on-device parser.

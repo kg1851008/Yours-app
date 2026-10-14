@@ -380,7 +380,8 @@
       const j = await r.json();
       S.ai = !!j.ai;
       S.aiCoach = !!j.coach; // live chat can be off while food photos stay on
-    } catch { S.ai = false; S.aiCoach = false; }
+      S.aiReview = !!j.review; // progress photos only go to the AI when this is on
+    } catch { S.ai = false; S.aiCoach = false; S.aiReview = false; }
     render();
   }
 
@@ -733,7 +734,7 @@
     S.analyzing = true;
     render();
     let result = null;
-    if (S.ai) {
+    if (S.aiReview) {
       try {
         const note = chosen.map((p, i) => `Photo ${i + 1}: ${p.pose} view, taken ${p.date}${p.phase ? ` during ${p.phase} phase` : ''}`).join('. ');
         const r = await fetch('/api/coach', {
@@ -778,8 +779,8 @@
     const prev = previousCheckinPhotos();
     S.modal = { type: 'weeklyResult', stats, answers, result, photos, prev, selected: result.adjustments.map(() => true), text: localWeeklyText(stats, result) + (hasPhotos ? `\n\nPhotos saved to your vault.${prev ? ' Compare them with your last check-in below. Judge the trend over a few weeks, not one set of photos.' : ' Next week you will see them side by side.'}` : ''), loading: !!S.ai };
     render();
-    if (!S.ai) return;
-    if (hasPhotos) {
+    if (!S.aiReview && !S.aiCoach) return;
+    if (hasPhotos && S.aiReview) {
       // Advisor reviews this week's photos (and last check-in's, same poses) together with the week's data.
       const byId = (id) => S.photos.find((p) => p.id === id);
       const imgs = [];
@@ -2946,7 +2947,7 @@ ${prog ? `
 
       ${review ? `<div class="card" style="margin-top:16px"><div class="row between"><span class="verdict ${review.verdict}">${verdictLabel[review.verdict] || 'Review'}</span><span class="tiny muted">${shortDate(review.date)}</span></div>
         <div class="rich small" style="margin-top:12px">${rich(review.text)}</div>
-        ${review.local ? `<p class="tiny muted" style="margin-top:10px">Based on your logged data. ${S.ai ? '' : 'Visual photo review needs the live AI coach.'}</p>` : ''}</div>` : ''}
+        ${review.local ? `<p class="tiny muted" style="margin-top:10px">Based on your logged data.</p>` : ''}</div>` : ''}
 
       ${checkinHistory()}
       ${measurementsCard()}
@@ -3153,7 +3154,7 @@ ${prog ? `
       const todayW = S.data.checkins.find((x) => x.date === todayKey());
       return sheet('Check-in photos', `${intro}
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px">${['front', 'side', 'back'].map((pose) => `<label style="cursor:pointer">${m.photos[pose] ? blurThumb(m.photos[pose], pose) : `<div class="photo" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;border:1.5px dashed var(--line)">${icon('camera', 22)}<span class="eyebrow">${pose}</span></div>`}<input type="file" accept="image/*" data-ci-photo="${pose}" hidden></label>`).join('')}</div>
-        <p class="tiny muted" style="margin-top:8px">Encrypted with your PIN and stored only on this phone.${S.ai ? ' Your coach reviews them when you finish, and they are not stored anywhere else.' : ''}</p>
+        <p class="tiny muted" style="margin-top:8px">Encrypted with your PIN and stored only on this phone.${S.aiReview ? ' Your coach reviews them when you finish, and they are not stored anywhere else.' : ''}</p>
         <form data-form="ci-continue" style="margin-top:16px"><label class="field"><span class="label">This morning's weight (${unit()})</span><input class="input" name="w" type="number" step="0.1" inputmode="decimal" value="${todayW ? (unit() === 'lb' ? Math.round(todayW.kg * 22.0462) / 10 : todayW.kg) : ''}" placeholder="Optional"></label>
           <button class="btn primary block" style="margin-top:16px" type="submit">Continue</button></form>
         <button class="btn ghost block" style="margin-top:10px" data-action="ci-skip-photos">Skip photos this week</button>`);
@@ -3494,7 +3495,7 @@ ${prog ? `
         ${adminHint() ? `<div class="card flat small"><div class="label">Owner dashboard</div><p class="muted">Trials, payments, the sign-up funnel and how members use YOURS. Anonymous counts only.</p><button class="btn ghost sm block" style="margin-top:10px" data-action="open-stats">Open dashboard</button></div>` : ''}
         ${inviteCard()}
         ${installPlatform() !== 'installed' ? '<div class="card flat small"><div class="label">Get the app</div><p class="muted">Add YOURS to your Home Screen for full screen, one-tap access and reminders.</p><button class="btn ghost sm block" style="margin-top:10px" data-action="open-install">Show me how</button></div>' : ''}
-        <div class="card flat small"><div class="label">Coach</div><p class="muted">${S.aiCoach ? 'Live AI coach is on, with plate photos and photo reviews.' : S.ai ? 'Plate photos and photo reviews use AI. Coach answers come from your plan on this phone.' : 'Coach answers come from your plan on this phone.'}</p></div>
+        <div class="card flat small"><div class="label">Coach</div><p class="muted">${S.aiCoach ? 'Live AI coach is on.' : 'Coach answers come from your plan on this phone.'} ${S.aiReview ? 'Progress photos can be reviewed by AI when you ask.' : 'Progress photos stay private on this phone and are never analyzed by AI.'}</p></div>
         ${billingOn() && isCloud() ? `<div class="card flat small"><div class="label">Membership</div><p class="muted">${esc(membershipLine())}</p>${S.sub && S.sub.status && !['none', 'comp'].includes(S.sub.status) ? '<button class="btn ghost sm block" style="margin-top:10px" data-action="billing-portal">Manage membership</button>' : ''}<p class="tiny muted" style="margin-top:8px">Cancel, switch plans or update your card on Stripe's secure page.</p></div>` : ''}
         ${isCloud() ? `<div class="card flat small"><div class="label">Account sync</div><p class="muted">${S.syncState === 'offline' ? 'Offline. Changes are saved on this device and sync when you are back online.' : S.syncState === 'saving' ? 'Saving...' : `Synced across your devices${S.syncedAt ? ` · ${timeAgo(S.syncedAt)}` : ''}.`}</p><button class="btn ghost sm block" style="margin-top:10px" data-action="sync-now">Sync now</button>${(S.data.blocked || []).length ? `<button class="link small" style="margin-top:10px" data-action="unblock-all">Show ${plural(S.data.blocked.length, 'hidden member')} again</button>` : ''}</div>` : cloud && !isGuest() ? '<div class="card flat small"><div class="label">Account sync</div><p class="muted">This account lives on this device only. Sign out and sign in again with the same email and password to move it to your YOURS account and sync across devices.</p></div>' : ''}
         ${remindersCard()}
