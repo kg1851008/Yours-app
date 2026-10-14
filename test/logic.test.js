@@ -475,3 +475,37 @@ test('home training swaps every gym session for a home one, and back', () => {
     assert.ok(a && b && b.home && a.phase === b.phase, `${gym} -> ${home}`);
   }
 });
+
+test('bridal, arm sculpt and athlete programs are complete, and athlete training has no running', () => {
+  for (const id of ['bridal', 'arms', 'athlete']) {
+    const p = L.programById(id);
+    assert.ok(p, id);
+    const weeks = Math.max(...p.blocks.map((b) => b.to));
+    assert.deepEqual(p.blocks.map((b) => [b.from, b.to]).flat().filter((n, i, a) => i % 2 === 1 && a[i + 1] && a[i + 1] !== n + 1), [], `${id} blocks leave a gap`);
+    assert.equal(p.blocks[0].from, 1);
+    for (const b of p.blocks) for (const sid of b.sessions) assert.ok(L.workoutById(sid) && L.workoutById(sid).program === id, `${id}: ${sid}`);
+    assert.ok(weeks >= 6 && weeks <= 12);
+  }
+  const athlete = D.WORKOUTS.filter((w) => w.program === 'athlete').flatMap((w) => w.exercises.map((e) => e.name));
+  assert.ok(!athlete.some((n) => /\b(run|sprint|jog|treadmill|shuttle)/i.test(n)), 'no running in athlete program');
+});
+
+test('mat Pilates and yoga sessions: every phase covered, every move has a real guide, no gym kit', () => {
+  for (const style of ['pilates', 'yoga']) {
+    const list = D.WORKOUTS.filter((w) => w.style === style);
+    assert.deepEqual([...new Set(list.map((w) => w.phase))].sort(), ['follicular', 'luteal', 'menopause', 'menstrual', 'ovulation'], style);
+    for (const w of list) {
+      assert.ok(w.mat);
+      for (const ex of w.exercises) {
+        assert.notEqual(L.guideFor(ex.name).id, 'mobility', `${ex.name} falls back to the generic guide`);
+        assert.equal(L.equipmentOf(ex.name), 'Bodyweight', `${ex.name} needs equipment`);
+      }
+    }
+  }
+});
+
+test('Aldi is a grocery store with a working search link', () => {
+  const aldi = D.STORES.find((x) => x.id === 'aldi');
+  assert.ok(aldi);
+  assert.equal(L.storeLink(aldi, 'greek yogurt'), 'https://www.aldi.us/store/aldi/s?k=greek%20yogurt');
+});

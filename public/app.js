@@ -1451,10 +1451,11 @@
     postpartum: { program: 'postpartum', eyebrow: 'Strength training after baby', h1: 'Your body did something incredible. Now rebuild it, gently.', lead: 'A step-by-step return to lifting after birth: breath and pelvic floor first, then real strength. Sessions of 25 to 40 minutes, three times a week.', cta: 'Start my comeback', note: 'Start once your doctor or midwife has cleared you for exercise, usually at your 6-week check or later.' },
     menopause: { program: 'menopause', eyebrow: 'Perimenopause and menopause', h1: 'Your body is changing. Your strength doesn\'t have to fade.', lead: 'Heavy-for-you lifting for bone and muscle, a plan that follows your symptoms instead of a cycle, and protein targets that fit this stage.', cta: 'Get stronger through menopause' },
     beginner: { program: 'beginner', eyebrow: 'New to lifting? Start here', h1: 'The weights section doesn\'t have to feel scary.', lead: 'Learn the five basic lifts in 8 weeks, with simple cues for every move and the exact weight to pick up. No experience needed.', cta: 'Start my first program' },
+    bridal: { program: 'bridal', eyebrow: 'Bridal bootcamp', h1: 'Feel strong and confident on your wedding day.', lead: '12 weeks of strength training for your shoulders, back, arms and glutes, timed to your cycle, with a lighter final week so you feel fresh on the day.', cta: 'Start my bridal bootcamp' },
     home: { program: 'home', eyebrow: 'Strength training at home', h1: 'No gym? Get strong at home with just dumbbells.', lead: 'Cycle-synced home workouts with dumbbells, a band and a chair, plus an 8-week home program. The weight for every set, suggested for you.', cta: 'Start training at home' },
   };
   function landingAudience() {
-    const m = location.pathname.match(/^\/(postpartum|menopause|beginner|home)\/?$/);
+    const m = location.pathname.match(/^\/(postpartum|menopause|beginner|home|bridal)\/?$/);
     const q = new URLSearchParams(location.search).get('for');
     const a = (m && m[1]) || (AUDIENCES[q] ? q : null);
     if (a) store.set('yours.aud', a);
@@ -1546,9 +1547,9 @@ ${prog ? `
       </section>
 
       <section class="lp-wrap lp-sec">
-        <h2 class="lp-h2">8-week programs</h2>
+        <h2 class="lp-h2">Programs</h2>
         <div class="chips" style="margin-top:12px">${D.PROGRAMS.map((pr) => `<span class="chip">${esc(pr.name)}</span>`).join('')}</div>
-        <p class="small muted" style="margin-top:10px">From your first goblet squat to your first pull-up, a stronger glute build, training at home, after baby or through menopause.</p>
+        <p class="small muted" style="margin-top:10px">From your first goblet squat to your first pull-up: glutes, arms, a bridal bootcamp, athlete training, home workouts, after baby or through menopause. Plus mat Pilates and yoga sessions for every phase.</p>
       </section>
 
       ${D.TESTIMONIALS.length ? `<section class="lp-wrap lp-sec"><h2 class="lp-h2">From members</h2><div class="lp-quotes">${D.TESTIMONIALS.map((t) => `<figure class="lp-quote"><blockquote class="serif">“${esc(t.quote)}”</blockquote><figcaption class="small muted">${esc(t.name)}${t.detail ? ` · ${esc(t.detail)}` : ''}</figcaption></figure>`).join('')}</div></section>` : ''}
@@ -1973,8 +1974,8 @@ ${prog ? `
       ${myWorkoutsSection()}
       <button class="card lib-entry" data-action="open-library"><div class="row between"><div><div class="eyebrow">Exercise library</div><strong style="display:block;margin-top:4px">Every exercise, with form guides and your records</strong><div class="tiny muted" style="margin-top:4px">Muscles worked, how to do it, common mistakes, strength charts and history.</div></div>${icon('search', 22)}</div></button>
       <div class="section-title"><h2>Workout library</h2></div>
-      <div class="chips">${D.PHASE_ORDER.concat(['menopause']).map((p) => `<button class="chip ${lib === p ? 'selected' : ''}" data-action="lib-phase" data-phase="${p}"><span class="dot" style="background:var(--${p})"></span>${phaseName(p)}</button>`).join('')}<button class="chip ${lib === 'home' ? 'selected' : ''}" data-action="lib-phase" data-phase="home">${icon('home', 14)}At home</button></div>
-      <div class="h-scroll" style="margin-top:14px">${D.WORKOUTS.filter((w) => (lib === 'home' ? w.home : w.phase === lib && !w.home)).map((w) => `<button class="poster mini" data-action="view-workout" data-id="${w.id}">${backdrop(lib === 'home' ? (w.phase === 'any' ? 'steady' : w.phase) : lib)}<div class="p-row"><span>${w.minutes} min</span><span>${esc(w.intensity)}</span></div><div class="p-body"><div class="p-title">${esc(w.name)}</div><div class="p-cap" style="letter-spacing:.2em">${esc(w.focus)}</div></div></button>`).join('')}</div>
+      <div class="chips">${D.PHASE_ORDER.concat(['menopause']).map((p) => `<button class="chip ${lib === p ? 'selected' : ''}" data-action="lib-phase" data-phase="${p}"><span class="dot" style="background:var(--${p})"></span>${phaseName(p)}</button>`).join('')}<button class="chip ${lib === 'home' ? 'selected' : ''}" data-action="lib-phase" data-phase="home">${icon('home', 14)}At home</button><button class="chip ${lib === 'pilates' ? 'selected' : ''}" data-action="lib-phase" data-phase="pilates">Mat Pilates</button><button class="chip ${lib === 'yoga' ? 'selected' : ''}" data-action="lib-phase" data-phase="yoga">Yoga</button></div>
+      <div class="h-scroll" style="margin-top:14px">${D.WORKOUTS.filter((w) => (lib === 'home' ? w.home : lib === 'pilates' || lib === 'yoga' ? w.style === lib : w.phase === lib && !w.home && !w.style)).map((w) => `<button class="poster mini" data-action="view-workout" data-id="${w.id}">${backdrop(lib === 'home' || w.style ? (w.phase === 'any' ? 'steady' : w.phase) : lib)}<div class="p-row"><span>${w.minutes} min</span><span>${esc(w.intensity)}</span></div><div class="p-body"><div class="p-title">${esc(w.name)}</div><div class="p-cap" style="letter-spacing:.2em">${esc(w.focus)}</div></div></button>`).join('')}</div>
     </div>`;
   }
 
@@ -2191,7 +2192,7 @@ ${prog ? `
     const maxDay = Math.max(1, ...d.days.map((x) => x.app_open));
     const bars = d.days.map((x, i) => `<rect x="${i * 10 + 1}" y="${60 - (x.app_open / maxDay) * 56}" width="8" height="${Math.max(1, (x.app_open / maxDay) * 56)}" rx="2" fill="var(--accent)"><title>${x.day}: ${x.app_open} opens, ${x.workout_done} workouts</title></rect>`).join('');
     const mem = d.members;
-    const engagement = ['workout_done', 'weekly_checkin', 'program_start', 'library_open', 'exercise_view', 'workout_created', 'home_mode', 'measurement_logged', 'lp_postpartum', 'start_postpartum', 'lp_menopause', 'start_menopause', 'lp_beginner', 'start_beginner', 'lp_home', 'start_home', 'exercise_swap', 'photo_compare', 'badge_earned', 'share_card', 'install_done', 'invite_shared', 'invite_opened', 'invite_claimed', 'membership_canceled'].filter((k) => ev[k]);
+    const engagement = ['workout_done', 'weekly_checkin', 'program_start', 'library_open', 'exercise_view', 'workout_created', 'home_mode', 'measurement_logged', 'lp_postpartum', 'start_postpartum', 'lp_menopause', 'start_menopause', 'lp_beginner', 'start_beginner', 'lp_home', 'start_home', 'lp_bridal', 'start_bridal', 'exercise_swap', 'photo_compare', 'badge_earned', 'share_card', 'install_done', 'invite_shared', 'invite_opened', 'invite_claimed', 'membership_canceled'].filter((k) => ev[k]);
     return `<div class="stats">${statTile('Paying', n(mem.active), '')}${statTile('In trial', n(mem.trialing), '')}</div>
       <p class="tiny muted" style="margin-top:8px">${n(mem.yearly)} yearly · ${n(mem.monthly)} monthly · ${n(mem.cancelling)} set to cancel · ${n(mem.pastDue)} card failing · ${n(mem.ended)} ended${mem.comp ? ` · ${n(mem.comp)} complimentary` : ''}</p>
       <div class="card" style="margin-top:14px"><div class="eyebrow">Funnel · last 30 days</div>${funnel}<p class="tiny muted" style="margin-top:10px">Percentages compare each step with the one above. Views count once per device per day.</p></div>
@@ -2288,7 +2289,7 @@ ${prog ? `
       <div class="eyebrow" style="margin-top:22px">${ended && !trial ? 'Welcome back' : 'Your plan is ready'}</div>
       <h1 style="margin-top:6px">${trial ? `${trialDays()} days free.<br>Then it's yours.` : 'Pick up where<br>you left off.'}</h1>
       ${trial && inviteBonusDays() ? `<p class="tag accent" style="margin-top:10px;gap:6px">${icon('gift', 14)} Friend's invite: 2 extra weeks free</p>` : ''}
-      <ul class="phase-list" style="margin-top:16px"><li>Training, meals and steps that change with your cycle</li><li>Suggested weights for every lift and an AI coach</li><li>Food diary with barcode, photo and voice logging</li><li>8-week programs, progress check-ins and the community</li></ul>
+      <ul class="phase-list" style="margin-top:16px"><li>Training, meals and steps that change with your cycle</li><li>Suggested weights for every lift and ${S.aiCoach ? 'an AI coach' : 'a coach in your pocket'}</li><li>Food diary with barcode${S.ai ? ', photo' : ''} and voice logging</li><li>Programs, Pilates, yoga, progress check-ins and the community</li></ul>
       ${t ? `<p class="small muted" style="margin-top:10px">Your targets: ${t.kcal.toLocaleString()} ${calWord()}, ${t.protein} g protein, ${t.steps.toLocaleString()} steps.</p>` : ''}
       ${option('yearly', 'Yearly', y, save > 0 ? `Save ${save}%` : '')}
       ${option('monthly', 'Monthly', m, '')}
@@ -2531,7 +2532,7 @@ ${prog ? `
       <button class="btn cream sm" style="margin-top:14px" data-action="open-library">${icon('workouts', 16)} My lifts and records</button></div>`;
   }
 
-  // ---------- 8-week programs ----------
+  // ---------- programs (6 to 12 weeks) ----------
   function recommendedPrograms() {
     const p = S.data.profile;
     const rec = [];
@@ -2567,8 +2568,8 @@ ${prog ? `
     const rec = recommendedPrograms();
     const rank = (id) => (rec.includes(id) ? rec.indexOf(id) : rec.length);
     const list = D.PROGRAMS.slice().sort((a, b) => rank(a.id) - rank(b.id));
-    return `<div class="section-title"><h2>8-week programs</h2></div>
-      <div class="h-scroll">${list.map((pr) => `<button class="poster mini" style="text-align:left" data-action="open-program" data-id="${pr.id}">${backdrop({ menopause: 'menopause', postpartum: 'menstrual', pullup: 'follicular', beginner: 'steady', home: 'luteal' }[pr.id] || 'ovulation')}<div class="p-row"><span>${esc(pr.kicker)}</span><span>${rec.includes(pr.id) ? 'For you' : `${pr.perWeek}x / week`}</span></div><div class="p-body"><div class="p-title" style="${Math.max(...pr.name.split(' ').map((w) => w.length)) >= 9 ? 'font-size:27px' : ''}">${esc(pr.name)}</div></div></button>`).join('')}</div>`;
+    return `<div class="section-title"><h2>Programs</h2></div>
+      <div class="h-scroll">${list.map((pr) => `<button class="poster mini" style="text-align:left" data-action="open-program" data-id="${pr.id}">${backdrop({ menopause: 'menopause', postpartum: 'menstrual', pullup: 'follicular', beginner: 'steady', home: 'luteal', bridal: 'menstrual', arms: 'follicular', athlete: 'luteal' }[pr.id] || 'ovulation')}<div class="p-row"><span>${esc(pr.kicker)}</span><span>${rec.includes(pr.id) ? 'For you' : `${pr.perWeek}x / week`}</span></div><div class="p-body"><div class="p-title" style="${Math.max(...pr.name.split(' ').map((w) => w.length)) >= 9 ? 'font-size:27px' : ''}">${esc(pr.name)}</div></div></button>`).join('')}</div>`;
   }
   function programSheet(m) {
     const pr = D.PROGRAMS.find((x) => x.id === m.id);
@@ -3458,7 +3459,7 @@ ${prog ? `
     if (m.type === 'swap') {
       const c = cyc();
       const home = (m.where || (atHome() ? 'home' : 'gym')) === 'home';
-      const list = D.WORKOUTS.filter((w) => (w.phase === 'program' ? !!(S.data.program && w.program === S.data.program.id) : (c.steady || w.phase === c.phase || w.phase === 'any') && (w.id === 'rest' || !!w.home === home))).concat(L.setCustomWorkouts(S.data.customWorkouts));
+      const list = D.WORKOUTS.filter((w) => (w.phase === 'program' ? !!(S.data.program && w.program === S.data.program.id) : (c.steady || w.phase === c.phase || w.phase === 'any') && (w.id === 'rest' || w.mat || !!w.home === home))).concat(L.setCustomWorkouts(S.data.customWorkouts));
       return sheet('Choose today\'s workout', `<div class="segment" style="margin-bottom:12px" role="group" aria-label="Show workouts for">${[['gym', 'Gym'], ['home', 'At home']].map(([v, l]) => `<button class="${(home ? 'home' : 'gym') === v ? 'active' : ''}" data-action="swap-where" data-value="${v}" aria-pressed="${(home ? 'home' : 'gym') === v}">${l}</button>`).join('')}</div><p class="small muted" style="margin-bottom:14px">${c.steady ? 'Any session works in steady mode.' : `Options that suit your ${phaseName(c.phase).toLowerCase()} phase.`}</p><div class="options">${list.map((w) => `<button class="option ${todaysWorkout().id === w.id ? 'selected' : ''}" data-action="set-today" data-id="${w.id}"><strong>${esc(w.name)}</strong><span>${w.minutes} min · ${esc(w.intensity)} · ${esc(w.focus)}</span></button>`).join('')}</div>
         <button class="btn ghost block" style="margin-top:12px" data-action="reset-today">Use the recommended plan</button>`);
     }

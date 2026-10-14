@@ -2,7 +2,7 @@
   "buildCommand": "",
   "outputDirectory": "public",
   "rewrites": [
-    { "source": "/:aud(postpartum|menopause|beginner|home)", "destination": "/index.html" }
+    { "source": "/:aud(postpartum|menopause|beginner|home|bridal)", "destination": "/index.html" }
   ],
   "headers": [
     {
