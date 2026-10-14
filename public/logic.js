@@ -970,12 +970,12 @@
   // What a lift needs, from its name. Used to label swap options ("machine taken? swap it").
   function equipmentOf(name) {
     const n = String(name || '').toLowerCase();
-    if (/^bodyweight|single-leg hip thrust|single-leg glute bridge/.test(n)) return 'Bodyweight';
+    if (/^bodyweight|single-leg hip thrust|single-leg glute bridge|\bpose\b|crescent lunge/.test(n)) return 'Bodyweight'; // yoga lunges are mat work
     if (/machine|leg press|hack squat|pec deck|leg curl|hip abduction|seated calf|smith/.test(n)) return 'Machine';
     if (/cable|pulldown|pushdown|face pull(?!.*band)|pull-through|seated cable/.test(n) && !/band/.test(n)) return 'Cable';
     if (/band/.test(n)) return 'Band';
     if (/dumbbell|goblet|kettlebell|farmer|suitcase|arnold|renegade|thruster|hammer curl|step-up|lunge|split squat/.test(n)) return 'Dumbbell';
-    if (/barbell|back squat|front-loaded|trap bar|sumo deadlift|^romanian|deficit romanian|overhead press|push press|hip thrust|box squat/.test(n)) return 'Barbell';
+    if (/barbell|back squat|front-loaded|trap bar|sumo deadlift|^romanian|deficit romanian|overhead press|push press|hip thrust|box squat|landmine/.test(n)) return 'Barbell';
     return 'Bodyweight';
   }
   // Other exercises that train the same movement, closest group first. Excludes ones already in today's session.
