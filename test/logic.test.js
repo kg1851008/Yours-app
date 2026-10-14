@@ -509,3 +509,66 @@ test('Aldi is a grocery store with a working search link', () => {
   assert.ok(aldi);
   assert.equal(L.storeLink(aldi, 'greek yogurt'), 'https://www.aldi.us/store/aldi/s?k=greek%20yogurt');
 });
+
+test('running: paces, treadmill speeds and parsing round-trip in both units', () => {
+  const easy = L.parsePace('10:30', 'imperial');
+  assert.equal(L.fmtPace(easy, 'imperial'), '10:30 /mi');
+  assert.equal(L.treadmillSpeed(easy, 'imperial'), '5.7 mph');
+  assert.equal(L.fmtPace(L.parsePace('6:00', 'metric'), 'metric'), '6:00 /km');
+  assert.equal(L.treadmillSpeed(L.parsePace('6:00', 'metric'), 'metric'), '10.0 km/h');
+  assert.equal(L.fmtPace(L.parseSpeed('6.0', 'imperial'), 'imperial'), '10:00 /mi');
+  assert.equal(L.parsePace('99:00', 'metric'), null); // not a running pace
+  assert.equal(L.parsePace('abc', 'metric'), null);
+  // Faster zones are faster than easy, in order
+  const z = ['jog', 'easy', 'tempo', 'interval', 'strides'].map((k) => L.paceFor(easy, k));
+  assert.deepEqual(z.slice().sort((a, b) => b - a), z);
+});
+
+test('running: plans are complete, sessions have targets, and period week trims fast reps', () => {
+  for (const p of D.RUN_PLANS) {
+    assert.equal(p.weeks.length, { c25k: 9, c10k: 8, speed: 6 }[p.id]);
+    for (const w of p.weeks) { assert.equal(w.length, p.perWeek); for (const sess of w) assert.ok(L.runTargets(sess, 391, 'imperial').minutes >= 15, `${p.id}: ${sess.title}`); }
+  }
+  const speed1 = D.RUN_PLANS.find((p) => p.id === 'speed').weeks[0][0];
+  const full = L.runTargets(speed1, 391, 'imperial', L.runPhaseAdjust('follicular', 'intervals'));
+  const period = L.runTargets(speed1, 391, 'imperial', L.runPhaseAdjust('menstrual', 'intervals'));
+  assert.equal(full.blocks[1].reps, 8);
+  assert.equal(period.blocks[1].reps, 5);
+  assert.ok(period.blocks[1].on.pace > full.blocks[1].on.pace, 'period week paces are a little easier');
+  // Easy runs are never trimmed, and steady modes get no phase changes
+  assert.deepEqual(L.runPhaseAdjust('menstrual', 'easy').reps, 1);
+  assert.deepEqual(L.runPhaseAdjust('luteal', 'intervals', true), { reps: 1, pace: 1, note: '' });
+  // No GPS needed: every block is minutes or a set distance
+  for (const p of D.RUN_PLANS) for (const w of p.weeks) for (const sess of w) for (const b of sess.blocks) assert.ok(b.min || b.km || b.reps);
+});
+
+test('running: progressive overload moves her pace only for good reasons, and in small steps', () => {
+  const easy = 391;
+  const faster = L.nextRunPace(easy, { zone: 'interval', kind: 'intervals', pace: L.paceFor(easy, 'interval') * 0.95, rpe: 7, completed: true });
+  assert.equal(faster.change, 'faster');
+  assert.ok(faster.pace >= easy * 0.985 - 0.001, 'capped at 1.5% per run');
+  assert.equal(L.nextRunPace(easy, { zone: 'interval', kind: 'intervals', pace: L.paceFor(easy, 'interval') * 0.95, rpe: 10, completed: true }).change, 'same', 'too hard: no change');
+  assert.equal(L.nextRunPace(easy, { zone: 'easy', kind: 'easy', pace: easy * 1.1, rpe: 9, completed: false }).change, 'easier');
+  assert.equal(L.nextRunPace(null, { zone: 'easy', kind: 'easy', pace: 400 }).change, 'set');
+  assert.equal(L.nextRunPace(easy, { zone: 'easy', kind: 'easy' }).change, 'same', 'no pace logged');
+});
+
+test('running: plan days run in order and a missed run is not skipped', () => {
+  const data = { profile: {}, workouts: [], runPlan: { id: 'c25k', start: k(-10), days: [0, 1, 2, 3, 4, 5, 6] } };
+  let d = L.runPlanDay(data, T);
+  assert.equal(d.sessionNumber, 1); assert.equal(d.week, 1); assert.equal(d.total, 27); assert.ok(d.scheduled);
+  data.workouts = [k(-9), k(-7), k(-5), k(-3)].map((date) => ({ date, run: { plan: 'c25k' } }));
+  d = L.runPlanDay(data, T);
+  assert.equal(d.sessionNumber, 5); assert.equal(d.week, 2);
+  data.workouts.push({ date: k(0), run: { plan: 'c25k' } });
+  d = L.runPlanDay(data, T);
+  assert.ok(d.doneToday); assert.equal(d.done, 5);
+  assert.equal(L.runPlanDay({ runPlan: { id: 'nope' } }, T), null);
+});
+
+test('running: run days use the same numbering as program days (Sunday = 0)', () => {
+  const data = { workouts: [], runPlan: { id: 'c25k', start: k(-1), days: [T.getDay()] } };
+  assert.equal(L.runPlanDay(data, T).scheduled, true);
+  data.runPlan.days = [(T.getDay() + 1) % 7];
+  assert.equal(L.runPlanDay(data, T).scheduled, false);
+});

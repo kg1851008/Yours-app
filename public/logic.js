@@ -966,6 +966,105 @@
     const dates = (data.workouts || []).map((w) => w.date).sort();
     return !last && dates.length > 0 && daysBetween(parseKey(dates[0]), now) >= 7;
   }
+  // ---------- running (optional) ----------
+  // Paces are stored as seconds per km. Her easy pace (profile.runPace) drives every zone; treadmill speed is the same
+  // pace as a belt speed. Outside, set the treadmill to 1% incline to match the effort.
+  const KM_PER_MI = 1.609344;
+  const runPlanById = (id) => (D.RUN_PLANS || []).find((p) => p.id === id);
+  const paceFor = (easySec, zone, factor) => {
+    const z = (D.RUN_ZONES || {})[zone];
+    return easySec && z && z.mult ? easySec * z.mult * (factor || 1) : null; // unrounded: rounding happens only for display
+  };
+  function fmtPace(secPerKm, units) {
+    if (!secPerKm) return '';
+    const sec = Math.round(units === 'metric' ? secPerKm : secPerKm * KM_PER_MI);
+    return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')} /${units === 'metric' ? 'km' : 'mi'}`;
+  }
+  function treadmillSpeed(secPerKm, units) {
+    if (!secPerKm) return '';
+    const kmh = 3600 / secPerKm;
+    return units === 'metric' ? `${(Math.round(kmh * 10) / 10).toFixed(1)} km/h` : `${(Math.round((kmh / KM_PER_MI) * 10) / 10).toFixed(1)} mph`;
+  }
+  // "10:30" per mile or km -> seconds per km. Accepts 4:00-20:00 per km (6:26-32:11 per mile).
+  function parsePace(text, units) {
+    const m = /^\s*(\d{1,2})\s*[:.]\s*(\d{1,2})\s*$/.exec(String(text || ''));
+    if (!m || Number(m[2]) > 59) return null;
+    const sec = Number(m[1]) * 60 + Number(m[2]);
+    const perKm = units === 'metric' ? sec : sec / KM_PER_MI;
+    return perKm >= 180 && perKm <= 1200 ? perKm : null;
+  }
+  // Treadmill speed (mph or km/h) -> seconds per km.
+  function parseSpeed(text, units) {
+    const v = Number(String(text || '').replace(',', '.'));
+    if (!(v > 0)) return null;
+    const kmh = units === 'metric' ? v : v * KM_PER_MI;
+    const perKm = 3600 / kmh;
+    return perKm >= 180 && perKm <= 1200 ? perKm : null;
+  }
+  // Cycle-aware adjustments. Many women find hard efforts feel harder on heavy period days and late in the cycle,
+  // when body temperature is higher; she can always ignore the nudge.
+  function runPhaseAdjust(phase, kind, steady) {
+    const hard = ['intervals', 'tempo', 'strides'].includes(kind);
+    if (steady || !phase) return { reps: 1, pace: 1, note: '' };
+    if (phase === 'menstrual') return hard ? { reps: 2 / 3, pace: 1.03, note: 'Period week: one third fewer fast reps and slightly easier paces. Swap for an easy run or a walk if cramps say so.' } : { reps: 1, pace: 1, note: 'Period week: keep it easy. A walk counts if you need it.' };
+    if (phase === 'luteal') return { reps: 1, pace: hard ? 1.02 : 1, note: 'Late cycle: a higher body temperature can make the same pace feel harder. Hold the pace or ease off a little, and drink more.' };
+    return { reps: 1, pace: 1, note: hard ? 'Your strongest phase: a great time to push the fast reps.' : '' };
+  }
+  // Turns a planned session into concrete targets for her: paces, treadmill speeds, rep counts and total minutes.
+  function runTargets(session, easySec, units, adj) {
+    const a = adj || { reps: 1, pace: 1 };
+    const seg = (b) => {
+      const zone = b.do === 'walk' ? 'walk' : b.zone;
+      const pace = zone === 'walk' ? null : paceFor(easySec, zone, a.pace);
+      const Z = (D.RUN_ZONES || {})[zone] || {};
+      return { do: b.do, zone, label: Z.label || zone, cue: Z.cue || '', min: b.min, km: b.km, pace, paceText: fmtPace(pace, units), speedText: treadmillSpeed(pace, units) };
+    };
+    let minutes = 0;
+    const blocks = session.blocks.map((b) => {
+      if (b.reps) {
+        const reps = Math.max(2, Math.round(b.reps * (b.on.zone === 'easy' ? 1 : a.reps)));
+        minutes += reps * (b.on.min + b.off.min);
+        return { reps, on: seg({ do: 'run', ...b.on }), off: seg({ do: b.off.do === 'jog' ? 'run' : 'walk', zone: 'jog', min: b.off.min }) };
+      }
+      const s2 = seg(b);
+      minutes += b.min || (b.km && s2.pace ? (b.km * s2.pace) / 60 : b.km ? b.km * 7 : 0);
+      return s2;
+    });
+    return { title: session.title, kind: session.kind, blocks, minutes: Math.round(minutes) };
+  }
+  // Where she is in her run plan. Sessions run in order (a missed run is not skipped), on the weekdays she picked.
+  function runPlanDay(data, date) {
+    const rp = data && data.runPlan;
+    const plan = rp && runPlanById(rp.id);
+    if (!plan) return null;
+    const flat = plan.weeks.flatMap((w, wi) => w.map((sess, si) => ({ ...sess, week: wi + 1, index: si })));
+    const key = dateKey(date || today());
+    const mine = (data.workouts || []).filter((w) => w.run && w.run.plan === plan.id && w.date >= rp.start);
+    const before = mine.filter((w) => w.date < key).length;
+    const doneToday = mine.some((w) => w.date === key);
+    const done = mine.length;
+    const complete = done >= flat.length;
+    const next = flat[Math.min(complete ? flat.length - 1 : doneToday ? done - 1 : before, flat.length - 1)];
+    const scheduled = (rp.days || []).includes((date || today()).getDay()); // Sunday = 0, like program days
+    return { plan, total: flat.length, done, complete, doneToday, scheduled, week: next.week, weeks: plan.weeks.length, session: next, sessionNumber: Math.min(done + (doneToday ? 0 : 1), flat.length) };
+  }
+  // Progressive overload: after each run her easy pace (which sets every zone) moves toward what she actually ran.
+  // Faster only when she completed the session at a sensible effort; slower only when it clearly went badly.
+  function nextRunPace(prevSec, entry) {
+    const z = (D.RUN_ZONES || {})[entry && entry.zone];
+    const implied = entry && entry.pace && z && z.mult ? entry.pace / z.mult : null;
+    if (!implied) return { pace: prevSec || null, change: 'same' };
+    if (!prevSec) return { pace: implied, change: 'set' };
+    const hard = ['intervals', 'tempo', 'strides', 'test'].includes(entry.kind);
+    const okEffort = entry.rpe ? entry.rpe <= (hard ? 8 : 6) : true;
+    if (entry.completed !== false && okEffort && implied < prevSec) {
+      const step = Math.min((prevSec - implied) * 0.5, prevSec * 0.015);
+      return { pace: prevSec - step, change: step >= 1 ? 'faster' : 'same' };
+    }
+    if (entry.completed === false && entry.rpe >= 9) return { pace: prevSec * 1.01, change: 'easier' };
+    return { pace: prevSec, change: 'same' };
+  }
+
   // ---------- exercise swaps ----------
   // What a lift needs, from its name. Used to label swap options ("machine taken? swap it").
   function equipmentOf(name) {
@@ -997,7 +1096,7 @@
     workoutById, plannedWorkout, workoutFor, programById, programDay, programProgress, adjustSets, parseReps, e1rm, suggestLoad, detectPRs, strengthByPhase, exerciseHistory,
     mealOptions, mealFor, proteinFor, aisleFor, storeLink, buildTotals, macrosFor, parseOFF, foodMacros, validBarcode, recipeTotals, recipeFood, groceryList, parseFoodText, usualRequest, usualMeal, cleanEstimates, estimateFood, parseRest, isBarbell, platesFor, defaultBar, BARS, streak, weeklyStats, weeklyAdjust, applyAdjustments, weeklyDue,
     equipmentOf, swapOptions, BADGES, badges, newBadges, guideFor, allExercises, liftStats,
-    setCustomWorkouts, customToWorkout, trainsAtHome, warmupSets, MEASURE_SITES, measurementSummary, measurementPhaseNote, STRENGTH_LEVELS, STRENGTH_STANDARDS, strengthStandard, strengthLevel, toKg, fromKg,
+    setCustomWorkouts, customToWorkout, trainsAtHome, runPlanById, paceFor, fmtPace, treadmillSpeed, parsePace, parseSpeed, runPhaseAdjust, runTargets, runPlanDay, nextRunPace, warmupSets, MEASURE_SITES, measurementSummary, measurementPhaseNote, STRENGTH_LEVELS, STRENGTH_STANDARDS, strengthStandard, strengthLevel, toKg, fromKg,
   };
   if (typeof window !== 'undefined') window.YOURS_LOGIC = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
