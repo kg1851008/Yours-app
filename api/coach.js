@@ -1,13 +1,16 @@
 // YOURS AI coach endpoint (Vercel serverless function; also mounted by server.js locally).
-// GET  -> { ai: boolean } so the app knows whether the live coach is available.
+// GET  -> { ai, coach } so the app knows what is live: ai = food estimates and photo reviews; coach = live chat.
+// Live chat is off unless AI_COACH=on (it costs the most per use); the on-device coach answers instead.
+// Daily limits per member keep the AI bill predictable (AI_FOOD_DAILY, AI_CHAT_DAILY, AI_REVIEW_DAILY).
 // POST -> { mode: "chat" | "progress", context, messages?, images? } -> { text, verdict? }
 // POST -> { mode: "food", image? | text, units, myFoods? } -> { items: [...], slot, note }  (plate photo or talk-to-log)
 // Photos are only held in memory for the duration of the request and are never stored.
 
 const Anthropic = require('@anthropic-ai/sdk');
-const { memberGate } = require('../lib/billing');
+const B = require('../lib/billing');
 
-const MODEL = process.env.ANTHROPIC_MODEL || 'claude-opus-5-5';
+// Sonnet keeps costs down for photo estimates; set ANTHROPIC_MODEL=claude-opus-5-5 for the most capable model.
+const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5-5';
 const MAX_IMAGES = 6;
 const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 const ALLOWED_MEDIA = ['image/jpeg', 'image/png', 'image/webp'];
@@ -141,6 +144,26 @@ function getClient() {
 function aiConfigured() {
   return Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
 }
+const coachLive = () => aiConfigured() && String(process.env.AI_COACH || '').toLowerCase() === 'on';
+
+const LIMITS = {
+  food: { env: 'AI_FOOD_DAILY', def: 20, msg: (n) => `You have used today's ${n} food estimates. Describe it with a saved food, scan a barcode, or try again tomorrow.` },
+  chat: { env: 'AI_CHAT_DAILY', def: 30, msg: (n) => `You have sent today's ${n} coach messages. Your coach will be back tomorrow.` },
+  progress: { env: 'AI_REVIEW_DAILY', def: 3, msg: (n) => `You have used today's ${n} photo reviews. Try again tomorrow.` },
+};
+const limitOf = (kind) => Math.max(1, Number(process.env[LIMITS[kind].env]) || LIMITS[kind].def);
+// Counts this request against her daily allowance (UTC day). Returns an error message once she is over it.
+// If the counter cannot be reached, the request goes through: a database hiccup should not break logging.
+async function overDailyLimit(user, kind) {
+  if (!user || !B.supabaseConfigured()) return null;
+  try {
+    const n = await B.sbRest('rpc/ai_bump', { method: 'POST', body: { p_user: user.id, p_day: new Date().toISOString().slice(0, 10), p_kind: kind } });
+    return Number(n) > limitOf(kind) ? LIMITS[kind].msg(limitOf(kind)) : null;
+  } catch (e) {
+    console.error('ai usage', e && e.message);
+    return null;
+  }
+}
 
 function parseImage(dataUrl) {
   if (typeof dataUrl !== 'string') return null;
@@ -204,7 +227,7 @@ async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
 
   if (req.method === 'GET') {
-    return res.status(200).json({ ai: aiConfigured() });
+    return res.status(200).json({ ai: aiConfigured(), coach: coachLive() });
   }
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'GET, POST');
@@ -214,8 +237,8 @@ async function handler(req, res) {
     return res.status(503).json({ error: 'AI coach is not configured' });
   }
   // Only signed-in members (with access, when payments are on) can spend the AI budget.
-  const denied = await memberGate(req);
-  if (denied) return res.status(denied.status).json({ error: denied.error });
+  const access = await B.memberAccess(req);
+  if (access.status) return res.status(access.status).json({ error: access.error });
 
   let body;
   try {
@@ -223,6 +246,10 @@ async function handler(req, res) {
   } catch {
     return res.status(400).json({ error: 'Invalid JSON' });
   }
+  const kind = body.mode === 'food' ? 'food' : body.mode === 'progress' ? 'progress' : 'chat';
+  if (kind === 'chat' && !coachLive()) return res.status(503).json({ error: 'Live coach chat is off', coach: false });
+  const over = await overDailyLimit(access.user, kind);
+  if (over) return res.status(429).json({ error: over, limit: true });
 
   const context = JSON.stringify(body.context || {}).slice(0, 12000);
 

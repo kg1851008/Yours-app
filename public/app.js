@@ -379,7 +379,8 @@
       const r = await fetch('/api/coach', { method: 'GET' });
       const j = await r.json();
       S.ai = !!j.ai;
-    } catch { S.ai = false; }
+      S.aiCoach = !!j.coach; // live chat can be off while food photos stay on
+    } catch { S.ai = false; S.aiCoach = false; }
     render();
   }
 
@@ -553,7 +554,7 @@
     render();
     scrollChat();
     let reply = null;
-    if (S.ai) {
+    if (S.aiCoach) {
       try {
         const r = await fetch('/api/coach', {
           method: 'POST',
@@ -561,6 +562,7 @@
           body: JSON.stringify({ mode: 'chat', context: buildContext(), messages: S.data.chat.slice(-20).map((m) => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.content })) }),
         });
         if (r.ok) reply = (await r.json()).text;
+        else if (r.status === 429) reply = `${(await r.json()).error} Until then, I can still answer common questions.`;
       } catch { /* fall back */ }
     } else {
       await new Promise((res) => setTimeout(res, 650));
@@ -799,7 +801,7 @@
       if (S.modal && S.modal.type === 'weeklyResult') { S.modal.loading = false; render(); }
       return;
     }
-    try {
+    if (S.aiCoach) try {
       const r = await fetch('/api/coach', {
         method: 'POST',
         headers: await coachHeaders(),
@@ -1142,6 +1144,7 @@
   async function aiEstimate(payload) {
     const r = await fetch('/api/coach', { method: 'POST', headers: await coachHeaders(), body: JSON.stringify({ mode: 'food', units: S.data.profile.units === 'metric' ? 'metric' : 'imperial', myFoods: myFoodHints(), ...payload }) });
     if (r.status === 401 || r.status === 402) throw Object.assign(new Error('members only'), { members: true });
+    if (r.status === 429) throw Object.assign(new Error((await r.json().catch(() => ({}))).error || 'Daily limit reached'), { limit: true });
     if (!r.ok) throw new Error('estimate failed');
     return r.json();
   }
@@ -1160,7 +1163,7 @@
       S.modal.note = j.note || '';
       if (j.slot) S.modal.slot = j.slot;
     } catch (e) {
-      if (S.modal && S.modal.type === 'estimate') S.modal.error = e && e.members ? 'Plate photos are for members. Sign in, or describe it instead.' : 'Could not reach the coach. Check your connection, or describe it instead.';
+      if (S.modal && S.modal.type === 'estimate') S.modal.error = e && e.limit ? e.message : e && e.members ? 'Plate photos are for members. Sign in, or describe it instead.' : 'Could not reach the coach. Check your connection, or describe it instead.';
     }
     if (S.modal && S.modal.type === 'estimate') { S.modal.loading = false; render(); }
   }
@@ -1188,7 +1191,8 @@
     const local = L.parseFoodText(text, talkFoods());
     if (local.slot) S.modal.slot = local.slot;
     let done = false;
-    if (S.ai) {
+    // The free on-device parser goes first; the AI is only asked when it could not match everything.
+    if (S.ai && (!local.items.length || local.unknown.length)) {
       try {
         const j = await aiEstimate({ text });
         if (!S.modal || S.modal.type !== 'estimate' || S.modal.said !== text) return;
@@ -1480,11 +1484,11 @@
     const features = [
       ['workouts', 'Every weight, suggested', 'YOURS tells you what to lift for every set, lighter on period days and low-energy days, heavier when you are ready.'],
       ['calendar', 'Plans for every life stage', 'Natural cycle, the pill, PCOS, perimenopause, menopause and after baby. No regular cycle needed.'],
-      ['meals', 'Food in seconds', 'Snap your plate, say what you ate or scan a barcode. Calories and protein set for your phase.'],
+      ['meals', 'Food in seconds', `${S.ai ? 'Snap your plate, say' : 'Say'} what you ate or scan a barcode. Calories and protein set for your phase.`],
       ['list', 'A weekly check-in', 'Photos, weigh-in and three questions. Next week\'s training, steps and calories adjust to you.'],
       ['image', 'Before and after', 'A private photo vault, locked with your PIN, with a slider to see the change.'],
       ['trend', 'Strength by phase', 'See how your cycle affects your lifts, with badges and personal records along the way.'],
-      ['advisor', 'A coach in your pocket', 'Ask anything about training, food or recovery and get answers built around your data.'],
+      ['advisor', 'A coach in your pocket', S.aiCoach ? 'Ask anything about training, food or recovery and get answers built around your data.' : 'Ask what to lift today, what helps with cramps or what to eat this phase, and get answers built around your plan.'],
       ['community', 'Women who lift', 'Share wins, ask questions and message other members.'],
     ];
     const faqs = [
@@ -1527,7 +1531,7 @@ ${prog ? `
 
       <section class="lp-sec">
         <h2 class="lp-h2 lp-wrap">See it in action</h2>
-        <div class="lp-screens" tabindex="0" role="region" aria-label="App screenshots, scroll sideways">${[['workout', 'The weight for every set', 'Workout logger with a suggested 175 lb x 9 on hip thrusts'], ['meals', 'Snap, say or scan your food', 'Food diary with calories and protein remaining'], ['insights', 'Your strength by phase', 'Chart showing strength is highest in the ovulation phase']].map(([img, cap, alt]) => `<figure>${phone(img, alt)}<figcaption class="small">${esc(cap)}</figcaption></figure>`).join('')}</div>
+        <div class="lp-screens" tabindex="0" role="region" aria-label="App screenshots, scroll sideways">${[['workout', 'The weight for every set', 'Workout logger with a suggested 175 lb x 9 on hip thrusts'], ['meals', S.ai ? 'Snap, say or scan your food' : 'Say or scan your food', 'Food diary with calories and protein remaining'], ['insights', 'Your strength by phase', 'Chart showing strength is highest in the ovulation phase']].map(([img, cap, alt]) => `<figure>${phone(img, alt)}<figcaption class="small">${esc(cap)}</figcaption></figure>`).join('')}</div>
         <p class="tiny muted lp-wrap" style="margin-top:8px">Screens from the YOURS demo account.</p>
       </section>
 
@@ -2785,7 +2789,7 @@ ${prog ? `
         <div class="big-number" style="font-size:56px;margin-top:6px">${Math.abs(remaining).toLocaleString()}<span class="eyebrow" style="font-size:11px;margin-left:6px">${calU()}</span></div>
         <div class="tiny" style="font-family:var(--mono);letter-spacing:.06em;margin-top:6px">${t.kcal.toLocaleString()} goal − ${m.kcal.toLocaleString()} food = ${remaining.toLocaleString()}</div>
         ${line('Protein', m.protein, t.protein, 'var(--accent)')}${line('Carbs', m.carbs, t.carbs, 'var(--follicular)')}${line('Fat', m.fat, t.fat, 'var(--luteal)')}
-        <div class="row" style="margin-top:16px"><label class="btn primary grow" style="cursor:pointer">${icon('camera', 18)} Snap plate<input type="file" accept="image/*" capture="environment" data-plate-photo hidden></label><button class="btn soft grow" data-action="open-talk">${icon('mic', 18)} Say it</button></div>
+        <div class="row" style="margin-top:16px">${S.ai ? `<label class="btn primary grow" style="cursor:pointer">${icon('camera', 18)} Snap plate<input type="file" accept="image/*" capture="environment" data-plate-photo hidden></label><button class="btn soft grow" data-action="open-talk">${icon('mic', 18)} Say it</button>` : `<button class="btn primary grow" data-action="open-talk">${icon('mic', 18)} Say it</button>`}</div>
         <div class="row" style="margin-top:8px"><button class="btn ghost grow" data-action="open-scanner">${icon('barcode', 18)} Scan</button><button class="btn ghost" data-action="open-food-search" aria-label="Search foods">${icon('search', 18)}</button><button class="btn ghost" data-action="open-recipes" aria-label="My recipes">${icon('list', 18)}</button><button class="btn ghost" data-action="open-quick-add" aria-label="Quick add calories">${icon('plus', 18)}</button></div>
       </div>
       ${scaleTip ? `<div class="banner" style="margin-top:12px;background:var(--green-soft)">${icon('trend', 20)}<div class="grow"><strong>Tip: a food scale.</strong> Not required, but weighing food, especially ingredients for recipes, gives the most accurate numbers.</div><button class="icon-btn" style="width:30px;height:30px" data-action="dismiss-tip" data-tip="scale" aria-label="Dismiss tip">${icon('x', 14)}</button></div>` : ''}
@@ -2814,7 +2818,7 @@ ${prog ? `
     const c = cyc();
     const v = S.advisorView;
     return `<div class="screen" ${v === 'coach' ? 'style="padding-bottom:calc(var(--nav-h) + 110px)"' : ''}>
-      ${header('Advisor', S.ai ? 'AI coach · live' : 'Coach · on-device', true)}
+      ${header('Advisor', S.aiCoach ? 'AI coach · live' : 'Your coach', true)}
       <div class="segment" style="margin-bottom:20px">${[['coach', 'Coach'], ['insights', 'Insights'], ['progress', 'Progress']].map(([id, label]) => `<button class="${v === id ? 'active' : ''}" data-action="advisor-view" data-value="${id}">${label}</button>`).join('')}</div>
       ${v === 'coach' ? viewChat(c) : v === 'insights' ? viewInsights(c) : viewProgress()}
     </div>`;
@@ -2822,7 +2826,9 @@ ${prog ? `
 
   function viewChat(c) {
     const name = firstName(myName());
-    const intro = `${name ? `Hi ${name}. ` : 'Hi. '}I am your YOURS coach. ${phaseLine(c)}. Ask me anything about training, weights, food, steps or recovery and I will adapt it to you.${S.ai ? '' : '\n\nI am running on this device right now. Connect the live AI coach for open-ended conversation and photo reviews.'}`;
+    const intro = S.aiCoach
+      ? `${name ? `Hi ${name}. ` : 'Hi. '}I am your YOURS coach. ${phaseLine(c)}. Ask me anything about training, weights, food, steps or recovery and I will adapt it to you.`
+      : `${name ? `Hi ${name}. ` : 'Hi. '}I am your YOURS coach. ${phaseLine(c)}. Ask me what to lift today, how to grow your glutes, what helps with cramps or what to eat this phase, and I will answer from your plan. Tap a suggestion below to start.`;
     const msgs = S.data.chat;
     return `<div class="chat">
       <div class="bubble coach rich">${rich(intro)}</div>
@@ -3240,7 +3246,7 @@ ${prog ? `
       const recent = S.data.recentFoods || [];
       const tile = (action, ic, label) => `<button class="card" style="margin:0;text-align:left;padding:16px" data-action="${action}">${icon(ic, 22)}<div class="eyebrow" style="color:var(--text);margin-top:10px">${label}</div></button>`;
       return sheet(t.kind === 'recipe' ? 'Add ingredient' : `Add to ${SLOT_LABEL[t.slot].toLowerCase()}`, `
-        ${t.kind === 'recipe' ? '' : `<label class="card" style="display:block;cursor:pointer;margin:0 0 10px;background:var(--green);color:var(--bg);border:none"><div class="row between"><div class="eyebrow" style="color:var(--bg);opacity:.7">New</div>${icon('camera', 22)}</div><div class="serif" style="font-size:26px;margin-top:4px">Snap your plate</div><div class="tiny" style="margin-top:6px;opacity:.75">Take a photo. The coach estimates each food and its macros, and you confirm.</div><input type="file" accept="image/*" capture="environment" data-plate-photo hidden></label>`}
+        ${t.kind === 'recipe' || !S.ai ? '' : `<label class="card" style="display:block;cursor:pointer;margin:0 0 10px;background:var(--green);color:var(--bg);border:none"><div class="row between"><div class="eyebrow" style="color:var(--bg);opacity:.7">New</div>${icon('camera', 22)}</div><div class="serif" style="font-size:26px;margin-top:4px">Snap your plate</div><div class="tiny" style="margin-top:6px;opacity:.75">Take a photo. The coach estimates each food and its macros, and you confirm.</div><input type="file" accept="image/*" capture="environment" data-plate-photo hidden></label>`}
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${t.kind === 'recipe' ? '' : tile('open-talk', 'mic', 'Say it')}${tile('open-scanner', 'barcode', 'Scan barcode')}${tile('open-food-search', 'search', 'Search foods')}${t.kind === 'recipe' ? '' : tile('open-restaurants', 'fork', 'Restaurants')}${t.kind === 'recipe' ? '' : tile('open-quick-add', 'plus', 'Quick add')}${tile('open-food-manual', 'list', 'Create a food')}</div>
         ${t.kind !== 'recipe' && recipes.length ? `<div class="label" style="margin-top:20px">My recipes</div>${recipes.map((r) => { const f = L.recipeFood(r); return `<button class="list-item" style="width:100%;text-align:left" data-action="recipe-log" data-id="${r.id}"><div class="grow"><strong class="small">${esc(r.name)}</strong><div class="tiny muted">${esc(f.serving.label)}</div></div><span class="tiny" style="font-family:var(--mono);text-align:right">${Math.round(f.perServing.kcal)} ${calU()}<br>${Math.round(f.perServing.protein)} g P</span></button>`; }).join('')}` : ''}
         ${recent.length ? `<div class="label" style="margin-top:20px">Recent</div>${recent.slice(0, 8).map((r, i) => `<button class="list-item" style="width:100%;text-align:left" data-action="recent-food" data-i="${i}"><div class="grow"><strong class="small">${esc(r.food.name)}</strong><div class="tiny muted">${esc(foodLabel(r.food, r.amount, r.mode))}</div></div><span class="tiny" style="font-family:var(--mono)">${L.foodMacros(r.food, r.amount, r.mode).kcal} ${calU()}</span></button>`).join('')}` : ''}
@@ -3305,7 +3311,7 @@ ${prog ? `
       return sheet(title, `${m.thumb ? `<img src="${m.thumb}" alt="Your plate" style="width:100%;max-height:220px;object-fit:cover;border-radius:16px;display:block">` : ''}
         ${m.said ? `<p class="serif" style="font-size:20px;margin:0 0 6px">"${esc(m.said)}"</p>` : ''}
         ${m.loading ? `<div class="empty">${m.source === 'photo' ? 'Reading your plate...' : 'Working it out...'}</div>` : ''}
-        ${m.noAi ? `<div class="banner" style="margin-top:12px">${icon('advisor', 18)}<div class="grow small">Plate photos use the live AI coach, which is not switched on here. Describe the meal instead and I will estimate it on this device.</div></div><button class="btn primary block" style="margin-top:12px" data-action="open-talk">${icon('mic', 18)} Describe it</button>` : ''}
+        ${m.noAi ? `<div class="banner" style="margin-top:12px">${icon('advisor', 18)}<div class="grow small">Plate photos are not available right now. Describe the meal instead and I will estimate it on this device.</div></div><button class="btn primary block" style="margin-top:12px" data-action="open-talk">${icon('mic', 18)} Describe it</button>` : ''}
         ${m.error ? `<p class="small error" style="margin-top:12px">${esc(m.error)}</p><div class="row" style="margin-top:10px"><button class="btn ghost grow" data-action="open-talk">${icon('mic', 16)} ${m.source === 'photo' ? 'Describe it' : 'Try again'}</button><button class="btn ghost grow" data-action="open-food-search">${icon('search', 16)} Search</button></div>` : ''}
         ${!m.loading && m.items.length ? `
           <div class="label" style="margin-top:14px">Log to</div><div class="chips">${Object.entries(SLOT_LABEL).map(([k, l]) => `<button class="chip ${m.slot === k ? 'selected' : ''}" data-action="est-slot" data-slot="${k}">${l}</button>`).join('')}</div>
@@ -3487,7 +3493,7 @@ ${prog ? `
         ${adminHint() ? `<div class="card flat small"><div class="label">Owner dashboard</div><p class="muted">Trials, payments, the sign-up funnel and how members use YOURS. Anonymous counts only.</p><button class="btn ghost sm block" style="margin-top:10px" data-action="open-stats">Open dashboard</button></div>` : ''}
         ${inviteCard()}
         ${installPlatform() !== 'installed' ? '<div class="card flat small"><div class="label">Get the app</div><p class="muted">Add YOURS to your Home Screen for full screen, one-tap access and reminders.</p><button class="btn ghost sm block" style="margin-top:10px" data-action="open-install">Show me how</button></div>' : ''}
-        <div class="card flat small"><div class="label">Coach</div><p class="muted">${S.ai ? 'Live AI coach is connected.' : 'Running the on-device coach. Set ANTHROPIC_API_KEY on the server to enable the live AI coach and photo reviews.'}</p></div>
+        <div class="card flat small"><div class="label">Coach</div><p class="muted">${S.aiCoach ? 'Live AI coach is on, with plate photos and photo reviews.' : S.ai ? 'Plate photos and photo reviews use AI. Coach answers come from your plan on this phone.' : 'Coach answers come from your plan on this phone.'}</p></div>
         ${billingOn() && isCloud() ? `<div class="card flat small"><div class="label">Membership</div><p class="muted">${esc(membershipLine())}</p>${S.sub && S.sub.status && !['none', 'comp'].includes(S.sub.status) ? '<button class="btn ghost sm block" style="margin-top:10px" data-action="billing-portal">Manage membership</button>' : ''}<p class="tiny muted" style="margin-top:8px">Cancel, switch plans or update your card on Stripe's secure page.</p></div>` : ''}
         ${isCloud() ? `<div class="card flat small"><div class="label">Account sync</div><p class="muted">${S.syncState === 'offline' ? 'Offline. Changes are saved on this device and sync when you are back online.' : S.syncState === 'saving' ? 'Saving...' : `Synced across your devices${S.syncedAt ? ` · ${timeAgo(S.syncedAt)}` : ''}.`}</p><button class="btn ghost sm block" style="margin-top:10px" data-action="sync-now">Sync now</button>${(S.data.blocked || []).length ? `<button class="link small" style="margin-top:10px" data-action="unblock-all">Show ${plural(S.data.blocked.length, 'hidden member')} again</button>` : ''}</div>` : cloud && !isGuest() ? '<div class="card flat small"><div class="label">Account sync</div><p class="muted">This account lives on this device only. Sign out and sign in again with the same email and password to move it to your YOURS account and sync across devices.</p></div>' : ''}
         ${remindersCard()}
