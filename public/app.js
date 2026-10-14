@@ -2926,7 +2926,7 @@ ${prog ? `
     const verdictLabel = { on_track: 'On track', progressing: 'Making progress', adjust: 'Needs adjustment' };
     const encrypted = !!S.photoKey;
     return `
-      <div class="banner" style="background:var(--green-soft)">${icon('shield', 20)}<div class="grow">${encrypted ? 'Photos are encrypted with your PIN and' : 'Photos'} stay on this device. They are only sent to your coach when you tap Analyze${S.backupKey ? ', and backed up to your account encrypted with your passphrase' : ', and are not stored anywhere else'}.${encrypted ? '' : ' Set a PIN to encrypt them.'}</div></div>
+      <div class="banner" style="background:var(--green-soft)">${icon('shield', 20)}<div class="grow">${encrypted ? 'Photos are encrypted with your PIN and stay on this device.' : 'Photos stay on this device.'} ${S.aiReview ? 'They are only sent to your coach when you tap Analyze.' : 'They are never analyzed by AI.'} ${S.backupKey ? 'They are backed up to your account, encrypted with your passphrase.' : 'They are not stored anywhere else.'}${encrypted ? '' : ' Set a PIN to encrypt them.'}</div></div>
       <div class="row" style="gap:10px">
         <label class="btn primary grow" style="cursor:pointer">${icon('camera', 18)} Add photo<input type="file" accept="image/*" data-upload hidden></label>
         <select class="select" style="width:auto;height:50px" data-bind-ui="pose" aria-label="Pose">${['front', 'side', 'back'].map((x) => `<option value="${x}" ${S.pose === x ? 'selected' : ''}>${x[0].toUpperCase() + x.slice(1)}</option>`).join('')}</select>
@@ -2935,14 +2935,14 @@ ${prog ? `
 
       ${backupCard()}
       <div class="section-title"><h2>Photo vault</h2><span class="small muted">${plural(S.photos.length, 'photo')}</span></div>
-      ${S.photos.length ? `<p class="small muted" style="margin:-4px 0 10px">Tap to reveal. Select up to 4 to analyze or compare.</p>
+      ${S.photos.length ? `<p class="small muted" style="margin:-4px 0 10px">Tap to reveal. Select up to ${S.aiReview ? '4 to analyze or' : '2 to'} compare.</p>
         <div class="photo-grid">${S.photos.map((ph) => { const sel = S.compare.indexOf(ph.id); return `<div class="photo ${S.revealed[ph.id] ? '' : 'blur'} ${sel > -1 ? 'selected' : ''}">
           <button style="display:block;width:100%;height:100%" data-action="photo-tap" data-id="${ph.id}" aria-label="${S.revealed[ph.id] ? 'Select photo' : 'Reveal photo'}"><img src="${ph.data}" alt="${esc(ph.pose)} progress photo from ${esc(ph.date)}"></button>
           ${sel > -1 ? `<span class="sel">${sel + 1}</span>` : ''}
           <div class="meta">${esc(ph.pose)} · ${shortDate(ph.date)}${ph.phase && ph.phase !== 'steady' ? ` · ${esc(phaseName(ph.phase))}` : ''}</div></div>`; }).join('')}</div>
-        <div class="row" style="margin-top:12px"><button class="btn accent grow" data-action="analyze" ${S.analyzing ? 'disabled' : ''}>${S.analyzing ? 'Analyzing...' : S.compare.length ? `Analyze ${plural(S.compare.length, 'photo')}` : 'Analyze my data'}</button>${S.compare.length ? `<button class="btn ghost" data-action="delete-photos" aria-label="Delete selected">${icon('trash', 18)}</button>` : ''}</div>`
+        <div class="row" style="margin-top:12px"><button class="btn accent grow" data-action="analyze" ${S.analyzing ? 'disabled' : ''}>${S.analyzing ? 'Reviewing...' : S.compare.length && S.aiReview ? `Analyze ${plural(S.compare.length, 'photo')}` : 'Review my progress'}</button>${S.compare.length ? `<button class="btn ghost" data-action="delete-photos" aria-label="Delete selected">${icon('trash', 18)}</button>` : ''}</div>`
         : `<div class="card empty">Take your first photos front, side and back. Retake every 2-4 weeks in the same cycle phase.</div>
-           <button class="btn accent block" style="margin-top:12px" data-action="analyze" ${S.analyzing ? 'disabled' : ''}>${S.analyzing ? 'Analyzing...' : 'Analyze my data'}</button>`}
+           <button class="btn accent block" style="margin-top:12px" data-action="analyze" ${S.analyzing ? 'disabled' : ''}>${S.analyzing ? 'Reviewing...' : 'Review my progress'}</button>`}
       ${photoCompareCard()}
 
       ${review ? `<div class="card" style="margin-top:16px"><div class="row between"><span class="verdict ${review.verdict}">${verdictLabel[review.verdict] || 'Review'}</span><span class="tiny muted">${shortDate(review.date)}</span></div>
@@ -3416,7 +3416,7 @@ ${prog ? `
         ${li(['On your phone, and in your private YOURS account so it syncs across your devices. Other members can never see it; only your posts and messages are shared, with the people you share them with.', 'Progress photos stay on your phone, locked with your PIN. If you turn on backup, they are encrypted on your phone with your passphrase first, so we cannot see them.'])}
         ${h('Services that help run YOURS')}
         <p class="tiny muted" style="margin-top:4px">They process data only to provide their part of the app, not for their own purposes.</p>
-        ${li(['<strong>Supabase</strong>: accounts and storage.', '<strong>Vercel</strong>: hosts the app.', '<strong>Stripe</strong>: payments.', '<strong>Anthropic (Claude)</strong>: AI coach answers, food estimates and photo reviews, only when you use them. Photos are sent only when you tap Analyze or snap a plate, and are not stored or used to train AI models.', '<strong>Open Food Facts</strong>: the barcode number when you scan.', '<strong>Nutritionix</strong>: what you type when you search restaurant menus.', '<strong>Have I Been Pwned</strong>: a 5-character fragment of a scrambled version of a new password, to check it has not been leaked. Never the password itself.'])}
+        ${li(['<strong>Supabase</strong>: accounts and storage.', '<strong>Vercel</strong>: hosts the app.', '<strong>Stripe</strong>: payments.', S.ai || S.aiCoach || S.aiReview ? `<strong>Anthropic (Claude)</strong>: ${[S.aiCoach && 'coach answers', S.ai && 'food estimates', S.aiReview && 'progress photo reviews'].filter(Boolean).join(', ')}, only when you use them. ${S.ai || S.aiReview ? 'Photos are sent only when you ask, and are' : 'Nothing is'} not stored or used to train AI models.` : '<strong>No AI services.</strong> Your coach, food logging and progress reviews run from your own data. Your photos are never analyzed by AI.', '<strong>Open Food Facts</strong>: the barcode number when you scan.', '<strong>Nutritionix</strong>: what you type when you search restaurant menus.', '<strong>Have I Been Pwned</strong>: a 5-character fragment of a scrambled version of a new password, to check it has not been leaked. Never the password itself.'])}
         ${h('Legal requests')}
         <p class="small" style="margin-top:6px">We only disclose data when legally required, such as by a valid court order. We push back on overly broad requests and tell you about any request for your data unless the law forbids it. We keep as little as we need: your period and health data is never used for advertising, and progress photos stay on your phone unless you back them up encrypted.</p>
         ${h('How long we keep it')}

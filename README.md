@@ -128,7 +128,8 @@ Vercel environment variables:
 
 `api/coach.js` calls Claude through the Anthropic SDK. It handles coach chat, progress-photo review, and food estimates from a plate photo or her words (structured JSON output).
 
-- Set `ANTHROPIC_API_KEY` in your Vercel project, or in your shell for local runs, to turn on AI plate photos and photo reviews. `ANTHROPIC_MODEL` is optional and defaults to `claude-sonnet-5-5` (cheaper); set `claude-opus-5-5` for the most capable model.
+- **Every AI feature is off until its own switch is on**, even with `ANTHROPIC_API_KEY` set: `AI_FOOD=on` (plate photos and AI help with unusual typed meals), `AI_COACH=on` (live coach chat), `AI_PHOTO_REVIEW=on` (progress photo review). With all three off, the app makes no AI calls and never mentions AI photo analysis; the privacy screen says no AI services are used.
+- Set `ANTHROPIC_API_KEY` in your Vercel project, or in your shell for local runs, before turning any of them on. `ANTHROPIC_MODEL` is optional and defaults to `claude-sonnet-5-5` (cheaper); set `claude-opus-5-5` for the most capable model.
 - Live coach chat costs the most per use, so it stays off (the on-device coach answers) until you set `AI_COACH=on`.
 - Progress photos are never sent to the AI unless you set `AI_PHOTO_REVIEW=on`. Without it, the PIN-locked photo vault, the before/after slider and the data-based progress review all work as normal.
 - Daily limits per member keep the bill predictable: `AI_FOOD_DAILY` (default 20 food estimates), `AI_CHAT_DAILY` (30 coach messages), `AI_REVIEW_DAILY` (3 photo reviews). Counts live in the `ai_usage` table. Also set a monthly spend limit in the Anthropic console.
