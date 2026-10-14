@@ -1400,6 +1400,77 @@
     { id: 'amazonfresh', name: 'Amazon Fresh', search: 'https://www.amazon.com/s?i=amazonfresh&k=' },
   ];
 
+  // Running (optional; off unless she turns it on). Every session is set by time, not GPS, so it works outside or on a
+  // treadmill. Each interval has a zone; the app turns zones into her own paces and treadmill speeds from her easy pace,
+  // and nudges that pace after every logged run (progressive overload). Zones are multipliers on easy pace (seconds per km).
+  const RUN_ZONES = {
+    walk: { label: 'Brisk walk', mult: null },
+    jog: { label: 'Easy jog', mult: 1.12 },
+    easy: { label: 'Easy', mult: 1, cue: 'Conversational: you can talk in short sentences.' },
+    long: { label: 'Long and easy', mult: 1.04, cue: 'Slower than you think. Finish feeling you could go on.' },
+    tempo: { label: 'Tempo', mult: 0.88, cue: 'Comfortably hard: you can say a few words, not sentences.' },
+    race10k: { label: '10K effort', mult: 0.9, cue: 'Strong and steady. Start controlled, finish fast.' },
+    race5k: { label: '5K effort', mult: 0.86, cue: 'Hard but even. Do not sprint the first kilometer.' },
+    interval: { label: 'Fast', mult: 0.82, cue: 'Hard: about 8 out of 10. Smooth, not a sprint.' },
+    strides: { label: 'Strides', mult: 0.74, cue: 'Build to fast over 20 seconds, relaxed shoulders, then walk back.' },
+  };
+  const walk = (min) => ({ do: 'walk', min });
+  const run = (min, zone) => ({ do: 'run', min, zone: zone || 'easy' });
+  const runKm = (km, zone) => ({ do: 'run', km, zone });
+  const rep = (reps, onMin, zone, offMin, offDo) => ({ reps, on: { min: onMin, zone }, off: { min: offMin, do: offDo || 'walk' } });
+  const rs = (title, kind, blocks) => ({ title, kind, blocks });
+  const WARM = walk(5);
+  const strides = rep(4, 20 / 60, 'strides', 1, 'walk');
+  const RUN_PLANS = [
+    {
+      id: 'c25k', name: 'Couch to 5K', kicker: '9 weeks', perWeek: 3, needsPace: false,
+      tagline: 'From walking to running 5K (or 30 minutes) without stopping, three short sessions a week.',
+      who: 'For anyone new to running or coming back after a long break. Every session starts and ends with a brisk walk. Repeat any week that feels too hard.',
+      weeks: [
+        Array(3).fill(rs('Run 1, walk 1.5', 'walkrun', [WARM, rep(8, 1, 'easy', 1.5), walk(5)])),
+        Array(3).fill(rs('Run 1.5, walk 2', 'walkrun', [WARM, rep(6, 1.5, 'easy', 2), walk(5)])),
+        Array(3).fill(rs('Run 1.5 and 3', 'walkrun', [WARM, run(1.5), walk(1.5), run(3), walk(3), run(1.5), walk(1.5), run(3), walk(5)])),
+        Array(3).fill(rs('Run 3 and 5', 'walkrun', [WARM, run(3), walk(1.5), run(5), walk(2.5), run(3), walk(1.5), run(5), walk(5)])),
+        [rs('Three 5-minute runs', 'walkrun', [WARM, rep(3, 5, 'easy', 3), walk(5)]), rs('Two 8-minute runs', 'walkrun', [WARM, run(8), walk(5), run(8), walk(5)]), rs('Run 20 minutes', 'easy', [WARM, run(20), walk(5)])],
+        [rs('Run 5, 8, 5', 'walkrun', [WARM, run(5), walk(3), run(8), walk(3), run(5), walk(5)]), rs('Two 10-minute runs', 'walkrun', [WARM, run(10), walk(3), run(10), walk(5)]), rs('Run 25 minutes', 'easy', [WARM, run(25), walk(5)])],
+        Array(3).fill(rs('Run 25 minutes', 'easy', [WARM, run(25), walk(5)])),
+        Array(3).fill(rs('Run 28 minutes', 'easy', [WARM, run(28), walk(5)])),
+        [rs('Run 30 minutes', 'easy', [WARM, run(30), walk(5)]), rs('Run 30 minutes', 'easy', [WARM, run(30), walk(5)]), rs('5K finish: run 5 km or 30 minutes', 'test', [WARM, runKm(5, 'easy'), walk(5)])],
+      ],
+      finish: 'You run 5K. Keep three easy runs a week, or start 5K to 10K or the Speed plan next.',
+    },
+    {
+      id: 'c10k', name: '5K to 10K', kicker: '8 weeks', perWeek: 3, needsPace: true,
+      tagline: 'Double your distance: one easy run, one faster session and one long run a week.',
+      who: 'For anyone who can run 5K or 30 minutes without stopping. Run the long run slowly; it builds the engine.',
+      weeks: [
+        [rs('Easy 25', 'easy', [run(25)]), rs('Easy 20 + strides', 'strides', [run(20), strides, run(5)]), rs('Long 35', 'long', [run(35, 'long')])],
+        [rs('Easy 25', 'easy', [run(25)]), rs('Tempo 3 x 5', 'tempo', [run(10), rep(3, 5, 'tempo', 2, 'jog'), run(5)]), rs('Long 40', 'long', [run(40, 'long')])],
+        [rs('Easy 30', 'easy', [run(30)]), rs('Intervals 6 x 2', 'intervals', [run(10), rep(6, 2, 'interval', 2, 'jog'), run(5)]), rs('Long 40', 'long', [run(40, 'long')])],
+        [rs('Easy 30', 'easy', [run(30)]), rs('Tempo 2 x 10', 'tempo', [run(10), rep(2, 10, 'tempo', 3, 'jog'), run(5)]), rs('Long 45', 'long', [run(45, 'long')])],
+        [rs('Easy 30', 'easy', [run(30)]), rs('Intervals 5 x 3', 'intervals', [run(10), rep(5, 3, 'interval', 2, 'jog'), run(5)]), rs('Long 50', 'long', [run(50, 'long')])],
+        [rs('Easy 25', 'easy', [run(25)]), rs('Tempo 20', 'tempo', [run(10), run(20, 'tempo'), run(5)]), rs('Long 45', 'long', [run(45, 'long')])],
+        [rs('Easy 30', 'easy', [run(30)]), rs('Intervals 6 x 3', 'intervals', [run(10), rep(6, 3, 'interval', 2, 'jog'), run(5)]), rs('Long 55', 'long', [run(55, 'long')])],
+        [rs('Easy 20 + strides', 'strides', [run(20), strides]), rs('Easy 20', 'easy', [run(20)]), rs('10K: run 10 km', 'test', [run(10), runKm(10, 'race10k'), walk(5)])],
+      ],
+      finish: 'You run 10K. Keep one long run a week, or sharpen up with the Speed plan.',
+    },
+    {
+      id: 'speed', name: 'Speed', kicker: '6 weeks', perWeek: 3, needsPace: true,
+      tagline: 'Get faster: intervals, tempo runs and strides, ending in a 5K time trial.',
+      who: 'For anyone who can run 5K comfortably and wants a faster time. Hard sessions are short; easy runs stay easy.',
+      weeks: [
+        [rs('Intervals 8 x 1', 'intervals', [run(10), rep(8, 1, 'interval', 1.5, 'jog'), run(5)]), rs('Tempo 15', 'tempo', [run(10), run(15, 'tempo'), run(5)]), rs('Easy 25 + strides', 'strides', [run(25), strides])],
+        [rs('Intervals 10 x 1', 'intervals', [run(10), rep(10, 1, 'interval', 1.5, 'jog'), run(5)]), rs('Tempo 2 x 8', 'tempo', [run(10), rep(2, 8, 'tempo', 2, 'jog'), run(5)]), rs('Easy 25 + strides', 'strides', [run(25), strides])],
+        [rs('Intervals 6 x 2', 'intervals', [run(10), rep(6, 2, 'interval', 2, 'jog'), run(5)]), rs('Tempo 20', 'tempo', [run(10), run(20, 'tempo'), run(5)]), rs('Easy 30 + strides', 'strides', [run(30), strides])],
+        [rs('Intervals 5 x 3', 'intervals', [run(10), rep(5, 3, 'interval', 2, 'jog'), run(5)]), rs('Tempo 2 x 10', 'tempo', [run(10), rep(2, 10, 'tempo', 2, 'jog'), run(5)]), rs('Easy 30 + strides', 'strides', [run(30), strides])],
+        [rs('Intervals 4 x 4', 'intervals', [run(10), rep(4, 4, 'interval', 2.5, 'jog'), run(5)]), rs('Tempo 25', 'tempo', [run(10), run(25, 'tempo'), run(5)]), rs('Easy 30 + strides', 'strides', [run(30), strides])],
+        [rs('Sharpen 6 x 1', 'intervals', [run(10), rep(6, 1, 'interval', 2, 'jog'), run(5)]), rs('Easy 20 + strides', 'strides', [run(20), strides]), rs('5K time trial', 'test', [run(10), runKm(5, 'race5k'), run(5)])],
+      ],
+      finish: 'Compare your 5K time trial with your old best. Repeat weeks 3-6 with your new paces to keep improving.',
+    },
+  ];
+
   // Home workouts: dumbbells, a band and a chair (or nothing at all). Each one fits a cycle phase,
   // and HOME_SWAP turns the gym rotation into the home rotation when she trains at home.
   const hw = (id, phase, name, focus, minutes, intensity, summary, exercises) => ({ id, phase, home: true, name, focus, minutes, intensity, summary, exercises });
@@ -1600,7 +1671,7 @@
   WORKOUTS.push(...MAT_WORKOUTS);
   WORKOUTS.push(...PROGRAM_WORKOUTS);
 
-  const api = { MUSCLES, MUSCLE_GROUPS, GUIDES, TESTIMONIALS, SWAPS, PROGRAMS, BASIC_FOODS, RESTAURANTS, STORES, PHASE_COPY, IMAGERY, PHASES, PHASE_ORDER, WORKOUTS, HOME_SWAP, ROTATION, MEALS, FAVORITE_OPTIONS, AVOID_OPTIONS, MEMBERS, SEED_POSTS, AUTO_REPLIES, CYCLE_MODES, SYMPTOMS, MENO_SYMPTOMS, GROCERY };
+  const api = { MUSCLES, MUSCLE_GROUPS, GUIDES, TESTIMONIALS, SWAPS, PROGRAMS, BASIC_FOODS, RESTAURANTS, STORES, PHASE_COPY, IMAGERY, PHASES, PHASE_ORDER, WORKOUTS, HOME_SWAP, RUN_PLANS, RUN_ZONES, ROTATION, MEALS, FAVORITE_OPTIONS, AVOID_OPTIONS, MEMBERS, SEED_POSTS, AUTO_REPLIES, CYCLE_MODES, SYMPTOMS, MENO_SYMPTOMS, GROCERY };
   if (typeof window !== 'undefined') window.YOURS_DATA = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();
