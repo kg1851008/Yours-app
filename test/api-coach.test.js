@@ -24,7 +24,25 @@ test('food mode needs the AI key', async () => {
   assert.equal(r.statusCode, 503);
   const g = res();
   await handler({ method: 'GET' }, g);
-  assert.deepEqual(g.body, { ai: false });
+  assert.deepEqual(g.body, { ai: false, coach: false });
   if (saved[0]) process.env.ANTHROPIC_API_KEY = saved[0];
   if (saved[1]) process.env.ANTHROPIC_AUTH_TOKEN = saved[1];
+});
+
+test('live coach chat stays off unless AI_COACH=on; food estimates do not need it', async () => {
+  const saved = [process.env.ANTHROPIC_API_KEY, process.env.AI_COACH];
+  process.env.ANTHROPIC_API_KEY = 'sk-ant-test'; delete process.env.AI_COACH;
+  const g = res();
+  await handler({ method: 'GET' }, g);
+  assert.deepEqual(g.body, { ai: true, coach: false });
+  const r = res();
+  await handler({ method: 'POST', headers: {}, body: { mode: 'chat', messages: [{ role: 'user', content: 'hi' }] } }, r);
+  assert.equal(r.statusCode, 503);
+  assert.equal(r.body.coach, false);
+  process.env.AI_COACH = 'on';
+  const g2 = res();
+  await handler({ method: 'GET' }, g2);
+  assert.deepEqual(g2.body, { ai: true, coach: true });
+  if (saved[0]) process.env.ANTHROPIC_API_KEY = saved[0]; else delete process.env.ANTHROPIC_API_KEY;
+  if (saved[1]) process.env.AI_COACH = saved[1]; else delete process.env.AI_COACH;
 });

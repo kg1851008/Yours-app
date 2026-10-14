@@ -184,3 +184,27 @@ test('memberships are US-only: checkout is refused from other countries', async 
   await billing({ method: 'GET', headers: { 'x-vercel-ip-country': 'FR' } }, g);
   assert.equal(g.body.region.allowed, false);
 });
+
+test('AI daily limits: a member over her food allowance gets a friendly 429 before any AI call', async () => {
+  const coach = require('../api/coach');
+  const rows = [{ user_id: 'u9', status: 'comp' }];
+  const counts = {};
+  const base = fakeSupabase(rows, { tok9: { id: 'u9' } });
+  global.fetch = async (url, opts) => {
+    if (new URL(url).pathname === '/rest/v1/rpc/ai_bump') {
+      const b = JSON.parse(opts.body); const k = `${b.p_user}:${b.p_kind}`; counts[k] = (counts[k] || 0) + 1;
+      return { ok: true, status: 200, json: async () => counts[k], text: async () => String(counts[k]) };
+    }
+    return base(url, opts);
+  };
+  const saved = [process.env.ANTHROPIC_API_KEY, process.env.AI_FOOD_DAILY];
+  process.env.ANTHROPIC_API_KEY = 'sk-ant-test'; process.env.AI_FOOD_DAILY = '2';
+  counts['u9:food'] = 2; // already used today's two
+  const r = res();
+  await coach({ method: 'POST', headers: { authorization: 'Bearer tok9' }, body: { mode: 'food', text: 'a mystery stew' } }, r);
+  assert.equal(r.statusCode, 429);
+  assert.equal(r.body.limit, true);
+  assert.match(r.body.error, /today's 2 food estimates/);
+  if (saved[0]) process.env.ANTHROPIC_API_KEY = saved[0]; else delete process.env.ANTHROPIC_API_KEY;
+  if (saved[1]) process.env.AI_FOOD_DAILY = saved[1]; else delete process.env.AI_FOOD_DAILY;
+});

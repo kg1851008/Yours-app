@@ -335,3 +335,11 @@ create or replace function public.grant_owner_comp() returns trigger language pl
 revoke execute on function public.grant_owner_comp() from public, anon, authenticated;
 drop trigger if exists owner_comp_on_signup on auth.users;
 create trigger owner_comp_on_signup after insert on auth.users for each row execute function public.grant_owner_comp();
+
+-- AI usage per member per day (server only: RLS on, no policies). ai_bump adds one and returns the new count,
+-- atomically, so two requests at once cannot both slip under the daily limit. Only the service role may call it.
+create table if not exists public.ai_usage (user_id uuid not null references auth.users(id) on delete cascade, day date not null, kind text not null, n int not null default 0, primary key (user_id, day, kind));
+alter table public.ai_usage enable row level security;
+create or replace function public.ai_bump(p_user uuid, p_day date, p_kind text) returns int language sql security definer set search_path = public as 'insert into public.ai_usage (user_id, day, kind, n) values (p_user, p_day, p_kind, 1) on conflict (user_id, day, kind) do update set n = public.ai_usage.n + 1 returning n';
+revoke all on function public.ai_bump(uuid, date, text) from public, anon, authenticated;
+grant execute on function public.ai_bump(uuid, date, text) to service_role;
