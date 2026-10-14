@@ -1,5 +1,7 @@
 // YOURS AI coach endpoint (Vercel serverless function; also mounted by server.js locally).
-// GET  -> { ai, coach, review } so the app knows what is live: ai = food estimates; coach = live chat; review = progress photo review.
+// GET  -> { ai, coach, review } so the app knows what is live: ai = food estimates (plate photos, unusual typed meals);
+// coach = live chat; review = progress photo review. Each is off until its own switch is on, even with the API key set:
+// AI_FOOD=on, AI_COACH=on, AI_PHOTO_REVIEW=on.
 // Live chat is off unless AI_COACH=on (it costs the most per use); the on-device coach answers instead.
 // Progress photos are never sent to the AI unless AI_PHOTO_REVIEW=on; the vault and the data-based review work without it.
 // Daily limits per member keep the AI bill predictable (AI_FOOD_DAILY, AI_CHAT_DAILY, AI_REVIEW_DAILY).
@@ -145,6 +147,7 @@ function getClient() {
 function aiConfigured() {
   return Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
 }
+const foodLive = () => aiConfigured() && String(process.env.AI_FOOD || '').toLowerCase() === 'on';
 const coachLive = () => aiConfigured() && String(process.env.AI_COACH || '').toLowerCase() === 'on';
 const reviewLive = () => aiConfigured() && String(process.env.AI_PHOTO_REVIEW || '').toLowerCase() === 'on';
 
@@ -229,7 +232,7 @@ async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
 
   if (req.method === 'GET') {
-    return res.status(200).json({ ai: aiConfigured(), coach: coachLive(), review: reviewLive() });
+    return res.status(200).json({ ai: foodLive(), coach: coachLive(), review: reviewLive() });
   }
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'GET, POST');
@@ -249,6 +252,7 @@ async function handler(req, res) {
     return res.status(400).json({ error: 'Invalid JSON' });
   }
   const kind = body.mode === 'food' ? 'food' : body.mode === 'progress' ? 'progress' : 'chat';
+  if (kind === 'food' && !foodLive()) return res.status(503).json({ error: 'Food estimates are off', ai: false });
   if (kind === 'chat' && !coachLive()) return res.status(503).json({ error: 'Live coach chat is off', coach: false });
   if (kind === 'progress' && !reviewLive()) return res.status(503).json({ error: 'Photo review is off', review: false });
   const over = await overDailyLimit(access.user, kind);

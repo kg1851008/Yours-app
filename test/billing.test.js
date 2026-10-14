@@ -198,7 +198,7 @@ test('AI daily limits: a member over her food allowance gets a friendly 429 befo
     return base(url, opts);
   };
   const saved = [process.env.ANTHROPIC_API_KEY, process.env.AI_FOOD_DAILY];
-  process.env.ANTHROPIC_API_KEY = 'sk-ant-test'; process.env.AI_FOOD_DAILY = '2';
+  process.env.ANTHROPIC_API_KEY = 'sk-ant-test'; process.env.AI_FOOD_DAILY = '2'; process.env.AI_FOOD = 'on';
   counts['u9:food'] = 2; // already used today's two
   const r = res();
   await coach({ method: 'POST', headers: { authorization: 'Bearer tok9' }, body: { mode: 'food', text: 'a mystery stew' } }, r);
@@ -207,4 +207,5 @@ test('AI daily limits: a member over her food allowance gets a friendly 429 befo
   assert.match(r.body.error, /today's 2 food estimates/);
   if (saved[0]) process.env.ANTHROPIC_API_KEY = saved[0]; else delete process.env.ANTHROPIC_API_KEY;
   if (saved[1]) process.env.AI_FOOD_DAILY = saved[1]; else delete process.env.AI_FOOD_DAILY;
+  delete process.env.AI_FOOD;
 });

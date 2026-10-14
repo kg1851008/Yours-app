@@ -29,22 +29,23 @@ test('food mode needs the AI key', async () => {
   if (saved[1]) process.env.ANTHROPIC_AUTH_TOKEN = saved[1];
 });
 
-test('live coach chat stays off unless AI_COACH=on; food estimates do not need it', async () => {
+test('every AI feature stays off until its own switch is on', async () => {
   const saved = [process.env.ANTHROPIC_API_KEY, process.env.AI_COACH];
   process.env.ANTHROPIC_API_KEY = 'sk-ant-test'; delete process.env.AI_COACH;
   const g = res();
   await handler({ method: 'GET' }, g);
-  assert.deepEqual(g.body, { ai: true, coach: false, review: false });
+  assert.deepEqual(g.body, { ai: false, coach: false, review: false }, 'the key alone turns nothing on');
   const r = res();
   await handler({ method: 'POST', headers: {}, body: { mode: 'chat', messages: [{ role: 'user', content: 'hi' }] } }, r);
   assert.equal(r.statusCode, 503);
   assert.equal(r.body.coach, false);
-  process.env.AI_COACH = 'on';
+  process.env.AI_COACH = 'on'; process.env.AI_FOOD = 'on';
   const g2 = res();
   await handler({ method: 'GET' }, g2);
   assert.deepEqual(g2.body, { ai: true, coach: true, review: false });
   if (saved[0]) process.env.ANTHROPIC_API_KEY = saved[0]; else delete process.env.ANTHROPIC_API_KEY;
   if (saved[1]) process.env.AI_COACH = saved[1]; else delete process.env.AI_COACH;
+  delete process.env.AI_FOOD;
 });
 
 test('progress photos are never sent to the AI unless AI_PHOTO_REVIEW=on', async () => {
@@ -60,4 +61,14 @@ test('progress photos are never sent to the AI unless AI_PHOTO_REVIEW=on', async
   assert.equal(g.body.review, true);
   if (saved[0]) process.env.ANTHROPIC_API_KEY = saved[0]; else delete process.env.ANTHROPIC_API_KEY;
   if (saved[1]) process.env.AI_PHOTO_REVIEW = saved[1]; else delete process.env.AI_PHOTO_REVIEW;
+});
+
+test('plate photos are refused unless AI_FOOD=on, even with the API key set', async () => {
+  const saved = process.env.ANTHROPIC_API_KEY;
+  process.env.ANTHROPIC_API_KEY = 'sk-ant-test'; delete process.env.AI_FOOD;
+  const r = res();
+  await handler({ method: 'POST', headers: {}, body: { mode: 'food', image: 'data:image/png;base64,AAAA' } }, r);
+  assert.equal(r.statusCode, 503);
+  assert.equal(r.body.ai, false);
+  if (saved) process.env.ANTHROPIC_API_KEY = saved; else delete process.env.ANTHROPIC_API_KEY;
 });
