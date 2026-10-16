@@ -64,3 +64,17 @@ test('owner dashboard: admins only, and counts are summarized by window', async 
   assert.equal(s.days[29].app_open, 1);
   assert.equal(s.funnel[0], 'landing_view');
 });
+
+test('owner member list: newest first, account and membership fields only', () => {
+  const S = require('../api/stats');
+  const users = [
+    { id: 'a', email: 'old@x.co', created_at: '2026-10-01T10:00:00Z', last_sign_in_at: '2026-10-02T10:00:00Z', email_confirmed_at: '2026-10-01T10:05:00Z', user_metadata: { name: 'Ava' }, phone: '555', app_metadata: { provider: 'email' } },
+    { id: 'b', email: 'new@x.co', created_at: '2026-10-15T10:00:00Z', last_sign_in_at: null, email_confirmed_at: null, user_metadata: {} },
+  ];
+  const subs = [{ user_id: 'a', status: 'trialing', plan: 'yearly', trial_end: '2026-10-08T00:00:00Z', current_period_end: '2026-10-08T00:00:00Z', cancel_at_period_end: true, cycle: 'x' }];
+  const list = S.memberList(users, subs);
+  assert.deepEqual(list.map((p) => p.email), ['new@x.co', 'old@x.co']);
+  assert.deepEqual(Object.keys(list[0]).sort(), ['cancelling', 'confirmed', 'email', 'joined', 'lastSignIn', 'name', 'periodEnd', 'plan', 'status', 'trialEnd']);
+  assert.equal(list[0].status, 'none'); assert.equal(list[0].confirmed, false);
+  assert.equal(list[1].name, 'Ava'); assert.equal(list[1].status, 'trialing'); assert.equal(list[1].cancelling, true);
+});

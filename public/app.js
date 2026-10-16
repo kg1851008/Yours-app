@@ -2185,6 +2185,44 @@ ${prog ? `
     } catch { if (S.modal && S.modal.type === 'stats') S.modal.error = 'Could not load stats. Check your connection.'; }
     render();
   }
+  // Owner dashboard: who has signed up. Account and membership details only.
+  const memberDate = (iso) => (iso ? fmtDate(new Date(iso), { month: 'short', day: 'numeric' }) : '');
+  function memberStatus(p) {
+    if (p.status === 'trialing') return p.cancelling ? `Trial, cancels ${memberDate(p.trialEnd)}` : `Trial until ${memberDate(p.trialEnd)}`;
+    if (p.status === 'active') return `${p.cancelling ? `Paying, ends ${memberDate(p.periodEnd)}` : 'Paying'}${p.plan ? ` · ${p.plan}` : ''}`;
+    if (p.status === 'comp') return 'Free access';
+    if (p.status === 'past_due') return 'Card failing';
+    if (['canceled', 'unpaid', 'incomplete_expired'].includes(p.status)) return 'Cancelled';
+    if (p.status === 'incomplete') return 'Checkout not finished';
+    return 'No membership yet';
+  }
+  function membersCard(m, people) {
+    if (!people) return '<div class="card" style="margin-top:12px"><div class="eyebrow">Members</div><p class="small muted" style="margin-top:6px">Could not load the member list. Try Refresh.</p></div>';
+    const q = (m.memberQ || '').trim().toLowerCase();
+    const list = people.filter((p) => !q || p.email.toLowerCase().includes(q) || p.name.toLowerCase().includes(q));
+    const shown = m.allMembers ? list : list.slice(0, 25);
+    const weekAgo = Date.now() - 7 * 864e5;
+    const newThisWeek = people.filter((p) => p.joined && Date.parse(p.joined) >= weekAgo).length;
+    const unconfirmed = people.filter((p) => !p.confirmed).length;
+    return `<div class="card" style="margin-top:12px">
+      <div class="row between"><span class="eyebrow">Members</span><button class="link small" data-action="members-csv">Download CSV</button></div>
+      <p class="small" style="margin-top:6px">${people.length.toLocaleString()} ${people.length === 1 ? 'account' : 'accounts'} · ${newThisWeek} new this week${unconfirmed ? ` · ${unconfirmed} email not confirmed` : ''}</p>
+      ${people.length > 5 ? `<input class="input" style="margin-top:10px" type="search" placeholder="Search name or email" value="${esc(m.memberQ || '')}" data-member-q aria-label="Search members">` : ''}
+      <div id="member-list">${memberRows(shown)}</div>
+      ${list.length > shown.length ? `<button class="btn ghost block sm" style="margin-top:10px" data-action="members-all">Show all ${list.length}</button>` : ''}
+      <p class="tiny muted" style="margin-top:10px">Account details only. Health, cycle, food and photo data are never shown here.</p>
+    </div>`;
+  }
+  function memberRows(list) {
+    if (!list.length) return '<p class="small muted" style="margin-top:10px">No one matches.</p>';
+    return list.map((p) => `<div class="list-item" style="padding:10px 0;align-items:flex-start"><div class="grow" style="min-width:0"><strong class="small" style="display:block;overflow:hidden;text-overflow:ellipsis">${esc(p.name || p.email)}</strong>${p.name ? `<div class="tiny muted" style="overflow:hidden;text-overflow:ellipsis">${esc(p.email)}</div>` : ''}<div class="tiny muted">Joined ${esc(memberDate(p.joined))}${p.lastSignIn ? ` · last in ${esc(memberDate(p.lastSignIn))}` : ''}${p.confirmed ? '' : ' · <strong>email not confirmed</strong>'}</div></div><span class="tag" style="white-space:nowrap">${esc(memberStatus(p))}</span></div>`).join('');
+  }
+  function membersCsv(people) {
+    const cell = (v) => `"${String(v == null ? '' : v).replace(/"/g, '""').replace(/^[=+\-@]/, "'$&")}"`;
+    const rows = [['Name', 'Email', 'Joined', 'Last sign-in', 'Email confirmed', 'Membership', 'Plan', 'Trial ends', 'Period ends', 'Set to cancel']]
+      .concat(people.map((p) => [p.name, p.email, (p.joined || '').slice(0, 10), (p.lastSignIn || '').slice(0, 10), p.confirmed ? 'yes' : 'no', p.status, p.plan || '', (p.trialEnd || '').slice(0, 10), (p.periodEnd || '').slice(0, 10), p.cancelling ? 'yes' : 'no']));
+    return rows.map((r) => r.map(cell).join(',')).join('\n');
+  }
   function statsSheet(m) {
     if (m.error) return `<p class="error">${esc(m.error)}</p>`;
     const d = m.data;
@@ -2204,11 +2242,12 @@ ${prog ? `
     const engagement = ['workout_done', 'weekly_checkin', 'program_start', 'library_open', 'exercise_view', 'workout_created', 'home_mode', 'run_on', 'run_plan_start', 'run_logged', 'measurement_logged', 'lp_postpartum', 'start_postpartum', 'lp_menopause', 'start_menopause', 'lp_beginner', 'start_beginner', 'lp_home', 'start_home', 'lp_bridal', 'start_bridal', 'exercise_swap', 'photo_compare', 'badge_earned', 'share_card', 'install_done', 'invite_shared', 'invite_opened', 'invite_claimed', 'membership_canceled'].filter((k) => ev[k]);
     return `<div class="stats">${statTile('Paying', n(mem.active), '')}${statTile('In trial', n(mem.trialing), '')}</div>
       <p class="tiny muted" style="margin-top:8px">${n(mem.yearly)} yearly · ${n(mem.monthly)} monthly · ${n(mem.cancelling)} set to cancel · ${n(mem.pastDue)} card failing · ${n(mem.ended)} ended${mem.comp ? ` · ${n(mem.comp)} complimentary` : ''}</p>
+      ${membersCard(m, d.people)}
       <div class="card" style="margin-top:14px"><div class="eyebrow">Funnel · last 30 days</div>${funnel}<p class="tiny muted" style="margin-top:10px">Percentages compare each step with the one above. Views count once per device per day.</p></div>
       <div class="card" style="margin-top:12px"><div class="row between"><span class="eyebrow">Daily app opens · 30 days</span><span class="tiny muted">${n((ev.app_open || {}).d7)} this week</span></div><svg viewBox="0 0 300 62" style="width:100%;height:80px;margin-top:8px" role="img" aria-label="Daily app opens over 30 days">${bars}</svg></div>
       <div class="card" style="margin-top:12px"><div class="row between"><span class="eyebrow">Activity</span><span class="eyebrow">7 days · 30 days</span></div>${engagement.map((k) => `<div class="list-item" style="padding:8px 0"><span class="grow small">${esc(ev[k].label)}</span><span class="small" style="font-family:var(--mono)">${n(ev[k].d7)} · ${n(ev[k].d30)}</span></div>`).join('')}</div>
       <div class="card" style="margin-top:12px"><div class="eyebrow">Invites</div><p class="small" style="margin-top:6px">${n(d.invites.joined)} joined with an invite · ${n(d.invites.paid)} became paying · ${n(d.invites.rewarded)} free months given</p></div>
-      <p class="tiny muted" style="margin-top:12px">Anonymous counts only: no names, emails, device IDs or IP addresses are stored. Updated ${esc(timeAgo(Date.parse(d.generatedAt)))}.</p>
+      <p class="tiny muted" style="margin-top:12px">Activity counts are anonymous: no names, emails, device IDs or IP addresses are stored with them. Updated ${esc(timeAgo(Date.parse(d.generatedAt)))}.</p>
       <button class="btn ghost block" style="margin-top:12px" data-action="open-stats">Refresh</button>`;
   }
 
@@ -4324,6 +4363,14 @@ ${prog ? `
     },
     'share-card': () => shareCard(),
     'open-stats': () => openStats(),
+    'members-all': () => { if (S.modal) { S.modal.allMembers = true; render(); } },
+    'members-csv': () => {
+      const people = S.modal && S.modal.data && S.modal.data.people;
+      if (!people) return;
+      const url = URL.createObjectURL(new Blob([membersCsv(people)], { type: 'text/csv' }));
+      const a = document.createElement('a'); a.href = url; a.download = `yours-members-${todayKey()}.csv`; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    },
     'open-library': () => openLibrary(),
     'wu-toggle': (el) => { const ex = S.data.activeWorkout.exercises[el.dataset.ei]; ex.wuHidden = !ex.wuHidden; save(); render(); },
     'wu-tick': (el) => { const ex = S.data.activeWorkout.exercises[el.dataset.ei]; const i = Number(el.dataset.i); ex.wu = (ex.wu || []).includes(i) ? ex.wu.filter((x) => x !== i) : (ex.wu || []).concat(i); save(); render(); },
@@ -4533,6 +4580,7 @@ ${prog ? `
     }
     if (S.modal && S.modal.type === 'runplan' && el.matches('[data-runplan-pace]')) { S.modal.paceDraft = el.value; return; }
     if (S.modal && S.modal.type === 'run' && el.form && el.form.dataset.form === 'run-log' && el.name) { S.modal[`f_${el.name}`] = el.type === 'checkbox' ? el.checked : el.value; return; }
+    if (el.matches('[data-member-q]') && S.modal && S.modal.type === 'stats') { S.modal.memberQ = el.value; const box = document.getElementById('member-list'); const people = (S.modal.data && S.modal.data.people) || []; const q = el.value.trim().toLowerCase(); if (box) box.innerHTML = memberRows(people.filter((p) => !q || p.email.toLowerCase().includes(q) || p.name.toLowerCase().includes(q)).slice(0, S.modal.allMembers ? Infinity : 25)); return; }
     if (el.matches('[data-lib-q]') && S.modal && S.modal.type === 'library') { S.modal.q = el.value; const box = document.getElementById('lib-list'); if (box) box.innerHTML = libraryRows(S.modal); return; }
     if (el.matches('[data-cmp-range]')) { S.cmp.pos = Number(el.value); const box = el.closest('.cmp-slider'); if (box) box.style.setProperty('--pos', `${el.value}%`); return; }
     if (el.dataset.note != null && S.data && S.data.activeWorkout) { const ex = S.data.activeWorkout.exercises[el.dataset.note]; if (ex) { ex.note = el.value.slice(0, 300); save(); } return; }
