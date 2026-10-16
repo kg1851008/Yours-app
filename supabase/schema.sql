@@ -343,3 +343,20 @@ alter table public.ai_usage enable row level security;
 create or replace function public.ai_bump(p_user uuid, p_day date, p_kind text) returns int language sql security definer set search_path = public as 'insert into public.ai_usage (user_id, day, kind, n) values (p_user, p_day, p_kind, 1) on conflict (user_id, day, kind) do update set n = public.ai_usage.n + 1 returning n';
 revoke all on function public.ai_bump(uuid, date, text) from public, anon, authenticated;
 grant execute on function public.ai_bump(uuid, date, text) to service_role;
+
+-- The community is for members. has_access() answers only for the signed-in person (no argument, so it cannot be
+-- used to look up anyone else) with the same rule as the app: trialing, active, comp, or past_due within 7 days.
+-- Reading and posting in the community, liking, sending messages and seeing other members' profiles need it.
+-- Without it a person can still read her own messages and profile, delete her own posts, and report abuse.
+-- Running YOURS without payments? Give members a 'comp' row in subscriptions, or the community stays closed to them.
+create or replace function public.has_access() returns boolean language sql stable security definer set search_path = public as 'select exists (select 1 from public.subscriptions s where s.user_id = auth.uid() and (s.status in (''trialing'', ''active'', ''comp'') or (s.status = ''past_due'' and (s.current_period_end is null or s.current_period_end + interval ''7 days'' > now()))))';
+revoke all on function public.has_access() from public, anon;
+grant execute on function public.has_access() to authenticated;
+alter policy "posts read" on public.posts using ((select public.has_access()));
+alter policy "posts insert own" on public.posts with check (user_id = (select auth.uid()) and (select public.has_access()));
+alter policy "comments read" on public.comments using ((select public.has_access()));
+alter policy "comments insert own" on public.comments with check (user_id = (select auth.uid()) and (select public.has_access()));
+alter policy "likes read" on public.likes using ((select public.has_access()));
+alter policy "likes insert own" on public.likes with check (user_id = (select auth.uid()) and (select public.has_access()));
+alter policy "messages send own" on public.messages with check (from_id = (select auth.uid()) and (select public.has_access()));
+alter policy "profiles read" on public.profiles using (id = (select auth.uid()) or (select public.has_access()));
