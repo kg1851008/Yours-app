@@ -1,11 +1,34 @@
 // Owner dashboard: GET /api/stats (Authorization: Bearer <Supabase session token>).
 // Only for the emails in ADMIN_EMAILS (comma separated; default: the YOURS support address).
-// Returns anonymous event counts plus membership totals. No names or emails of members.
+// Returns anonymous event counts, membership totals, and the member list: account details only (name, email,
+// dates, membership status). Never health, cycle, food, weight or photo data.
 const A = require('../lib/analytics');
 const B = require('../lib/billing');
 
 const admins = () => String(process.env.ADMIN_EMAILS || 'yoursfitapp@gmail.com').toLowerCase().split(',').map((x) => x.trim()).filter(Boolean);
 const isAdmin = (user) => !!(user && user.email && admins().includes(String(user.email).toLowerCase()));
+
+// One row per account, newest first. Only account and membership fields.
+function memberList(users, subs) {
+  const byUser = new Map(subs.map((x) => [x.user_id, x]));
+  return users
+    .map((u) => {
+      const sub = byUser.get(u.id) || {};
+      return {
+        name: String((u.user_metadata && u.user_metadata.name) || '').slice(0, 80),
+        email: u.email || '',
+        joined: u.created_at || null,
+        lastSignIn: u.last_sign_in_at || null,
+        confirmed: !!u.email_confirmed_at,
+        status: sub.status || 'none',
+        plan: sub.plan || null,
+        trialEnd: sub.trial_end || null,
+        periodEnd: sub.current_period_end || null,
+        cancelling: !!sub.cancel_at_period_end,
+      };
+    })
+    .sort((a, b) => String(b.joined || '').localeCompare(String(a.joined || '')));
+}
 
 function summarize(rows, now) {
   const day = (n) => new Date(now - n * 864e5).toISOString().slice(0, 10);
@@ -45,10 +68,11 @@ module.exports = async function handler(req, res) {
   try {
     const now = Date.now();
     const since = new Date(now - 30 * 864e5).toISOString().slice(0, 10);
-    const [events, subs, refs] = await Promise.all([
+    const [events, subs, refs, users] = await Promise.all([
       all(`events?select=name,day&day=gte.${since}`),
-      all('subscriptions?select=status,plan,cancel_at_period_end'),
+      all('subscriptions?select=user_id,status,plan,cancel_at_period_end,trial_end,current_period_end'),
       all('referrals?select=status').catch(() => []),
+      B.listUsers().catch((e) => { console.error('stats users', e && e.message); return null; }),
     ]);
     const count = (list, f) => list.filter(f).length;
     const members = {
@@ -62,11 +86,12 @@ module.exports = async function handler(req, res) {
       monthly: count(subs, (s) => ['trialing', 'active', 'past_due'].includes(s.status) && s.plan === 'monthly'),
     };
     const invites = { joined: refs.length, paid: count(refs, (r) => ['earned', 'rewarded'].includes(r.status)), rewarded: count(refs, (r) => r.status === 'rewarded') };
-    return res.status(200).json({ ...summarize(events, now), members, invites, generatedAt: new Date(now).toISOString() });
+    return res.status(200).json({ ...summarize(events, now), members, invites, people: users ? memberList(users, subs) : null, generatedAt: new Date(now).toISOString() });
   } catch (e) {
     console.error('stats', e && e.message);
     return res.status(502).json({ error: 'Could not load stats' });
   }
 };
 module.exports.summarize = summarize;
+module.exports.memberList = memberList;
 module.exports.isAdmin = isAdmin;
