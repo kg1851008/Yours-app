@@ -970,17 +970,22 @@
   // Paces are stored as seconds per km. Her easy pace (profile.runPace) drives every zone; treadmill speed is the same
   // pace as a belt speed. Outside, set the treadmill to 1% incline to match the effort.
   const KM_PER_MI = 1.609344;
+  // A saved pace that is not a positive number (an old version, a bad sync) counts as no pace yet.
+  const validPace = (x) => (typeof x === 'number' && Number.isFinite(x) && x > 0 ? x : null);
   const runPlanById = (id) => (D.RUN_PLANS || []).find((p) => p.id === id);
   const paceFor = (easySec, zone, factor) => {
     const z = (D.RUN_ZONES || {})[zone];
+    easySec = validPace(easySec);
     return easySec && z && z.mult ? easySec * z.mult * (factor || 1) : null; // unrounded: rounding happens only for display
   };
   function fmtPace(secPerKm, units) {
+    secPerKm = validPace(secPerKm);
     if (!secPerKm) return '';
     const sec = Math.round(units === 'metric' ? secPerKm : secPerKm * KM_PER_MI);
     return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')} /${units === 'metric' ? 'km' : 'mi'}`;
   }
   function treadmillSpeed(secPerKm, units) {
+    secPerKm = validPace(secPerKm);
     if (!secPerKm) return '';
     const kmh = 3600 / secPerKm;
     return units === 'metric' ? `${(Math.round(kmh * 10) / 10).toFixed(1)} km/h` : `${(Math.round((kmh / KM_PER_MI) * 10) / 10).toFixed(1)} mph`;
@@ -1051,8 +1056,9 @@
   // Progressive overload: after each run her easy pace (which sets every zone) moves toward what she actually ran.
   // Faster only when she completed the session at a sensible effort; slower only when it clearly went badly.
   function nextRunPace(prevSec, entry) {
+    prevSec = validPace(prevSec);
     const z = (D.RUN_ZONES || {})[entry && entry.zone];
-    const implied = entry && entry.pace && z && z.mult ? entry.pace / z.mult : null;
+    const implied = entry && validPace(entry.pace) && z && z.mult ? entry.pace / z.mult : null;
     if (!implied) return { pace: prevSec || null, change: 'same' };
     if (!prevSec) return { pace: implied, change: 'set' };
     const hard = ['intervals', 'tempo', 'strides', 'test'].includes(entry.kind);

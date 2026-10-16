@@ -572,3 +572,13 @@ test('running: run days use the same numbering as program days (Sunday = 0)', ()
   data.runPlan.days = [(T.getDay() + 1) % 7];
   assert.equal(L.runPlanDay(data, T).scheduled, false);
 });
+
+test('running: a corrupted saved pace shows nothing and is replaced by the next run', () => {
+  for (const bad of ['fast', -5, NaN, Infinity, null, {}]) {
+    assert.equal(L.fmtPace(bad, 'imperial'), '');
+    assert.equal(L.treadmillSpeed(bad, 'metric'), '');
+    assert.equal(L.paceFor(bad, 'easy'), null);
+    assert.equal(L.nextRunPace(bad, { zone: 'easy', kind: 'easy', pace: 400, rpe: 5 }).change, 'set');
+  }
+  assert.equal(L.nextRunPace(391, { zone: 'easy', kind: 'easy', pace: 'x' }).change, 'same');
+});
