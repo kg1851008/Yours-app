@@ -416,7 +416,7 @@
       planAdjustments: S.data.plan,
       todaysWorkout: { id: wk.id, name: wk.name, completed: loggedOn(todayKey()).length > 0, suggestedLoads: todaysLoads() },
       program: programContext(),
-      running: (() => { const tr = runsOn() && todaysRun(); return tr ? { plan: tr.rd.plan.name, week: tr.rd.week, of: tr.rd.weeks, nextRun: tr.t.title, scheduledToday: tr.rd.scheduled && !tr.rd.doneToday, easyPace: S.data.profile.runPace ? L.fmtPace(S.data.profile.runPace, runUnits()) : null } : null; })(),
+      running: (() => { const tr = runsOn() && todaysRun(); return tr ? { plan: tr.rd.plan.name, week: tr.rd.week, of: tr.rd.weeks, nextRun: tr.t.title, scheduledToday: tr.rd.scheduled && !tr.rd.doneToday, easyPace: hasPace() ? L.fmtPace(S.data.profile.runPace, runUnits()) : null } : null; })(),
       trainsAt: atHome() ? 'home (dumbbells, band, chair; no machines or barbells)' : 'gym',
       workoutCatalog: D.WORKOUTS.filter((w) => w.phase !== 'program' || (S.data.program && w.program === S.data.program.id)).concat(L.setCustomWorkouts(S.data.customWorkouts)).map((w) => ({ id: w.id, name: w.name, phase: w.phase, intensity: w.intensity })),
       recentWorkouts: S.data.workouts.slice(-10).map((w) => ({ date: w.date, name: w.name, minutes: w.minutes, phase: w.phase })),
@@ -2602,6 +2602,7 @@ ${prog ? `
   // Off unless she turns it on. Plans are set by time and effort; her easy pace turns every zone into a pace for
   // outside and a treadmill speed, and moves after each logged run (progressive overload).
   const runsOn = () => !!(S.data && S.data.profile.runs);
+  const hasPace = () => !!L.paceFor(S.data.profile.runPace, 'easy'); // a corrupted saved pace counts as none
   const runUnits = () => (S.data.profile.units === 'metric' ? 'metric' : 'imperial');
   const runWhere = () => S.data.profile.runWhere || 'both';
   const fmtMin = (min) => (min < 1 ? `${Math.round(min * 60)} sec` : `${Math.round(min * 10) / 10} min`);
@@ -2661,7 +2662,7 @@ ${prog ? `
       <div class="card" style="margin:12px 0 0;padding:14px">${pl.weeks.map((w, i) => `<div class="row between small" style="padding:5px 0;${i ? 'border-top:1px solid var(--line)' : ''}"><span class="muted" style="min-width:64px">Week ${i + 1}</span><span class="grow" style="text-align:right">${esc([...new Set(w.map((x) => x.title))].join(' · '))}</span></div>`).join('')}</div>
       ${active ? `<button class="btn ghost block" style="margin-top:16px" data-action="runplan-leave">Leave this plan</button>` : `
         <div class="label" style="margin-top:18px">Your usual easy pace${pl.needsPace ? '' : ' (optional)'}</div>
-        <div class="row" style="gap:8px;align-items:center"><input class="input" style="max-width:120px" inputmode="decimal" placeholder="${u === 'metric' ? '6:30' : '10:30'}" value="${m.paceDraft != null ? esc(m.paceDraft) : S.data.profile.runPace ? esc(L.fmtPace(S.data.profile.runPace, u).split(' ')[0]) : ''}" data-runplan-pace aria-label="Easy pace, minutes and seconds per ${u === 'metric' ? 'kilometer' : 'mile'}"><span class="small muted">per ${u === 'metric' ? 'km' : 'mile'}, at an easy, chatty effort</span></div>
+        <div class="row" style="gap:8px;align-items:center"><input class="input" style="max-width:120px" inputmode="decimal" placeholder="${u === 'metric' ? '6:30' : '10:30'}" value="${m.paceDraft != null ? esc(m.paceDraft) : hasPace() ? esc(L.fmtPace(S.data.profile.runPace, u).split(' ')[0]) : ''}" data-runplan-pace aria-label="Easy pace, minutes and seconds per ${u === 'metric' ? 'kilometer' : 'mile'}"><span class="small muted">per ${u === 'metric' ? 'km' : 'mile'}, at an easy, chatty effort</span></div>
         ${pl.needsPace ? '' : '<p class="tiny muted" style="margin-top:6px">Not sure? Leave it blank and run by feel. Log your pace after a run and your targets appear.</p>'}
         ${m.paceError ? `<p class="error" style="margin-top:6px">${esc(m.paceError)}</p>` : ''}
         <div class="label" style="margin-top:18px">Pick ${pl.perWeek} run days</div>
@@ -2684,7 +2685,7 @@ ${prog ? `
       <div class="segment" style="margin-top:12px" role="group" aria-label="Show targets for">${[['outside', 'Outside'], ['treadmill', 'Treadmill'], ['both', 'Both']].map(([v, l]) => `<button class="${where === v ? 'active' : ''}" data-action="run-show" data-value="${v}" aria-pressed="${where === v}">${l}</button>`).join('')}</div>
       <div class="card" style="margin-top:12px">${runBlocksHtml(t, where)}</div>
       ${where !== 'outside' ? '<p class="tiny muted" style="margin-top:8px">Treadmill: set a 1% incline to match the effort of running outside.</p>' : ''}
-      ${S.data.profile.runPace ? '' : '<p class="tiny muted" style="margin-top:8px">No pace yet, so run by feel. Log your pace below and your personal targets appear next time.</p>'}
+      ${hasPace() ? '' : '<p class="tiny muted" style="margin-top:8px">No pace yet, so run by feel. Log your pace below and your personal targets appear next time.</p>'}
       ${rd.doneToday ? '<div class="banner" style="margin-top:14px;background:var(--green-soft)">' + icon('check', 18) + '<div class="grow small">Run logged today. Nice work.</div></div>' : `
       <form data-form="run-log" style="margin-top:16px">
         <div class="label">Log this run</div>
@@ -3602,7 +3603,7 @@ ${prog ? `
           <div class="row between" style="margin-top:14px"><span class="small">Daily weigh-in prompt</span><button class="chip ${S.data.weighDaily === false ? '' : 'selected'}" data-action="toggle-weigh">${S.data.weighDaily === false ? 'Off' : 'On'}</button></div>
           <div class="row between" style="margin-top:14px"><span class="small">Had a baby in the last year</span><button class="chip ${S.data.profile.postpartum ? 'selected' : ''}" data-action="toggle-postpartum">${S.data.profile.postpartum ? 'Yes' : 'No'}</button></div></div>
         <div class="card flat"><div class="label">Running</div><div class="segment" role="group" aria-label="Running">${[['off', 'Off'], ['on', 'On']].map(([v, l]) => `<button class="${(runsOn() ? 'on' : 'off') === v ? 'active' : ''}" data-action="set-runs" data-value="${v}" aria-pressed="${(runsOn() ? 'on' : 'off') === v}">${l}</button>`).join('')}</div>
-          ${runsOn() ? `<form data-form="run-pace" class="row" style="gap:8px;margin-top:10px;align-items:center"><input class="input" style="max-width:110px" name="pace" inputmode="decimal" placeholder="${runUnits() === 'metric' ? '6:30' : '10:30'}" value="${S.data.profile.runPace ? esc(L.fmtPace(S.data.profile.runPace, runUnits()).split(' ')[0]) : ''}" aria-label="Easy pace"><span class="small muted grow">easy pace per ${runUnits() === 'metric' ? 'km' : 'mile'}</span><button class="btn ghost sm" type="submit">Save</button></form>
+          ${runsOn() ? `<form data-form="run-pace" class="row" style="gap:8px;margin-top:10px;align-items:center"><input class="input" style="max-width:110px" name="pace" inputmode="decimal" placeholder="${runUnits() === 'metric' ? '6:30' : '10:30'}" value="${hasPace() ? esc(L.fmtPace(S.data.profile.runPace, runUnits()).split(' ')[0]) : ''}" aria-label="Easy pace"><span class="small muted grow">easy pace per ${runUnits() === 'metric' ? 'km' : 'mile'}</span><button class="btn ghost sm" type="submit">Save</button></form>
           <div class="segment" style="margin-top:10px" role="group" aria-label="Where you run">${[['outside', 'Outside'], ['treadmill', 'Treadmill'], ['both', 'Both']].map(([v, l]) => `<button class="${runWhere() === v ? 'active' : ''}" data-action="set-run-where" data-value="${v}" aria-pressed="${runWhere() === v}">${l}</button>`).join('')}</div>
           <p class="tiny muted" style="margin-top:8px">Your easy pace sets every target, outside and on the treadmill, and moves after each run you log.</p>` : '<p class="tiny muted">Off by default. Turn it on for Couch to 5K, 5K to 10K and Speed plans.</p>'}</div>
         <div class="card flat"><div class="label">Where you train</div>${trainAtSegment()}<p class="tiny muted">At home, your plan uses dumbbells, a band and a chair instead of gym machines.</p></div>
@@ -4092,7 +4093,7 @@ ${prog ? `
       const m = S.modal; const pl = L.runPlanById(m.id);
       const box = root.querySelector('[data-runplan-pace]'); const raw = box ? box.value.trim() : '';
       if (raw) { const pace = L.parsePace(raw, runUnits()); if (!pace) { m.paceError = `Enter a pace like ${runUnits() === 'metric' ? '6:30' : '10:30'}.`; return render(); } S.data.profile.runPace = pace; }
-      else if (pl.needsPace && !S.data.profile.runPace) { m.paceError = 'This plan needs your usual easy pace to set your targets.'; return render(); }
+      else if (pl.needsPace && !hasPace()) { m.paceError = 'This plan needs your usual easy pace to set your targets.'; return render(); }
       S.data.profile.runs = true;
       S.data.runPlan = { id: pl.id, start: todayKey(), days: m.days.slice().sort() };
       logEvent('run_plan_start'); save(); S.modal = null; render(); toast(`${pl.name} started`);
