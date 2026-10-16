@@ -2264,18 +2264,31 @@ ${prog ? `
     </div>`;
   }
   // Paid access needs a cloud account with an active, trialing or recently past-due membership.
-  const memberHasAccess = () => isCloud() && window.YOURS_CLOUD.hasAccess(S.sub);
+  // Last confirmed membership, kept per account so a paying member is not locked out by bad signal or a slow start.
+  // Trusted for 3 days; online, the live status always replaces it.
+  const SUB_TTL = 3 * 864e5;
+  const subKey = () => `yours.sub.${S.session && S.session.email}`;
+  function cachedSub() {
+    const c = store.get(subKey(), null);
+    if (!c || !c.sub || !(Date.now() - c.at < SUB_TTL)) return null;
+    if (c.sub.status === 'trialing' && c.sub.trial_end && Date.parse(c.sub.trial_end) < Date.now()) return null;
+    return c.sub;
+  }
+  const memberHasAccess = () => isCloud() && window.YOURS_CLOUD.hasAccess(S.sub || cachedSub());
+  // Payment is required whenever the app is set up for it (config.js requirePayment), even if the payment options
+  // could not be loaded: then the paywall says so instead of letting her in for free.
+  const payRequired = () => !!(cloud && ((window.YOURS_CONFIG || {}).requirePayment || billingOn()));
   const money = (p) => (p ? new Intl.NumberFormat(undefined, { style: 'currency', currency: p.currency.toUpperCase(), minimumFractionDigits: p.amount % 1 ? 2 : 0 }).format(p.amount) : '');
   function priceFor(plan) {
     const pr = S.billing && S.billing.prices;
     return pr ? pr[plan] : plan === 'yearly' ? { amount: 99, currency: 'usd' } : { amount: 14.99, currency: 'usd' };
   }
   async function loadBilling() {
-    try { const r = await fetch('/api/billing'); S.billing = r.ok ? await r.json() : { enabled: false }; } catch { S.billing = S.billing || { enabled: false }; }
+    try { const r = await fetch('/api/billing'); S.billing = r.ok ? await r.json() : { enabled: false, failed: true }; } catch { S.billing = S.billing && S.billing.enabled ? S.billing : { enabled: false, failed: true }; }
   }
   async function refreshSub() {
     if (!isCloud()) { S.sub = null; return; }
-    try { S.sub = await cloud.subscription(); S.subLoaded = true; } catch { /* keep the last known status */ }
+    try { S.sub = await cloud.subscription(); S.subLoaded = true; store.set(subKey(), { sub: S.sub, at: Date.now() }); } catch { /* keep the last known status */ }
   }
   async function billingCall(action, extra) {
     const token = await cloud.accessToken();
@@ -2331,6 +2344,15 @@ ${prog ? `
         <h1 style="margin-top:24px">Create your account</h1><p class="muted" style="margin-top:6px">Your plan is ready. Create an account to start your ${trialDays()}-day free trial.</p>
         <div class="card" style="margin-top:20px">${signupForm('paywall')}</div>
         <p class="center small" style="margin-top:14px"><button class="link" data-action="logout">${isGuest() ? 'Start over' : 'Sign out'}</button> · <button class="link" data-action="go-login">I already have an account</button></p></div>`;
+    }
+    if (!billingOn()) {
+      return `<div class="screen no-nav">
+        <div class="top"><div class="wordmark sm">yours.</div><button class="link small" data-action="logout">Sign out</button></div>
+        <h1 style="margin-top:24px">Almost there</h1>
+        <p class="muted" style="margin-top:8px">We could not load membership options just now. Check your connection and try again.</p>
+        <button class="btn primary block" style="margin-top:20px" data-action="billing-retry" ${S.billingBusy ? 'disabled' : ''}>${S.billingBusy ? 'Trying...' : 'Try again'}</button>
+        <p class="center small" style="margin-top:14px"><button class="link" data-action="billing-recheck">I already subscribed</button></p>
+      </div>`;
     }
     return `<div class="screen no-nav">
       <div class="top"><div class="wordmark sm">yours.</div><button class="link small" data-action="logout">Sign out</button></div>
@@ -3711,7 +3733,7 @@ ${prog ? `
     else if (!S.data.onboarded) html = viewOnboarding();
     else if (!S.data.planSeen) html = viewReveal();
     else if (!termsOk()) html = viewAgreement();
-    else if (billingOn() && !memberHasAccess()) html = viewPaywall();
+    else if (payRequired() && !memberHasAccess()) html = viewPaywall();
     else {
       const views = { home: viewHome, workouts: viewWorkouts, meals: viewMeals, advisor: viewAdvisor, community: viewCommunity };
       html = (views[S.tab] || viewHome)() + nav();
@@ -4362,6 +4384,7 @@ ${prog ? `
       openShare(pr ? { art: m.record.phase, eyebrow: 'New personal record', big: fmtLoad(pr.weight, pr.unit), sub: `${pr.name} for ${pr.reps} reps.`, foot: shortDate(m.record.date) } : { art: 'session', eyebrow: 'Session complete', big: `${m.record.sets} sets`, sub: m.record.name, foot: shortDate(m.record.date) });
     },
     'share-card': () => shareCard(),
+    'billing-retry': async () => { S.billingBusy = true; render(); await Promise.all([loadBilling(), refreshSub()]); S.billingBusy = false; render(); },
     'open-stats': () => openStats(),
     'members-all': () => { if (S.modal) { S.modal.allMembers = true; render(); } },
     'members-csv': () => {
