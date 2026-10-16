@@ -8,4 +8,6 @@ window.YOURS_CONFIG = {
   supabaseAnonKey: 'sb_publishable_N5hltz4KM5enX3o95biU9A_nU1-tbzf',
   // Who sees the owner dashboard card in Profile. The server checks ADMIN_EMAILS in Vercel before showing any numbers.
   adminEmails: ['yoursfitapp@gmail.com'],
+  // Nobody uses the app without a membership (trial, paid or free access). Payment problems show a retry screen, never free access.
+  requirePayment: true,
 };
