@@ -1480,21 +1480,21 @@
     const cta = (cls) => `<button class="btn primary ${cls || ''}" data-action="start">${esc(ctaText)}</button>`;
     const phone = (img, alt) => `<div class="lp-phone"><img src="/img/landing/${img}.jpg" alt="${esc(alt)}" width="390" height="844" loading="lazy"></div>`;
     const phases = [
-      ['menstrual', 'Period week', 'Lighter lifts, mobility and more rest. Iron-rich meals and gentle movement for cramps.'],
-      ['follicular', 'Follicular', 'Energy climbs. Your best window to add weight and learn new lifts.'],
-      ['ovulation', 'Ovulation', 'Peak strength. Heavy days, personal records and power work.'],
-      ['luteal', 'Luteal', 'Steady weights, quality reps and a little more food, on purpose.'],
+      ['01', 'Days 1-5', 'Period week', 'lighter, slower, kinder.', 'Lighter lifts, mobility and more rest. Iron-rich meals and gentle movement for cramps.'],
+      ['02', 'Days 6-13', 'Follicular', 'energy climbs.', 'Your best window to add weight and learn new lifts.'],
+      ['03', 'Days 14-16', 'Ovulation', 'peak strength.', 'Heavy days, personal records and power work.'],
+      ['04', 'Days 17-28', 'Luteal', 'steady wins.', 'Steady weights, quality reps and a little more food, on purpose.'],
     ];
     const features = [
-      ['workouts', 'Every weight, suggested', 'YOURS tells you what to lift for every set, lighter on period days and low-energy days, heavier when you are ready.'],
-      ['calendar', 'Plans for every life stage', 'Natural cycle, the pill, PCOS, perimenopause, menopause and after baby. No regular cycle needed.'],
-      ['meals', 'Food in seconds', `${S.ai ? 'Snap your plate, say' : 'Say'} what you ate or scan a barcode. Calories and protein set for your phase.`],
-      ['list', 'A weekly check-in', 'Photos, weigh-in and three questions. Next week\'s training, steps and calories adjust to you.'],
-      ['image', 'Before and after', 'A private photo vault, locked with your PIN, with a slider to see the change.'],
-      ['trend', 'Strength by phase', 'See how your cycle affects your lifts, with badges and personal records along the way.'],
-      ['advisor', 'A coach in your pocket', S.aiCoach ? 'Ask anything about training, food or recovery and get answers built around your data.' : 'Ask what to lift today, what helps with cramps or what to eat this phase, and get answers built around your plan.'],
-      ['flame', 'Running plans', 'Couch to 5K, 5K to 10K and Speed, with your own paces outside and treadmill speeds. Paces move up as you get fitter, and hard runs land in your stronger weeks.'],
-      ['community', 'Women who lift', 'Share wins, ask questions and message other members.'],
+      ['Every weight, suggested', 'YOURS tells you what to lift for every set, lighter on period days and low-energy days, heavier when you are ready.'],
+      ['Plans for every life stage', 'Natural cycle, the pill, PCOS, perimenopause, menopause and after baby. No regular cycle needed.'],
+      ['Food in seconds', `${S.ai ? 'Snap your plate, say' : 'Say'} what you ate or scan a barcode. Calories and protein set for your phase.`],
+      ['A weekly check-in', 'Photos, weigh-in and three questions. Next week\'s training, steps and calories adjust to you.'],
+      ['Before and after', 'A private photo vault, locked with your PIN, with a slider to see the change.'],
+      ['Strength by phase', 'See how your cycle affects your lifts, with badges and personal records along the way.'],
+      ['A coach in your pocket', S.aiCoach ? 'Ask anything about training, food or recovery and get answers built around your data.' : 'Ask what to lift today, what helps with cramps or what to eat this phase, and get answers built around your plan.'],
+      ['Running plans', 'Couch to 5K, 5K to 10K and Speed, with your own paces outside and treadmill speeds. Hard runs land in your stronger weeks.'],
+      ['Women who lift', 'Share wins, ask questions and message other members.'],
     ];
     const faqs = [
       ['Do I need a regular cycle?', 'No. YOURS has plans for irregular cycles, PCOS, hormonal birth control, perimenopause, menopause and postpartum. Without a natural cycle, your week follows your daily check-in instead.'],
@@ -1505,83 +1505,106 @@
       ['Is my data private?', 'Yes. We never sell your data or use it for ads. Progress photos stay on your phone, locked with your PIN.'],
       ['Is this medical advice?', 'No. YOURS is a fitness and nutrition coach. Talk to your doctor before starting, especially if you are pregnant, postpartum or managing a condition.'],
     ];
+    // Laid out like an issue of a magazine: a contents list on the cover, numbered sections below.
+    const toc = [['lp-cycle', 'Four phases', 'one plan'], ['lp-app', 'Inside the app', ''], ['lp-programs', 'Programs', 'for every season'], ...(paid ? [['lp-pricing', 'Pricing', 'simple'], ] : []), ['lp-faq', 'Questions', 'answered']];
+    const no = (id) => String(toc.findIndex((t) => t[0] === id) + 1).padStart(2, '0');
+    const head = (id, title, it) => `<div class="lp-head"><h2 class="lp-h2">${title}${it ? ` <span class="serif">${it}</span>` : ''}</h2><span class="mono">${no(id)}</span></div>`;
+    const weeksOf = (pr) => Math.max(...pr.blocks.map((b) => b.to));
+    const lines = { postpartum: 'after baby', glutes: 'build it', pullup: 'your first one', menopause: 'bones and muscle', beginner: 'start here', bridal: 'to the aisle', arms: 'sleeveless season', athlete: 'move like one', home: 'no gym needed' };
+    const programs = [
+      ...D.PROGRAMS.map((pr) => [pr.name, lines[pr.id] || '', `${weeksOf(pr)} wks`]),
+      ['Running', 'couch to 5K, 10K and speed', 'Optional'],
+      ['Pilates and yoga', 'on the mat', 'Every phase'],
+    ];
     return `<div class="lp">
-      <header class="lp-top"><div class="wordmark sm">yours.</div><div class="row" style="gap:10px"><button class="link small" data-action="go-login">Sign in</button>${paid ? '' : '<button class="btn soft xs" data-action="demo">Demo</button>'}</div></header>
+      <header class="lp-top"><span class="mono lp-issue">Issue 01 · Cycle-synced training</span><div class="row" style="gap:12px"><button class="link small" data-action="go-login">Sign in</button>${paid ? '' : '<button class="btn soft xs" data-action="demo">Demo</button>'}<button class="btn primary xs" data-action="start">${paid ? 'Start free' : 'Start'}</button></div></header>
       ${regionBlocked() ? `<div class="banner lp-wrap" style="margin-top:8px" role="status">${icon('shield', 18)}<div class="grow small"><strong>YOURS is only available in the United States right now.</strong> We hope to come to you soon.</div></div>` : ''}
       ${pendingInvite() && !regionBlocked() ? `<div class="banner lp-wrap" style="margin-top:8px">${icon('gift', 18)}<div class="grow small"><strong>A friend invited you.</strong> Your free trial is 3 weeks instead of 1.</div></div>` : ''}
+      <div class="lp-wrap">
+        <div class="wordmark lp-mast">yours.</div>
+        <div class="lp-strip mono"><span>Made by women, for women</span><span>Strength · Running · Pilates · Yoga</span></div>
+      </div>
       <section class="lp-hero lp-wrap">
         <div class="lp-hero-copy">
-          <div class="eyebrow">${A ? esc(A.eyebrow) : 'Train with your cycle, not against it'}</div>
-          <h1 class="lp-h1">${A ? esc(A.h1) : 'Some weeks you feel unstoppable. Some weeks you&nbsp;don\'t.'}</h1>
-          <p class="lp-lead">${A ? esc(A.lead) : 'That isn\'t a lack of discipline. It\'s your cycle. YOURS plans every workout, weight and meal around it, so you get stronger in every phase.'}</p>
+          ${A ? `<div class="eyebrow">${esc(A.eyebrow)}</div><h1 class="lp-h1">${esc(A.h1)}</h1>` : '<h1 class="lp-h1">Stop training <span class="serif">against your cycle.</span></h1>'}
+          <p class="lp-lead">${A ? esc(A.lead) : 'YOURS plans every workout, weight and meal around your cycle, so you get stronger in every phase.'}</p>
           <div class="lp-cta">${cta()}<button class="btn ghost" data-action="go-login">I have an account</button></div>
-          <p class="tiny muted" style="margin-top:12px">${paid ? `${days} days free, then ${money(m)} a month or ${money(y)} a year. Cancel anytime.` : 'Your plan in about 2 minutes.'}</p>
+          <p class="mono muted" style="margin-top:14px">${paid ? `${days} days free, then ${money(m)} a month or ${money(y)} a year. Cancel anytime.` : 'Your plan in about 2 minutes.'}</p>
         </div>
-        <div class="lp-hero-phone">${phone('home', 'YOURS home screen: day 10 of the cycle, follicular phase, rising energy')}</div>
+        <nav class="lp-toc" aria-label="On this page">
+          <div class="mono muted">In this issue</div>
+          ${toc.map(([id, t, it]) => `<a href="#${id}"><span><strong>${esc(t)}</strong>${it ? ` <span class="serif">${esc(it)}</span>` : ''}</span><span class="mono">${no(id)}</span></a>`).join('')}
+        </nav>
       </section>
 ${prog ? `
       <section class="lp-wrap lp-sec">
         <div class="eyebrow">Your program</div>
         <h2 class="lp-h2">${esc(prog.name)}</h2>
-        <p class="lp-lead" style="margin-top:8px">${esc(prog.tagline)}</p>
-        <ol class="lp-steps">${prog.blocks.map((b, i) => `<li><span class="lp-num">0${i + 1}</span><div><h3>${esc(b.title)} <span class="tiny muted" style="font-weight:400">· ${b.from === b.to ? `Week ${b.from}` : `Weeks ${b.from}-${b.to}`}</span></h3><p class="small muted">${esc(b.note)}</p></div></li>`).join('')}</ol>
-        <p class="small muted" style="margin-top:12px">${prog.perWeek} sessions a week. ${esc(A.note || prog.who)}</p>
+        <p class="lp-lead">${esc(prog.tagline)}</p>
+        <ol class="lp-steps">${prog.blocks.map((b, i) => `<li><span class="lp-big">0${i + 1}</span><div><span class="mono muted">${b.from === b.to ? `Week ${b.from}` : `Weeks ${b.from}-${b.to}`}</span><h3>${esc(b.title)}</h3><p class="small muted">${esc(b.note)}</p></div></li>`).join('')}</ol>
+        <p class="small muted" style="margin-top:14px">${prog.perWeek} sessions a week. ${esc(A.note || prog.who)}</p>
         <div style="margin-top:16px">${cta()}</div>
       </section>` : ''}
 
-      <section class="lp-wrap lp-sec">
-        <h2 class="lp-h2">Four phases. One plan that moves with them.</h2>
-        <div class="lp-phases">${phases.map(([k, t, d]) => `<div class="lp-phase"><span class="lp-dot" style="background:var(--${k})"></span><h3>${esc(t)}</h3><p class="small muted">${esc(d)}</p></div>`).join('')}</div>
-        <p class="small muted" style="margin-top:14px">No regular cycle? On the pill, PCOS, perimenopause, menopause or after baby, YOURS follows your stage and your daily check-in.</p>
+      <section class="lp-band">
+        <div class="mono">The idea</div>
+        <p class="serif lp-pull">“Some weeks you feel unstoppable. Some weeks you don't.”</p>
+        <p class="lp-band-sub">That isn't a lack of discipline. It's your hormones. So we built a plan that moves with them.</p>
       </section>
 
-      <section class="lp-sec">
-        <h2 class="lp-h2 lp-wrap">See it in action</h2>
-        <div class="lp-screens" tabindex="0" role="region" aria-label="App screenshots, scroll sideways">${[['workout', 'The weight for every set', 'Workout logger with a suggested 175 lb x 9 on hip thrusts'], ['meals', S.ai ? 'Snap, say or scan your food' : 'Say or scan your food', 'Food diary with calories and protein remaining'], ['insights', 'Your strength by phase', 'Chart showing strength is highest in the ovulation phase']].map(([img, cap, alt]) => `<figure>${phone(img, alt)}<figcaption class="small">${esc(cap)}</figcaption></figure>`).join('')}</div>
-        <p class="tiny muted lp-wrap" style="margin-top:8px">Screens from the YOURS demo account.</p>
+      <section class="lp-wrap lp-sec" id="lp-cycle">
+        ${head('lp-cycle', 'Four phases,', 'one plan.')}
+        <div class="lp-phases">${phases.map(([n, d, t, it, p]) => `<article class="lp-phase"><span class="lp-big">${n}</span><span class="mono muted">${d}</span><h3>${esc(t)}</h3><div class="serif lp-it">${esc(it)}</div><p class="small muted">${esc(p)}</p></article>`).join('')}</div>
+        <p class="small muted" style="margin-top:16px">Days shown for a 28-day cycle; yours follows your own length. No regular cycle? On the pill, PCOS, perimenopause, menopause or after baby, YOURS follows your stage and your daily check-in.</p>
       </section>
 
-      <section class="lp-wrap lp-sec">
-        <h2 class="lp-h2">How it works</h2>
-        <ol class="lp-steps">${[['Tell us about you', 'Your cycle or life stage, goal, experience and how active you are. About two minutes.'], ['Get your plan', 'Workouts, weights, calories, protein and steps for today and every phase.'], ['It learns from you', 'Log lifts, food and a 20-second daily check-in. Your plan adjusts every week.']].map(([t, d], i) => `<li><span class="lp-num">0${i + 1}</span><div><h3>${esc(t)}</h3><p class="small muted">${esc(d)}</p></div></li>`).join('')}</ol>
-      </section>
-
-      <section class="lp-wrap lp-sec">
-        <h2 class="lp-h2">Everything in one app</h2>
-        <div class="lp-features">${features.map(([ic, t, d]) => `<div class="lp-feature">${icon(ic, 22)}<h3>${esc(t)}</h3><p class="small muted">${esc(d)}</p></div>`).join('')}</div>
-      </section>
-
-      <section class="lp-wrap lp-sec">
-        <h2 class="lp-h2">Programs</h2>
-        <div class="chips" style="margin-top:12px">${D.PROGRAMS.map((pr) => `<span class="chip">${esc(pr.name)}</span>`).join('')}</div>
-        <p class="small muted" style="margin-top:10px">From your first goblet squat to your first pull-up: glutes, arms, a bridal bootcamp, athlete training, home workouts, after baby or through menopause. Plus mat Pilates and yoga sessions for every phase.</p>
-      </section>
-
-      ${D.TESTIMONIALS.length ? `<section class="lp-wrap lp-sec"><h2 class="lp-h2">From members</h2><div class="lp-quotes">${D.TESTIMONIALS.map((t) => `<figure class="lp-quote"><blockquote class="serif">“${esc(t.quote)}”</blockquote><figcaption class="small muted">${esc(t.name)}${t.detail ? ` · ${esc(t.detail)}` : ''}</figcaption></figure>`).join('')}</div></section>` : ''}
-
-      ${paid ? `<section class="lp-wrap lp-sec" id="pricing">
-        <h2 class="lp-h2">Simple pricing</h2>
-        <div class="lp-prices">
-          <div class="lp-price"><div class="row between"><h3>Yearly</h3>${save > 0 ? `<span class="tag accent">Save ${save}%</span>` : ''}</div><div class="serif lp-amount">${money(y)}<span class="small muted"> / year</span></div><p class="tiny muted">${money({ amount: Math.round((y.amount / 12) * 100) / 100, currency: y.currency })} a month, billed yearly</p></div>
-          <div class="lp-price"><h3>Monthly</h3><div class="serif lp-amount">${money(m)}<span class="small muted"> / month</span></div><p class="tiny muted">Cancel anytime</p></div>
+      <section class="lp-sec lp-app" id="lp-app">
+        <div class="lp-wrap">
+          <div class="mono muted">${no('lp-app')} · Inside the app</div>
+          <h2 class="lp-h2 lp-app-h">The weight for every set, <span class="serif">planned around you.</span></h2>
+          <p class="lp-drop">Lighter on low days, heavier when you're ready. Your plan follows your cycle or life stage, and adjusts every week from what you actually log.</p>
         </div>
-        <p class="small" style="margin-top:12px">Both start with <strong>${days} days free</strong>. Cancel before the trial ends and you won't be charged.</p>
-        <div style="margin-top:16px">${cta('block')}</div>
+        <div class="lp-screens" tabindex="0" role="region" aria-label="App screenshots, scroll sideways">${[['workout', 'The weight for every set', 'Workout logger with a suggested 175 lb x 9 on hip thrusts'], ['meals', S.ai ? 'Snap, say or scan your food' : 'Say or scan your food', 'Food diary with calories and protein remaining'], ['insights', 'Your strength by phase', 'Chart showing strength is highest in the ovulation phase']].map(([img, cap, alt]) => `<figure>${phone(img, alt)}<figcaption class="mono">${esc(cap)}</figcaption></figure>`).join('')}</div>
+        <p class="tiny muted lp-wrap" style="margin-top:10px">Screens from the YOURS demo account.</p>
+        <div class="lp-wrap">
+          <ol class="lp-steps lp-how">${[['Tell us about you', 'Your cycle or life stage, goal, experience and how active you are. About two minutes.'], ['Get your plan', 'Workouts, weights, calories, protein and steps for today and every phase.'], ['It learns from you', 'Log lifts, food and a 20-second daily check-in. Your plan adjusts every week.']].map(([t, d], i) => `<li><span class="lp-big">0${i + 1}</span><div><h3>${esc(t)}</h3><p class="small muted">${esc(d)}</p></div></li>`).join('')}</ol>
+          <div class="lp-features">${features.map(([t, d]) => `<div class="lp-feature"><h3>${esc(t)}</h3><p class="small muted">${esc(d)}</p></div>`).join('')}</div>
+        </div>
+      </section>
+
+      <section class="lp-wrap lp-sec" id="lp-programs">
+        ${head('lp-programs', 'Programs', 'for every season of you.')}
+        <ul class="lp-index">${programs.map(([t, it, k]) => `<li><span><strong>${esc(t)}</strong>${it ? ` <span class="serif">${esc(it)}.</span>` : ''}</span><span class="mono">${esc(k)}</span></li>`).join('')}</ul>
+      </section>
+
+      ${D.TESTIMONIALS.length ? `<section class="lp-wrap lp-sec"><h2 class="lp-h2">From members</h2><div class="lp-quotes">${D.TESTIMONIALS.map((t) => `<figure class="lp-quote"><blockquote class="serif">“${esc(t.quote)}”</blockquote><figcaption class="mono muted">${esc(t.name)}${t.detail ? ` · ${esc(t.detail)}` : ''}</figcaption></figure>`).join('')}</div></section>` : ''}
+
+      ${paid ? `<section class="lp-wrap lp-sec" id="lp-pricing">
+        ${head('lp-pricing', 'Pricing,', 'simple.')}
+        <div class="lp-prices">
+          <div class="lp-price"><div class="row between"><h3>Yearly</h3>${save > 0 ? `<span class="tag accent">Save ${save}%</span>` : ''}</div><div class="lp-amount">${money(y)}<span class="small muted"> / year</span></div><p class="mono muted">${money({ amount: Math.round((y.amount / 12) * 100) / 100, currency: y.currency })} a month, billed yearly</p></div>
+          <div class="lp-price"><h3>Monthly</h3><div class="lp-amount">${money(m)}<span class="small muted"> / month</span></div><p class="mono muted">Cancel anytime</p></div>
+        </div>
+        <p class="small" style="margin-top:14px">Both start with <strong>${days} days free</strong>. Cancel before the trial ends and you won't be charged.</p>
+        <div style="margin-top:16px">${cta()}</div>
       </section>` : ''}
 
-      <section class="lp-wrap lp-sec">
-        <h2 class="lp-h2">Questions</h2>
+      <section class="lp-wrap lp-sec" id="lp-faq">
+        ${head('lp-faq', 'Questions,', 'answered.')}
         <div class="lp-faq">${faqs.map(([q, a]) => `<details><summary>${esc(q)}</summary><p class="small muted">${esc(a)}</p></details>`).join('')}</div>
       </section>
 
-      <section class="lp-wrap lp-sec lp-final">
-        <div class="wordmark xl" style="color:inherit">yours.</div>
-        <p class="lp-lead" style="margin:14px 0 18px">Your body changes every week. Your training should too.</p>
-        ${cta('cream')}
+      <section class="lp-band lp-final">
+        <div class="wordmark">yours.</div>
+        <p class="serif lp-pull" style="margin-top:12px">Train with your cycle,<br>not against it.</p>
+        ${paid ? `<p class="lp-band-sub">${days} days free, then ${money(m)} a month or ${money(y)} a year.</p>` : ''}
+        <div style="margin-top:22px">${cta('cream')}</div>
+        <div class="mono" style="margin-top:16px;opacity:.7">Cancel anytime</div>
       </section>
 
       <footer class="lp-wrap lp-foot">
-        <p class="small"><strong>We never sell your data.</strong></p>
+        <div class="lp-foot-row"><span class="wordmark sm">yours.</span><span class="mono muted">Made by women for women</span></div>
+        <p class="small" style="margin-top:14px"><strong>We never sell your data.</strong></p>
         <p class="tiny" style="margin-top:8px"><button class="link tiny" data-action="open-privacy">Privacy</button> · <button class="link tiny" data-action="open-legal" data-doc="terms">Terms</button> · <button class="link tiny" data-action="open-legal" data-doc="health">Health data policy</button> · ${mailLink('YOURS question', 'Contact')}</p>
         <p class="tiny muted" style="margin-top:8px">YOURS is a fitness and nutrition app, not medical advice. Available in the United States. © ${new Date().getFullYear()} YOURS.</p>
       </footer>
