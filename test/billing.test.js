@@ -102,7 +102,7 @@ test('checkout: needs a signed-in member, gives the trial once, and refuses a se
   await billing({ method: 'POST', headers: { authorization: 'Bearer tok', origin: 'https://yours-app-tau.vercel.app' }, body: { action: 'checkout', plan: 'yearly' } }, r1);
   assert.equal(r1.statusCode, 200);
   const s1 = calls.find((c) => c[0] === 'checkout')[1];
-  assert.equal(s1.subscription_data.trial_period_days, 7);
+  assert.equal(s1.subscription_data.trial_period_days, 14);
   assert.equal(s1.line_items[0].price, 'price_year');
   assert.equal(s1.payment_method_collection, 'always');
   assert.equal(s1.success_url, 'https://yours-app-tau.vercel.app/?billing=success');
