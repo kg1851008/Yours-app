@@ -1,6 +1,6 @@
 // YOURS billing (Vercel function; also mounted by server.js locally).
 // GET  /api/billing -> { enabled, trialDays, prices: { monthly, yearly } }
-// POST /api/billing { action: 'checkout', plan: 'monthly' | 'yearly' } -> { url }   (Stripe Checkout, 7-day trial once per member)
+// POST /api/billing { action: 'checkout', plan: 'monthly' | 'yearly' } -> { url }   (Stripe Checkout, 14-day trial once per member)
 // POST /api/billing { action: 'portal' } -> { url }                                (Stripe customer portal: cancel, change card)
 // POST needs the member's Supabase session token as "Authorization: Bearer <token>".
 

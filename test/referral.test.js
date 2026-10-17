@@ -63,13 +63,13 @@ test('claim rules: valid code, not your own, once, new members only', () => {
   assert.match(R.canClaim({ user, code: 'ABC234', owner: 'old', existing: { id: 1 } }), /already/);
   assert.match(R.canClaim({ user, code: 'ABC234', owner: 'old', sub: { status: 'canceled', trial_used: true } }), /new members/);
   assert.match(R.canClaim({ user: { id: 'new', created_at: fresh(30) }, code: 'ABC234', owner: 'old' }), /new members/);
-  assert.equal(R.trialDaysFor(null), 7);
-  assert.equal(R.trialDaysFor({ status: 'joined' }), 21);
-  assert.equal(R.trialDaysFor({ status: 'earned' }), 7);
+  assert.equal(R.trialDaysFor(null), 14);
+  assert.equal(R.trialDaysFor({ status: 'joined' }), 30);
+  assert.equal(R.trialDaysFor({ status: 'earned' }), 14);
   for (let i = 0; i < 50; i++) assert.ok(R.validCode(R.newCode()));
 });
 
-test('invite flow: code, claim, 21-day trial, then a free month for the inviter when the friend pays', async () => {
+test('invite flow: code, claim, 30-day trial, then a free month for the inviter when the friend pays', async () => {
   const db = { subscriptions: [{ user_id: 'amy', customer_id: 'cus_amy', status: 'active', trial_used: true }] };
   global.fetch = fakeDb(db, { tA: { id: 'amy', email: 'amy@x.co', created_at: fresh(200) }, tB: { id: 'bea', email: 'bea@x.co', created_at: fresh(0) } });
   const credits = [];
@@ -100,16 +100,16 @@ test('invite flow: code, claim, 21-day trial, then a free month for the inviter 
   assert.equal(self.statusCode, 400);
   const claim = res();
   await referral({ method: 'POST', headers: { authorization: 'Bearer tB' }, body: { action: 'claim', code: code.toLowerCase() } }, claim);
-  assert.deepEqual(claim.body, { ok: true, bonusDays: 14 });
+  assert.deepEqual(claim.body, { ok: true, bonusDays: 16 });
   const twice = res();
   await referral({ method: 'POST', headers: { authorization: 'Bearer tB' }, body: { action: 'claim', code } }, twice);
   assert.equal(twice.statusCode, 400);
 
-  // Bea's checkout has a 21-day trial.
+  // Bea's checkout has a 30-day trial.
   const co = res();
   await billing({ method: 'POST', headers: { authorization: 'Bearer tB' }, body: { action: 'checkout', plan: 'monthly' } }, co);
   assert.equal(co.statusCode, 200);
-  assert.equal(checkouts[0].subscription_data.trial_period_days, 21);
+  assert.equal(checkouts[0].subscription_data.trial_period_days, 30);
 
   // Trial started: no reward yet. First payment (active): Amy gets one month's credit, once, even if Stripe retries.
   const send = async (status, id) => {

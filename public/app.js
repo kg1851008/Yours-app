@@ -1436,7 +1436,7 @@
         <div class="script-sig">for your body</div>
       </div>
       <div class="stack">
-        ${pendingInvite() && !regionBlocked() ? `<div class="banner" style="margin-bottom:12px">${icon('gift', 18)}<div class="grow small"><strong>A friend invited you.</strong> Your free trial is 3 weeks instead of 1.</div></div>` : ''}
+        ${pendingInvite() && !regionBlocked() ? `<div class="banner" style="margin-bottom:12px">${icon('gift', 18)}<div class="grow small"><strong>A friend invited you.</strong> Your free trial is 30 days instead of 14.</div></div>` : ''}
         <button class="btn primary block" data-action="start">Get started</button>
         <button class="btn ghost block" data-action="go-login">I have an account</button>
         ${billingOn() ? '' : '<button class="btn soft block" data-action="demo">Try the demo</button>'}
@@ -1519,7 +1519,7 @@
     return `<div class="lp">
       <header class="lp-top"><span class="mono lp-issue">Issue 01 · Cycle-synced training</span><div class="row" style="gap:12px"><button class="link small" data-action="go-login">Sign in</button>${paid ? '' : '<button class="btn soft xs" data-action="demo">Demo</button>'}<button class="btn primary xs" data-action="start">${paid ? 'Start free' : 'Start'}</button></div></header>
       ${regionBlocked() ? `<div class="banner lp-wrap" style="margin-top:8px" role="status">${icon('shield', 18)}<div class="grow small"><strong>YOURS is only available in the United States right now.</strong> We hope to come to you soon.</div></div>` : ''}
-      ${pendingInvite() && !regionBlocked() ? `<div class="banner lp-wrap" style="margin-top:8px">${icon('gift', 18)}<div class="grow small"><strong>A friend invited you.</strong> Your free trial is 3 weeks instead of 1.</div></div>` : ''}
+      ${pendingInvite() && !regionBlocked() ? `<div class="banner lp-wrap" style="margin-top:8px">${icon('gift', 18)}<div class="grow small"><strong>A friend invited you.</strong> Your free trial is 30 days instead of 14.</div></div>` : ''}
       <div class="lp-wrap">
         <div class="wordmark lp-mast">yours.</div>
         <div class="lp-strip mono"><span>Made by women, for women</span><span>Strength · Running · Pilates · Yoga</span></div>
@@ -2158,12 +2158,13 @@ ${prog ? `
   // ---------- membership (Stripe via /api/billing; status mirrored in Supabase) ----------
   const billingOn = () => !!(S.billing && S.billing.enabled && cloud);
   const regionBlocked = () => !!(S.billing && S.billing.region && S.billing.region.allowed === false);
-  const trialDays = () => ((S.billing && S.billing.trialDays) || 7) + inviteBonusDays();
+  const BASE_TRIAL = 14;
+  const trialDays = () => ((S.billing && S.billing.trialDays) || BASE_TRIAL) + inviteBonusDays();
 
   // ---------- invite friends (/api/referral) ----------
   // An invite link (?invite=CODE) is remembered on this device until she has an account, then claimed once.
   // The friend gets 2 extra trial weeks; the inviter gets a free month when the friend's first payment goes through.
-  const INVITE_BONUS = 14;
+  const INVITE_BONUS = 16; // 14 + 16 = a 30-day trial
   const pendingInvite = () => store.get('yours.invite', null);
   function inviteBonusDays() {
     if (S.sub && S.sub.trial_used) return 0;
@@ -2188,7 +2189,7 @@ ${prog ? `
     if (!code) { await loadInvite(); render(); return; }
     try {
       const j = await referralCall({ action: 'claim', code });
-      if (j.ok) { store.del('yours.invite'); logEvent('invite_claimed'); toast(`Invite applied: your free trial is ${7 + (j.bonusDays || INVITE_BONUS)} days`); }
+      if (j.ok) { store.del('yours.invite'); logEvent('invite_claimed'); toast(`Invite applied: your free trial is ${((S.billing && S.billing.trialDays) || BASE_TRIAL) + (j.bonusDays || INVITE_BONUS)} days`); }
       else if (j.status === 400) store.del('yours.invite'); // not usable (own code, already used, not a new account)
     } catch { /* offline: keep it and try next time */ }
     await loadInvite();
@@ -2279,7 +2280,7 @@ ${prog ? `
     if (!isCloud()) return `<div class="card flat small"><div class="label">Invite friends</div><p class="muted">Create an account to get your invite link. Friends get 2 extra weeks free, and you get a free month when they join.</p></div>`;
     const v = S.invite;
     return `<div class="card flat small"><div class="row between"><span class="label" style="margin:0">Invite friends</span>${icon('gift', 18)}</div>
-      <p class="muted" style="margin-top:6px">Friends get <strong>3 weeks free</strong> instead of 1. When a friend's membership starts, you get <strong>a free month</strong>.</p>
+      <p class="muted" style="margin-top:6px">Friends get <strong>30 days free</strong> instead of 14. When a friend's membership starts, you get <strong>a free month</strong>.</p>
       ${v ? `<div class="invite-code" aria-label="Your invite code">${esc(v.code)}</div>
         <div class="row" style="gap:8px;margin-top:10px"><button class="btn primary sm grow" data-action="invite-share">${icon('share', 16)} Share link</button><button class="btn ghost sm grow" data-action="invite-copy">Copy link</button></div>
         <p class="tiny muted" style="margin-top:10px">${v.joined ? `${plural(v.joined, 'friend')} joined · ${plural(v.rewarded, 'free month')} earned${v.paid > v.rewarded ? ` · ${v.paid - v.rewarded} waiting for your membership` : ''}.` : 'No friends yet.'} Up to ${v.maxRewards || 12} free months.</p>`
@@ -4463,7 +4464,7 @@ ${prog ? `
     'invite-copy': async () => { const link = inviteLink(); if (!link) return; try { await navigator.clipboard.writeText(link); toast('Invite link copied'); } catch { prompt('Copy your invite link', link); } logEvent('invite_shared'); },
     'invite-share': async () => {
       const link = inviteLink(); if (!link) return;
-      const text = 'I train with YOURS, strength training that follows your cycle. Use my link for 3 weeks free:';
+      const text = 'I train with YOURS, strength training that follows your cycle. Use my link for 30 days free:';
       logEvent('invite_shared');
       if (navigator.share) { try { await navigator.share({ title: 'YOURS', text, url: link }); return; } catch { return; } }
       try { await navigator.clipboard.writeText(`${text} ${link}`); toast('Invite copied. Paste it in a message.'); } catch { prompt('Copy your invite link', link); }
