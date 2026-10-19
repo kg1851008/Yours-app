@@ -22,8 +22,8 @@ function originOf(req) {
   const o = req.headers.origin || '';
   // Only send people back to this app's own address.
   if (allowed) return allowed;
-  if (/^https:\/\/yours-app[a-z0-9-]*\.vercel\.app$/.test(o) || /^http:\/\/localhost:\d+$/.test(o)) return o;
-  return 'https://yours-app-tau.vercel.app';
+  if (/^https:\/\/(www\.)?yoursfit\.app$/.test(o) || /^https:\/\/yours-app[a-z0-9-]*\.vercel\.app$/.test(o) || /^http:\/\/localhost:\d+$/.test(o)) return o;
+  return 'https://yoursfit.app';
 }
 
 module.exports = async function handler(req, res) {

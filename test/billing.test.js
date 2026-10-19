@@ -99,13 +99,13 @@ test('checkout: needs a signed-in member, gives the trial once, and refuses a se
   assert.equal(anon.statusCode, 401);
 
   const r1 = res();
-  await billing({ method: 'POST', headers: { authorization: 'Bearer tok', origin: 'https://yours-app-tau.vercel.app' }, body: { action: 'checkout', plan: 'yearly' } }, r1);
+  await billing({ method: 'POST', headers: { authorization: 'Bearer tok', origin: 'https://www.yoursfit.app' }, body: { action: 'checkout', plan: 'yearly' } }, r1);
   assert.equal(r1.statusCode, 200);
   const s1 = calls.find((c) => c[0] === 'checkout')[1];
   assert.equal(s1.subscription_data.trial_period_days, 14);
   assert.equal(s1.line_items[0].price, 'price_year');
   assert.equal(s1.payment_method_collection, 'always');
-  assert.equal(s1.success_url, 'https://yours-app-tau.vercel.app/?billing=success');
+  assert.equal(s1.success_url, 'https://www.yoursfit.app/?billing=success');
   assert.equal(rows[0].customer_id, 'cus_2');
 
   // Trial already used: no second trial. An untrusted origin falls back to the app's own address.
@@ -115,7 +115,7 @@ test('checkout: needs a signed-in member, gives the trial once, and refuses a se
   await billing({ method: 'POST', headers: { authorization: 'Bearer tok', origin: 'https://evil.example' }, body: { action: 'checkout', plan: 'monthly' } }, r2);
   const s2 = calls.find((c) => c[0] === 'checkout')[1];
   assert.equal(s2.subscription_data.trial_period_days, undefined);
-  assert.equal(s2.success_url, 'https://yours-app-tau.vercel.app/?billing=success');
+  assert.equal(s2.success_url, 'https://yoursfit.app/?billing=success');
   assert.equal(calls.filter((c) => c[0] === 'customer').length, 0);
 
   rows[0].status = 'active';
