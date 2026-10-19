@@ -3765,7 +3765,20 @@ ${prog ? `
     const focusedName = document.activeElement && document.activeElement.name;
     const sheetEl = root.querySelector('.sheet');
     const sheetScroll = sheetEl ? sheetEl.scrollTop : 0;
+    // Keep a live camera through redraws (the iPhone permission prompt or coming back to the app redraws the
+    // screen); a replaced <video> would be black, and Safari stops decoding from one that left the page.
+    const liveFrame = S.modal && S.modal.type === 'scanner' ? root.querySelector('.scan-frame') : null;
+    const liveStatus = liveFrame && document.getElementById('scan-status') ? document.getElementById('scan-status').textContent : null;
     root.innerHTML = html + viewModal();
+    if (liveFrame) {
+      const fresh = root.querySelector('.scan-frame');
+      if (fresh) {
+        fresh.replaceWith(liveFrame);
+        const v = liveFrame.querySelector('video');
+        if (v && v.srcObject && v.paused) v.play().catch(() => {});
+        if (liveStatus) setScanStatus(liveStatus);
+      }
+    }
     // Only animate a sheet when it first opens, not on every update inside it.
     const modalType = S.modal ? S.modal.type : null;
     if (modalType && modalType === S.lastModalType) root.querySelectorAll('.overlay, .sheet').forEach((el) => el.classList.add('still'));
