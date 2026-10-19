@@ -1522,16 +1522,16 @@
       ${pendingInvite() && !regionBlocked() ? `<div class="banner lp-wrap" style="margin-top:8px">${icon('gift', 18)}<div class="grow small"><strong>A friend invited you.</strong> Your free trial is 30 days instead of 14.</div></div>` : ''}
       <div class="lp-wrap">
         <div class="wordmark lp-mast">yours.</div>
-        <div class="lp-strip mono"><span>Made by women, for women</span><span>Strength · Running · Pilates · Yoga</span></div>
+        <div class="lp-strip mono"><span>Made by women, for women</span><span class="lp-wide">Strength · Running · Pilates · Yoga</span></div>
       </div>
       <section class="lp-hero lp-wrap">
         <div class="lp-hero-copy">
           ${A ? `<div class="eyebrow">${esc(A.eyebrow)}</div><h1 class="lp-h1">${esc(A.h1)}</h1>` : '<h1 class="lp-h1">Stop training <span class="serif">against your cycle.</span></h1>'}
           <p class="lp-lead">${A ? esc(A.lead) : 'YOURS plans every workout, weight and meal around your cycle, so you get stronger in every phase.'}</p>
-          <div class="lp-cta">${cta()}<button class="btn ghost" data-action="go-login">I have an account</button></div>
-          <p class="mono muted" style="margin-top:14px">${paid ? `${days} days free, then ${money(m)} a month or ${money(y)} a year. Cancel anytime.` : 'Your plan in about 2 minutes.'}</p>
+          <div class="lp-cta">${cta()}</div>
+          <p class="small muted" style="margin-top:12px">${paid ? `${days} days free, then ${money(m)} a month. Cancel anytime.` : 'Your plan in about 2 minutes.'}</p>
         </div>
-        <nav class="lp-toc" aria-label="On this page">
+        <nav class="lp-toc lp-wide" aria-label="On this page">
           <div class="mono muted">In this issue</div>
           ${toc.map(([id, t, it]) => `<a href="#${id}"><span><strong>${esc(t)}</strong>${it ? ` <span class="serif">${esc(it)}</span>` : ''}</span><span class="mono">${no(id)}</span></a>`).join('')}
         </nav>
