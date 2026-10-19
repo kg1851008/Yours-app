@@ -597,3 +597,19 @@ test('vegan: every phase and meal has plant-based options, each with a grocery l
     }
   }
 });
+
+test('food amounts: servings, grams and ounces, including foods with only per-serving nutrition', () => {
+  const fajita = { serving: { label: '3 oz (85 g)', grams: 85 }, perServing: { kcal: 150, protein: 23, carbs: 3, fat: 5 }, per100: null };
+  assert.equal(L.canWeigh(fajita), true);
+  assert.equal(L.foodMacros(fajita, 1, 'servings').kcal, 150);
+  assert.equal(L.foodMacros(fajita, 85, 'grams').kcal, 150);
+  assert.equal(L.foodMacros(fajita, 3, 'oz').kcal, 150);
+  assert.equal(L.foodMacros(fajita, 1.5, 'servings').protein, 34.5);
+  assert.equal(L.convertAmount(fajita, 2, 'servings', 'grams'), 170);
+  assert.equal(L.convertAmount(fajita, 170, 'grams', 'oz'), 6);
+  assert.equal(L.convertAmount(fajita, 6, 'oz', 'servings'), 2);
+  // No serving weight and no per-100 g data: servings only.
+  const bar = { serving: { label: '1 bar', grams: null }, perServing: { kcal: 200, protein: 20, carbs: 22, fat: 7 }, per100: null };
+  assert.equal(L.canWeigh(bar), false);
+  assert.equal(L.foodMacros(bar, 2, 'servings').kcal, 400);
+});

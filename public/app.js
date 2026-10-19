@@ -43,6 +43,7 @@
     community: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.7a3.5 3.5 0 0 1 0 6.6M18 14.3A6.5 6.5 0 0 1 21.5 20"/>',
     send: '<path d="M12 19V5M5 12l7-7 7 7"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
+    minus: '<path d="M5 12h14"/>',
     check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
     x: '<path d="M6 6l12 12M18 6 6 18"/>',
     back: '<path d="M15 5l-7 7 7 7"/>',
@@ -1088,10 +1089,21 @@
 
   function foodLabel(food, amount, mode) {
     if (mode === 'grams') return `${amount} g`;
+    if (mode === 'oz') return `${amount} oz`;
     const s = food.serving.label;
     return amount === 1 ? s : `${amount} x ${s}`;
   }
 
+  // Serving size and amount, like a nutrition label: the package serving, grams or ounces, and any number of them.
+  const AMOUNT_UNITS = { servings: { step: 0.5, max: 50, label: 'Number of servings' }, grams: { step: 10, max: 5000, label: 'Grams' }, oz: { step: 0.5, max: 200, label: 'Ounces' } };
+  function foodAmountPicker(f, m) {
+    const units = [['servings', f.serving.label]].concat(L.canWeigh(f) ? [['grams', 'grams (g)'], ['oz', 'ounces (oz)']] : []);
+    const u = AMOUNT_UNITS[m.mode] || AMOUNT_UNITS.servings;
+    return `${units.length > 1 ? `<div class="label" style="margin-top:16px">Serving size</div><div class="chips" role="group" aria-label="Serving size">${units.map(([v, l]) => `<button class="chip ${m.mode === v ? 'selected' : ''}" data-action="food-mode" data-value="${v}" aria-pressed="${m.mode === v}">${esc(l)}</button>`).join('')}</div>` : `<div class="label" style="margin-top:16px">Serving size</div><p class="small">${esc(f.serving.label)}</p>`}
+        <label class="label" style="margin-top:14px;display:block" for="food-amount">${u.label}</label>
+        <div class="row" style="gap:10px"><button class="icon-btn" data-action="food-step" data-d="-${u.step}" aria-label="Less">${icon('minus', 16)}</button><input id="food-amount" class="input grow center" type="number" inputmode="decimal" step="any" min="0" max="${u.max}" value="${m.amount}" data-food-amount style="font-size:20px;font-weight:700"><button class="icon-btn" data-action="food-step" data-d="${u.step}" aria-label="More">${icon('plus', 16)}</button></div>
+        ${m.mode === 'servings' && f.serving.grams && L.canWeigh(f) ? `<p class="tiny muted" style="margin-top:6px">${esc(String(Math.round(m.amount * f.serving.grams)))} g total</p>` : m.mode !== 'servings' ? '<p class="tiny muted" style="margin-top:6px">A food scale gives the most accurate number here. Optional.</p>' : ''}`;
+  }
   const foodMacroTiles = (mac) => [[calU() === 'cal' ? 'Calories' : 'kcal', mac.kcal, ''], ['Protein', mac.protein, 'g'], ['Carbs', mac.carbs, 'g'], ['Fat', mac.fat, 'g']].map(([l, v, u]) => `<div class="stat" style="padding:10px"><div class="eyebrow" style="font-size:9px">${l}</div><div class="value" style="font-size:24px">${Math.round(v)}<small>${u}</small></div></div>`).join('');
 
   function rememberFood(f, amount, mode) {
@@ -1103,6 +1115,7 @@
   function logFood() {
     const m = S.modal;
     const f = m.food;
+    if (!(Number(m.amount) > 0)) { toast('Enter how much you had'); return; }
     const mac = L.foodMacros(f, m.amount, m.mode);
     const item = { name: f.name, brand: f.brand || '', barcode: f.barcode || null, food: f, amount: m.amount, mode: m.mode, label: foodLabel(f, m.amount, m.mode), ...mac };
     rememberFood(f, m.amount, m.mode);
@@ -1173,7 +1186,7 @@
 
   // Her saved and recent foods count as known foods for the offline parser, ahead of the built-in list.
   function talkFoods() {
-    const mine = (S.data.recentFoods || []).map((r) => ({ id: 'r', names: [r.food.name.toLowerCase()], unit: foodLabel(r.food, r.amount, r.mode), grams: (r.food.serving.grams || 100) * (r.mode === 'grams' ? r.amount / (r.food.serving.grams || 100) : r.amount), ...L.foodMacros(r.food, r.amount, r.mode) }));
+    const mine = (S.data.recentFoods || []).map((r) => ({ id: 'r', names: [r.food.name.toLowerCase()], unit: foodLabel(r.food, r.amount, r.mode), grams: L.gramsOf(r.food, r.amount, r.mode) || (r.food.serving.grams || 100) * r.amount, ...L.foodMacros(r.food, r.amount, r.mode) }));
     return mine.concat(D.BASIC_FOODS);
   }
 
@@ -3485,10 +3498,7 @@ ${prog ? `
       const f = m.food;
       const mac = L.foodMacros(f, m.amount, m.mode);
       return sheet(m.target === 'recipe' ? 'Add ingredient' : m.editId ? 'Edit entry' : 'Log food', `<div class="row" style="gap:14px;align-items:flex-start">${f.image ? `<img src="${esc(f.image)}" alt="" style="width:64px;height:64px;object-fit:contain;border-radius:12px;background:#fff;flex-shrink:0" referrerpolicy="no-referrer">` : ''}<div class="grow"><div class="serif" style="font-size:26px;line-height:1.05">${esc(f.name)}</div><div class="eyebrow" style="margin-top:6px">${esc(f.brand || 'Food')}${f.barcode ? ` · ${esc(f.barcode)}` : ''}</div></div></div>
-        ${f.per100 && f.serving.grams !== 100 ? `<div class="segment" style="margin-top:16px">${[['servings', 'Servings'], ['grams', 'Grams']].map(([v, l]) => `<button class="${m.mode === v ? 'active' : ''}" data-action="food-mode" data-value="${v}">${l}</button>`).join('')}</div>` : ''}
-        ${m.mode === 'grams'
-          ? `<label class="field" style="margin-top:14px"><span class="label">Amount in grams</span><input class="input" type="number" inputmode="decimal" min="1" max="2000" value="${m.amount}" data-food-grams></label><p class="tiny muted" style="margin-top:6px">A food scale gives the most accurate number here. Optional.</p>`
-          : `<div class="row between" style="margin-top:16px"><button class="icon-btn" data-action="food-step" data-d="-0.5" aria-label="Less">${icon('x', 14)}</button><div class="center"><div class="big-number" style="font-size:48px">${m.amount}</div><div class="tiny muted">x ${esc(f.serving.label)}</div></div><button class="icon-btn" data-action="food-step" data-d="0.5" aria-label="More">${icon('plus', 16)}</button></div>`}
+        ${foodAmountPicker(f, m)}
         <div class="stats" id="food-macros" style="margin-top:16px;grid-template-columns:repeat(4,1fr)">${foodMacroTiles(mac)}</div>
         ${m.target === 'recipe' ? '' : `<div class="label" style="margin-top:16px">Meal</div><div class="chips">${Object.entries(SLOT_LABEL).map(([v, l]) => `<button class="chip ${m.slot === v ? 'selected' : ''}" data-action="food-slot" data-value="${v}">${l}</button>`).join('')}</div>`}
         <button class="btn primary block" style="margin-top:20px" data-action="food-log">${m.target === 'recipe' ? 'Add to recipe' : m.editId ? 'Save changes' : `Log to ${diaryDateLabel().toLowerCase() === 'today' ? SLOT_LABEL[m.slot].toLowerCase() : `${SLOT_LABEL[m.slot].toLowerCase()}, ${diaryDateLabel()}`}`}</button>
@@ -4432,8 +4442,12 @@ ${prog ? `
     'open-food-manual': () => { stopScanner(); S.modal = { type: 'foodManual' }; render(); },
     'recent-food': (el) => { stopScanner(); const r = S.data.recentFoods[el.dataset.i]; if (r) openFood(r.food, r.amount, r.mode); },
     'search-pick': (el) => { const f = S.modal.results[el.dataset.i]; if (f) openFood(f); },
-    'food-step': (el) => { S.modal.amount = clamp(Math.round((S.modal.amount + Number(el.dataset.d)) * 2) / 2, 0.5, 20); render(); },
-    'food-mode': (el) => { const m = S.modal; if (m.mode === el.dataset.value) return; m.mode = el.dataset.value; m.amount = m.mode === 'grams' ? (m.food.serving.grams || 100) : 1; render(); },
+    'food-step': (el) => {
+      const m = S.modal; const u = AMOUNT_UNITS[m.mode] || AMOUNT_UNITS.servings; const d = Number(el.dataset.d);
+      const next = Math.round(((Number(m.amount) || 0) + d) * 100) / 100;
+      m.amount = next > 0 ? Math.min(next, u.max) : m.amount; render();
+    },
+    'food-mode': (el) => { const m = S.modal; const to = el.dataset.value; if (m.mode === to) return; m.amount = L.convertAmount(m.food, Number(m.amount) || 1, m.mode, to); m.mode = to; render(); },
     'food-slot': (el) => { S.modal.slot = el.dataset.value; render(); },
     'food-log': () => logFood(),
     'food-del': (el) => { const k = diaryKey(); S.data.foodLog[k] = (S.data.foodLog[k] || []).filter((f) => f.id !== el.dataset.id); save(); render(); },
@@ -4671,10 +4685,11 @@ ${prog ? `
       const box = document.getElementById('recipe-per');
       if (box && el.dataset.recipeField !== 'name') box.innerHTML = foodMacroTiles(L.recipeFood({ ...S.recipeDraft, servings: Number(S.recipeDraft.servings) || 1, totalGrams: Number(S.recipeDraft.totalGrams) || null }).perServing);
     }
-    if (el.matches('[data-food-grams]') && S.modal && S.modal.type === 'food') {
-      S.modal.amount = clamp(Number(el.value) || 0, 0, 2000);
+    if (el.matches('[data-food-amount]') && S.modal && S.modal.type === 'food') {
+      const u = AMOUNT_UNITS[S.modal.mode] || AMOUNT_UNITS.servings;
+      S.modal.amount = clamp(Number(el.value) || 0, 0, u.max);
       const box = document.getElementById('food-macros');
-      if (box) box.innerHTML = foodMacroTiles(L.foodMacros(S.modal.food, S.modal.amount, 'grams'));
+      if (box) box.innerHTML = foodMacroTiles(L.foodMacros(S.modal.food, S.modal.amount, S.modal.mode));
     }
     if (S.modal && S.modal.type === 'builder') {
       if (el.matches('[data-builder-name]')) { S.modal.name = el.value; const b = root.querySelector('[data-action=builder-save]'); if (b) b.disabled = !(el.value.trim() && S.modal.exercises.length); return; }

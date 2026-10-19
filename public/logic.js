@@ -413,10 +413,34 @@
     };
   }
 
-  // Macros for an amount: servings of the label serving, or grams when per-100 g data exists.
+  // Amounts come in servings of the label serving, grams or ounces. Weighing works whenever the per-100 g
+  // nutrition is known, from the label or worked out from the serving's weight.
+  const OZ = 28.3495;
+  function per100Of(food) {
+    if (food.per100) return food.per100;
+    const g = food.serving && food.serving.grams;
+    if (!g || !food.perServing) return null;
+    return Object.fromEntries(Object.entries(food.perServing).map(([k, v]) => [k, ((v || 0) * 100) / g]));
+  }
+  const canWeigh = (food) => !!per100Of(food);
+  function gramsOf(food, amount, mode) {
+    if (mode === 'grams') return amount;
+    if (mode === 'oz') return amount * OZ;
+    return food.serving && food.serving.grams ? amount * food.serving.grams : null;
+  }
+  // Switching units keeps the same quantity of food where the weight is known.
+  function convertAmount(food, amount, from, to) {
+    if (from === to) return amount;
+    const g = gramsOf(food, amount, from);
+    if (g == null) return to === 'servings' ? 1 : to === 'grams' ? 100 : 3.5;
+    if (to === 'grams') return Math.round(g);
+    if (to === 'oz') return Math.round((g / OZ) * 10) / 10;
+    return food.serving && food.serving.grams ? Math.round((g / food.serving.grams) * 100) / 100 : 1;
+  }
   function foodMacros(food, amount, mode) {
-    const base = mode === 'grams' && food.per100 ? food.per100 : food.perServing;
-    const factor = mode === 'grams' && food.per100 ? amount / 100 : amount;
+    const p = mode === 'grams' || mode === 'oz' ? per100Of(food) : null;
+    const base = p || food.perServing;
+    const factor = p ? gramsOf(food, amount, mode) / 100 : amount;
     return { kcal: Math.round(base.kcal * factor), protein: Math.round(base.protein * factor * 10) / 10, carbs: Math.round(base.carbs * factor * 10) / 10, fat: Math.round(base.fat * factor * 10) / 10 };
   }
 
@@ -1100,7 +1124,7 @@
     GOALS, LEVELS, ACTIVITY, goalOf, activityOf, STEADY_MODES, MENO_MODES, menoInsights, checkinDay, checkinTomorrow,
     learnCycle, addPeriod, cycleInfo, targets, readiness, readinessLabel, patterns,
     workoutById, plannedWorkout, workoutFor, programById, programDay, programProgress, adjustSets, parseReps, e1rm, suggestLoad, detectPRs, strengthByPhase, exerciseHistory,
-    mealOptions, mealFor, proteinFor, aisleFor, storeLink, buildTotals, macrosFor, parseOFF, foodMacros, validBarcode, recipeTotals, recipeFood, groceryList, parseFoodText, usualRequest, usualMeal, cleanEstimates, estimateFood, parseRest, isBarbell, platesFor, defaultBar, BARS, streak, weeklyStats, weeklyAdjust, applyAdjustments, weeklyDue,
+    mealOptions, mealFor, proteinFor, aisleFor, storeLink, buildTotals, macrosFor, parseOFF, foodMacros, canWeigh, gramsOf, convertAmount, validBarcode, recipeTotals, recipeFood, groceryList, parseFoodText, usualRequest, usualMeal, cleanEstimates, estimateFood, parseRest, isBarbell, platesFor, defaultBar, BARS, streak, weeklyStats, weeklyAdjust, applyAdjustments, weeklyDue,
     equipmentOf, swapOptions, BADGES, badges, newBadges, guideFor, allExercises, liftStats,
     setCustomWorkouts, customToWorkout, trainsAtHome, runPlanById, paceFor, fmtPace, treadmillSpeed, parsePace, parseSpeed, runPhaseAdjust, runTargets, runPlanDay, nextRunPace, warmupSets, MEASURE_SITES, measurementSummary, measurementPhaseNote, STRENGTH_LEVELS, STRENGTH_STANDARDS, strengthStandard, strengthLevel, toKg, fromKg,
   };
