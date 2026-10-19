@@ -1482,7 +1482,7 @@
     const phases = [
       ['01', 'Days 1-5', 'Period week', 'lighter, slower, kinder.', 'Lighter lifts, mobility and more rest. Iron-rich meals and gentle movement for cramps.'],
       ['02', 'Days 6-13', 'Follicular', 'energy climbs.', 'Your best window to add weight and learn new lifts.'],
-      ['03', 'Days 14-16', 'Ovulation', 'peak strength.', 'Heavy days, personal records and power work.'],
+      ['03', 'Days 14-16', 'Ovulation', 'often feels strongest.', 'Heavy days, personal records and power work.'],
       ['04', 'Days 17-28', 'Luteal', 'steady wins.', 'Steady weights, quality reps and a little more food, on purpose.'],
     ];
     const features = [
@@ -1500,13 +1500,24 @@
       ['Do I need a regular cycle?', 'No. YOURS has plans for irregular cycles, PCOS, hormonal birth control, perimenopause, menopause and postpartum. Without a natural cycle, your week follows your daily check-in instead.'],
       ['I have never lifted. Is it for me?', 'Yes. Beginner foundations teaches the basic movements in 8 weeks, and every exercise comes with simple cues and a suggested starting weight.'],
       ['Do I have to run?', 'No. YOURS is built around strength training. Running has its own section for when you want it, and your lifting plan stays the same unless you start a run plan. Runs are planned around your lifting and your cycle, with paces for outside and the treadmill.'],
+      ['Can I eat vegan or vegetarian?', 'Yes. Pick Vegan, Vegetarian or any allergies (dairy, gluten, eggs, nuts, soy, fish, shellfish) and your meal ideas and grocery list leave them out.'],
       ['Gym or home?', 'Both. Home strength needs only dumbbells and a band, and any exercise can be swapped if a machine is taken.'],
-      ['What happens after the free trial?', `It becomes ${money(m)} a month or ${money(y)} a year. Cancel anytime before the trial ends in Profile and you won't be charged.`],
-      ['Is my data private?', 'Yes. We never sell your data or use it for ads. Progress photos stay on your phone, locked with your PIN.'],
+      ['What happens after the free trial?', `It becomes ${money(m)} a month or ${money(y)} a year. The app reminds you 2 days before the trial ends. Cancel in Profile, Manage membership, before it ends and you pay nothing.`],
+      ['Where is YOURS available?', 'In the United States only, for now. We would rather tell you here than after you sign up.'],
+      ['Is my data private?', 'Yes. We never sell your cycle or health data, and we never use it for ads. Progress photos stay on your phone, locked with your PIN. You can export everything any time in Profile.'],
       ['Is this medical advice?', 'No. YOURS is a fitness and nutrition coach. Talk to your doctor before starting, especially if you are pregnant, postpartum or managing a condition.'],
     ];
     // Laid out like an issue of a magazine: a contents list on the cover, numbered sections below.
-    const toc = [['lp-cycle', 'Four phases', 'one plan'], ['lp-app', 'Inside the app', ''], ['lp-programs', 'Programs', 'for every season'], ...(paid ? [['lp-pricing', 'Pricing', 'simple'], ] : []), ['lp-faq', 'Questions', 'answered']];
+    const toc = [['lp-cycle', 'Four phases', 'one plan'], ['lp-every', 'Every kind of cycle', ''], ['lp-science', 'The science', 'honestly'], ['lp-app', 'Inside the app', ''], ['lp-programs', 'Programs', 'for every season'], ...(paid ? [['lp-pricing', 'Pricing', 'no surprises'], ] : []), ['lp-faq', 'Questions', 'answered']];
+    // How YOURS adapts when a cycle isn't textbook. Every line here is something the app does today.
+    const kinds = [
+      ['Irregular cycles', 'No assumed 28 days. YOURS estimates your phase, labels it as an estimate, and learns from every period you log. A late period is just late: tap when it starts.'],
+      ['PCOS', 'Long or unpredictable cycles are fine. If you feel the same all month, the plan follows your daily check-in, not a calendar.'],
+      ['Birth control', 'The pill, implant, injection or hormonal IUD keep hormones fairly steady, so we don\'t invent phases. Your week follows a steady rhythm and how you feel each day.'],
+      ['Perimenopause', 'Changing cycles in your 40s are estimated, not forced. Check-ins track hot flashes, sleep and joint aches, and heavy lifting protects bone and muscle.'],
+      ['Menopause', 'A plan built for this stage: brief, heavy strength work for bone density, balance, more protein, and symptom tracking.'],
+      ['After baby, or no period', 'A steady weekly rhythm, plus a postpartum program that starts with breath and pelvic floor once your doctor clears you.'],
+    ];
     const no = (id) => String(toc.findIndex((t) => t[0] === id) + 1).padStart(2, '0');
     const head = (id, title, it) => `<div class="lp-head"><h2 class="lp-h2">${title}${it ? ` <span class="serif">${it}</span>` : ''}</h2><span class="mono">${no(id)}</span></div>`;
     const weeksOf = (pr) => Math.max(...pr.blocks.map((b) => b.to));
@@ -1529,7 +1540,7 @@
           ${A ? `<div class="eyebrow">${esc(A.eyebrow)}</div><h1 class="lp-h1">${esc(A.h1)}</h1>` : '<h1 class="lp-h1">Stop training <span class="serif">against your cycle.</span></h1>'}
           <p class="lp-lead">${A ? esc(A.lead) : 'YOURS plans every workout, weight and meal around your cycle, so you get stronger in every phase.'}</p>
           <div class="lp-cta">${cta()}</div>
-          <p class="small muted" style="margin-top:12px">${paid ? `${days} days free, then ${money(m)} a month. Cancel anytime.` : 'Your plan in about 2 minutes.'}</p>
+          <p class="small muted" style="margin-top:12px">${paid ? `${days} days free, then ${money(m)} a month. Cancel anytime. <a href="#lp-pricing" class="lp-inline">How pricing works</a>` : 'Your plan in about 2 minutes.'}</p>
         </div>
         <nav class="lp-toc lp-wide" aria-label="On this page">
           <div class="mono muted">In this issue</div>
@@ -1555,7 +1566,31 @@ ${prog ? `
       <section class="lp-wrap lp-sec" id="lp-cycle">
         ${head('lp-cycle', 'Four phases,', 'one plan.')}
         <div class="lp-phases">${phases.map(([n, d, t, it, p]) => `<article class="lp-phase"><span class="lp-big">${n}</span><span class="mono muted">${d}</span><h3>${esc(t)}</h3><div class="serif lp-it">${esc(it)}</div><p class="small muted">${esc(p)}</p></article>`).join('')}</div>
-        <p class="small muted" style="margin-top:16px">Days shown for a 28-day cycle; yours follows your own length. No regular cycle? On the pill, PCOS, perimenopause, menopause or after baby, YOURS follows your stage and your daily check-in.</p>
+        <p class="small muted" style="margin-top:16px">Days shown for a 28-day cycle; yours follows your own length. Phases are a starting point, not rules: feel strong on day 2? Train hard.</p>
+      </section>
+
+      <section class="lp-wrap lp-sec" id="lp-every">
+        ${head('lp-every', 'Not textbook?', 'Neither are most cycles.')}
+        <div class="lp-kinds">${kinds.map(([t, d]) => `<article class="lp-kind"><h3>${esc(t)}</h3><p class="small muted">${esc(d)}</p></article>`).join('')}</div>
+        <p class="small muted" style="margin-top:16px">Pick your cycle type when you build your plan, and change it any time in Profile, Edit my plan.</p>
+      </section>
+
+      <section class="lp-wrap lp-sec" id="lp-science">
+        ${head('lp-science', 'The science,', 'honestly.')}
+        <div class="lp-science">
+          <p class="lp-stance">You can train hard any day.</p>
+          <div>
+            <p>For most women, research finds cycle phase has at most a small effect on strength. A 2020 review of 78 studies found a trivial dip in performance early in the cycle, with big differences from woman to woman<a class="lp-cite" href="https://rgu-repository.worktribe.com/output/940959" target="_blank" rel="noopener">1</a>. A 2023 review concluded the evidence is too weak to program training by phase<a class="lp-cite" href="https://doi.org/10.3389/fspor.2023.1054542" target="_blank" rel="noopener">2</a>.</p>
+            <p style="margin-top:12px"><strong>The bigger problem: women are barely studied.</strong> In sport and exercise science, only 6% of studies from 2014 to 2020 looked at women alone, and women were just 34% of all participants<a class="lp-cite" href="https://doi.org/10.1123/wspaj.2021-0028" target="_blank" rel="noopener">3</a>. In the United States, NIH-funded medical research didn't have to include women until 1993<a class="lp-cite" href="https://www.govinfo.gov/content/pkg/GAOREPORTS-HEHS-00-96/html/GAOREPORTS-HEHS-00-96.htm" target="_blank" rel="noopener">4</a>. Much of what we're told about training was learned from men.</p>
+            <p style="margin-top:12px">So YOURS treats phases as a starting point, not rules. Your daily check-in and what you actually lift set your weights, and your Strength by phase chart shows your own pattern, not an average.</p>
+            <ol class="lp-refs tiny muted">
+              <li>McNulty et al. The Effects of Menstrual Cycle Phase on Exercise Performance in Eumenorrheic Women. <em>Sports Medicine</em>, 2020.</li>
+              <li>Colenso-Semple et al. Current evidence shows no influence of women's menstrual cycle phase on acute strength performance or adaptations to resistance exercise training. <em>Frontiers in Sports and Active Living</em>, 2023.</li>
+              <li>Cowley et al. "Invisible Sportswomen": The Sex Data Gap in Sport and Exercise Science Research. <em>Women in Sport and Physical Activity Journal</em>, 2021.</li>
+              <li>U.S. General Accounting Office. Women's Health: NIH Has Increased Its Efforts to Include Women in Research, 2000.</li>
+            </ol>
+          </div>
+        </div>
       </section>
 
       <section class="lp-sec lp-app" id="lp-app">
@@ -1580,7 +1615,15 @@ ${prog ? `
       ${D.TESTIMONIALS.length ? `<section class="lp-wrap lp-sec"><h2 class="lp-h2">From members</h2><div class="lp-quotes">${D.TESTIMONIALS.map((t) => `<figure class="lp-quote"><blockquote class="serif">“${esc(t.quote)}”</blockquote><figcaption class="mono muted">${esc(t.name)}${t.detail ? ` · ${esc(t.detail)}` : ''}</figcaption></figure>`).join('')}</div></section>` : ''}
 
       ${paid ? `<section class="lp-wrap lp-sec" id="lp-pricing">
-        ${head('lp-pricing', 'Pricing,', 'simple.')}
+        ${head('lp-pricing', 'Pricing,', 'no surprises.')}
+        <ul class="lp-promises">
+          <li><strong>Building your plan is free.</strong> See your workouts, weights and calories before you pay anything.</li>
+          <li><strong>${days} days free.</strong> A card is needed to start the trial, and you see the price before you enter it.</li>
+          <li><strong>A reminder before you pay.</strong> The app reminds you 2 days before your trial ends.</li>
+          <li><strong>Cancel in two taps.</strong> Profile, then Manage membership. Cancel during the trial and you pay nothing.</li>
+          <li><strong>No upsells.</strong> One membership unlocks everything. No ads.</li>
+          <li><strong>United States only, for now.</strong> We'd rather tell you here than after you sign up.</li>
+        </ul>
         <div class="lp-prices">
           <div class="lp-price"><div class="row between"><h3>Yearly</h3>${save > 0 ? `<span class="tag accent">Save ${save}%</span>` : ''}</div><div class="lp-amount">${money(y)}<span class="small muted"> / year</span></div><p class="mono muted">${money({ amount: Math.round((y.amount / 12) * 100) / 100, currency: y.currency })} a month, billed yearly</p></div>
           <div class="lp-price"><h3>Monthly</h3><div class="lp-amount">${money(m)}<span class="small muted"> / month</span></div><p class="mono muted">Cancel anytime</p></div>
