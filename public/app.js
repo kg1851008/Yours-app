@@ -2277,7 +2277,7 @@ ${prog ? `
 
   function inviteCard() {
     if (!cloud) return '';
-    if (!isCloud()) return `<div class="card flat small"><div class="label">Invite friends</div><p class="muted">Create an account to get your invite link. Friends get 2 extra weeks free, and you get a free month when they join.</p></div>`;
+    if (!isCloud()) return `<div class="card flat small"><div class="label">Invite friends</div><p class="muted">Create an account to get your invite link. Friends get 16 extra days free, and you get a free month when they join.</p></div>`;
     const v = S.invite;
     return `<div class="card flat small"><div class="row between"><span class="label" style="margin:0">Invite friends</span>${icon('gift', 18)}</div>
       <p class="muted" style="margin-top:6px">Friends get <strong>30 days free</strong> instead of 14. When a friend's membership starts, you get <strong>a free month</strong>.</p>
@@ -2382,7 +2382,7 @@ ${prog ? `
       <div class="top"><div class="wordmark sm">yours.</div><button class="link small" data-action="logout">Sign out</button></div>
       <div class="eyebrow" style="margin-top:22px">${ended && !trial ? 'Welcome back' : 'Your plan is ready'}</div>
       <h1 style="margin-top:6px">${trial ? `${trialDays()} days free.<br>Then it's yours.` : 'Pick up where<br>you left off.'}</h1>
-      ${trial && inviteBonusDays() ? `<p class="tag accent" style="margin-top:10px;gap:6px">${icon('gift', 14)} Friend's invite: 2 extra weeks free</p>` : ''}
+      ${trial && inviteBonusDays() ? `<p class="tag accent" style="margin-top:10px;gap:6px">${icon('gift', 14)} Friend's invite: 30 days free</p>` : ''}
       <ul class="phase-list" style="margin-top:16px"><li>Training, meals and steps that change with your cycle</li><li>Suggested weights for every lift and ${S.aiCoach ? 'an AI coach' : 'a coach in your pocket'}</li><li>Food diary with barcode${S.ai ? ', photo' : ''} and voice logging</li><li>Programs, Pilates, yoga, progress check-ins and the community</li></ul>
       ${t ? `<p class="small muted" style="margin-top:10px">Your targets: ${t.kcal.toLocaleString()} ${calWord()}, ${t.protein} g protein, ${t.steps.toLocaleString()} steps.</p>` : ''}
       ${option('yearly', 'Yearly', y, save > 0 ? `Save ${save}%` : '')}
