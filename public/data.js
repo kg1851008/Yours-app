@@ -263,11 +263,13 @@
         m('Lentil and beef bolognese bowl', 'Lean beef and lentil ragu over brown rice with spinach.', ['redmeat'], 42, 620, 'Heme and plant iron help replace what you lose.'),
         m('Salmon and quinoa power bowl', 'Baked salmon, quinoa, roasted beets and citrus dressing.', ['fish'], 38, 580, 'Omega-3s and vitamin C support recovery and iron uptake.'),
         m('Chickpea and spinach curry', 'Coconut chickpea curry with spinach and basmati rice.', [], 22, 560, 'A warming, iron-rich and easy-to-digest meal.'),
+        m('Lentil and tofu dal', 'Red lentil dal with cubed tofu, spinach, tomato and brown rice.', ['soy'], 30, 580, 'Plant iron from lentils and spinach, with tomato\'s vitamin C to absorb it.'),
       ],
       dinner: [
         m('Ginger chicken bone broth soup', 'Chicken, bone broth, ginger, bok choy and rice noodles.', ['poultry'], 40, 520, 'Warming and hydrating, and ginger can ease cramping.'),
         m('Miso-glazed cod with greens', 'Cod, miso glaze, sauteed kale and jasmine rice.', ['fish', 'soy'], 36, 540, 'Lean protein with iodine and leafy-green iron.'),
         m('Black bean and sweet potato chili', 'Hearty bean chili topped with avocado.', [], 24, 560, 'Fiber, iron and complex carbs for steady energy.'),
+        m('Tempeh miso noodle soup', 'Seared tempeh, miso broth, kale, mushrooms and rice noodles.', ['soy', 'mushroom'], 30, 540, 'Warm, hydrating and iron-rich when your energy is low.'),
       ],
       snack: [
         m('Dark chocolate and almonds', '20 g of 85% dark chocolate with a handful of almonds.', ['nuts'], 7, 260, 'Magnesium helps with cramps and mood.'),
@@ -280,21 +282,25 @@
         m('Greek yogurt protein parfait', 'Greek yogurt, granola, berries and chia.', ['dairy', 'gluten'], 34, 430, 'Probiotics and protein while estrogen rises.'),
         m('Veggie egg-white omelet', 'Egg whites, peppers, spinach and avocado toast.', ['egg', 'gluten'], 32, 420, 'Lean protein and fresh vegetables.'),
         m('Green protein smoothie', 'Pea protein, spinach, mango, oats and flax.', [], 30, 410, 'Light, fresh fuel for heavier training days.'),
+        m('Tofu scramble breakfast wrap', 'Turmeric tofu scramble, black beans, salsa and spinach in a whole-wheat wrap.', ['soy', 'gluten'], 28, 460, 'Protein and fiber to fuel heavier training days.'),
       ],
       lunch: [
         m('Chicken kimchi rice bowl', 'Grilled chicken, kimchi, brown rice, cucumber and sesame.', ['poultry', 'soy'], 45, 600, 'Fermented foods support gut health and estrogen metabolism.'),
         m('Shrimp poke bowl', 'Shrimp, sushi rice, edamame, mango and seaweed.', ['shellfish', 'soy'], 36, 560, 'Lean protein and carbs to fuel strength work.'),
         m('Tempeh quinoa salad', 'Tempeh, quinoa, sprouts, herbs and lemon tahini.', ['soy'], 30, 540, 'Fermented plant protein with fresh greens.'),
+        m('Edamame soba crunch salad', 'Soba noodles, edamame, red cabbage, carrot and sesame-ginger dressing.', ['soy', 'gluten'], 28, 520, 'Fresh, light fuel while energy climbs.'),
       ],
       dinner: [
         m('Lemon herb chicken and potatoes', 'Roast chicken thighs, baby potatoes and green beans.', ['poultry'], 44, 610, 'Protein and carbs for recovery after heavy lifts.'),
         m('Turkey zucchini meatballs', 'Turkey meatballs, marinara and whole-wheat pasta.', ['poultry', 'gluten'], 42, 600, 'Lean protein with performance carbs.'),
         m('Tofu stir-fry with soba', 'Crispy tofu, broccoli, snap peas and buckwheat soba.', ['soy'], 30, 560, 'Fiber-rich vegetables and complete plant protein.'),
+        m('Seitan fajita bowl', 'Seitan strips, peppers, onions, black beans, rice and guacamole.', ['gluten'], 42, 600, 'One of the highest-protein plant meals, for building muscle.'),
       ],
       snack: [
         m('Cottage cheese and pineapple', 'A cup of cottage cheese with pineapple.', ['dairy'], 24, 220, 'Slow-digesting protein.'),
         m('Rice cakes and turkey', 'Two rice cakes with turkey slices and mustard.', ['poultry'], 18, 190, 'Quick pre-workout carbs and protein.'),
         m('Protein shake and banana', 'Whey or plant protein with a banana.', [], 26, 250, 'Fast fuel around training.'),
+        m('Soy yogurt, granola and berries', 'Plain soy yogurt with granola and mixed berries.', ['soy', 'gluten'], 14, 260, 'Protein and antioxidants in a quick snack.'),
       ],
     },
     ovulation: {
@@ -302,16 +308,20 @@
         m('Berry flax overnight oats', 'Oats, flax, mixed berries and protein yogurt.', ['gluten', 'dairy'], 30, 450, 'Fiber and antioxidants support estrogen clearance.'),
         m('Smoked salmon avocado toast', 'Smoked salmon, avocado, arugula and rye toast.', ['fish', 'gluten'], 28, 440, 'Omega-3s and healthy fats.'),
         m('Tofu veggie scramble', 'Tofu, peppers, tomatoes and black beans.', ['soy'], 28, 400, 'Plant protein and colourful antioxidants.'),
+        m('Pea protein pancakes', 'Oat and pea protein pancakes with berries and maple.', ['gluten'], 30, 450, 'Carbs and protein before your strongest sessions.'),
       ],
       lunch: [
         m('Salmon and roasted broccoli bowl', 'Salmon, broccoli, quinoa and tahini.', ['fish'], 40, 600, 'Cruciferous vegetables help metabolise estrogen.'),
         m('Turkey and cauliflower rice burrito bowl', 'Turkey, cauliflower rice, beans, salsa and avocado.', ['poultry'], 42, 560, 'Fiber-forward with high protein.'),
         m('Rainbow lentil salad', 'Lentils, peppers, red cabbage, feta and herbs.', ['dairy'], 26, 520, 'Antioxidants and fiber at your peak.'),
+        m('Tofu poke bowl', 'Marinated tofu, sushi rice, edamame, cucumber, mango and seaweed.', ['soy'], 32, 580, 'Easy-to-digest carbs and protein around training.'),
+        m('Lentil and quinoa power salad', 'Green lentils, quinoa, roasted peppers, rocket and lemon-tahini.', [], 24, 540, 'Plant protein and slow carbs for steady energy.'),
       ],
       dinner: [
         m('Grilled steak and Brussels sprouts', 'Sirloin, roasted Brussels sprouts and sweet potato.', ['redmeat'], 45, 620, 'Protein for power work plus cruciferous vegetables.'),
         m('Shrimp and veggie skewers', 'Shrimp, zucchini, peppers and wild rice.', ['shellfish'], 38, 540, 'Light, lean and colourful.'),
         m('Chickpea cauliflower tikka', 'Roasted cauliflower and chickpeas in tikka sauce with rice.', [], 22, 560, 'Fiber and plant protein.'),
+        m('Tempeh peanut stir-fry', 'Tempeh, broccoli, peppers and peanut sauce over brown rice.', ['soy', 'nuts'], 34, 620, 'Protein and carbs to recover from heavy days.'),
       ],
       snack: [
         m('Apple and almond butter', 'A sliced apple with 1 tbsp almond butter.', ['nuts'], 5, 200, 'Fiber and healthy fats.'),
@@ -329,11 +339,14 @@
         m('Turkey sweet potato bowl', 'Ground turkey, roasted sweet potato, kale and tahini.', ['poultry'], 42, 620, 'Complex carbs and tryptophan support mood.'),
         m('Salmon brown rice sushi bowl', 'Salmon, brown rice, avocado and cucumber.', ['fish', 'soy'], 38, 610, 'Omega-3s may ease PMS symptoms.'),
         m('Lentil and pumpkin soup', 'Red lentils, pumpkin, cumin and a side of seeded bread.', ['gluten'], 24, 540, 'Magnesium and fiber for cravings.'),
+        m('Tofu banh mi bowl', 'Lemongrass tofu, pickled carrot, cucumber, herbs and rice.', ['soy'], 28, 560, 'Satisfying and filling when appetite rises.'),
       ],
       dinner: [
         m('Beef and black bean tacos', 'Lean beef, black beans, slaw and corn tortillas.', ['redmeat'], 42, 640, 'Higher-calorie, satisfying protein for higher needs.'),
         m('Chicken and chickpea tray bake', 'Chicken, chickpeas, peppers and harissa.', ['poultry'], 44, 600, 'Protein and fiber keep you full.'),
         m('Halloumi and roasted veggie couscous', 'Halloumi, roasted vegetables, couscous and pumpkin seeds.', ['dairy', 'gluten'], 28, 620, 'Magnesium from seeds with satisfying carbs.'),
+        m('Lentil shepherd\'s pie', 'Lentil and mushroom filling under a sweet potato mash.', ['mushroom'], 24, 560, 'Comforting complex carbs that ease cravings.'),
+        m('Chickpea and tofu tikka masala', 'Chickpeas and tofu in a coconut tikka sauce with rice.', ['soy'], 30, 640, 'A little more food, on purpose, with steady energy.'),
       ],
       snack: [
         m('Dark chocolate and pumpkin seeds', '20 g dark chocolate with pumpkin seeds.', [], 8, 240, 'Magnesium for cravings and sleep.'),
@@ -366,6 +379,7 @@
     { label: 'Soy', tags: ['soy'] },
     { label: 'Nuts', tags: ['nuts'] },
     { label: 'Vegetarian', tags: ['fish', 'shellfish', 'redmeat', 'pork', 'poultry'] },
+    { label: 'Vegan', tags: ['fish', 'shellfish', 'redmeat', 'pork', 'poultry', 'dairy', 'egg'] },
     { label: 'Mushrooms', tags: ['mushroom'] },
   ];
 
@@ -443,6 +457,23 @@
 
   // Grocery items per meal. Prefix: p protein, v produce, g grains and pantry, d dairy and eggs.
   const GROCERY = {
+    'Lentil and tofu dal': ['g:Red lentils', 'p:Firm tofu', 'v:Spinach', 'g:Chopped tomatoes', 'g:Brown rice'],
+    'Tempeh miso noodle soup': ['p:Tempeh', 'g:Miso paste', 'v:Kale', 'v:Mushrooms', 'g:Rice noodles'],
+    'Tofu scramble breakfast wrap': ['p:Firm tofu', 'g:Black beans', 'g:Salsa', 'v:Spinach', 'g:Whole-wheat wraps'],
+    'Edamame soba crunch salad': ['g:Soba noodles', 'v:Edamame (frozen)', 'v:Red cabbage', 'v:Carrots', 'g:Sesame oil'],
+    'Seitan fajita bowl': ['p:Seitan', 'v:Bell peppers', 'v:Onions', 'g:Black beans', 'g:Brown rice', 'v:Avocados'],
+    'Soy yogurt, granola and berries': ['p:Soy yogurt', 'g:Granola', 'v:Mixed berries'],
+    'Pea protein pancakes': ['g:Oats', 'g:Pea protein powder', 'v:Mixed berries', 'g:Maple syrup'],
+    'Tofu poke bowl': ['p:Firm tofu', 'g:Sushi rice', 'v:Edamame (frozen)', 'v:Cucumbers', 'v:Mangoes', 'g:Nori'],
+    'Lentil and quinoa power salad': ['g:Green lentils', 'g:Quinoa', 'v:Bell peppers', 'v:Rocket', 'g:Tahini'],
+    'Tempeh peanut stir-fry': ['p:Tempeh', 'v:Broccoli', 'v:Bell peppers', 'g:Peanut butter', 'g:Brown rice'],
+    'Tofu banh mi bowl': ['p:Firm tofu', 'v:Carrots', 'v:Cucumbers', 'v:Fresh herbs', 'g:Jasmine rice'],
+    'Lentil shepherd\'s pie': ['g:Green lentils', 'v:Mushrooms', 'v:Sweet potatoes', 'v:Onions', 'v:Carrots'],
+    'Chickpea and tofu tikka masala': ['g:Chickpeas', 'p:Firm tofu', 'g:Coconut milk', 'g:Curry paste', 'g:Basmati rice'],
+    'Soy yogurt protein bowl': ['p:Soy yogurt', 'g:Pea protein powder', 'v:Mixed berries', 'g:Ground flaxseed'],
+    'Edamame and white bean salad': ['v:Edamame (frozen)', 'g:White beans', 'v:Kale', 'g:Pumpkin seeds', 'v:Lemons'],
+    'Baked tofu with tahini greens': ['p:Calcium-set tofu', 'v:Bok choy', 'g:Tahini', 'g:Brown rice'],
+    'Soy latte and almonds': ['p:Fortified soy milk', 'g:Almonds', 'g:Coffee'],
     'Warm cacao protein oats': ['g:Oats', 'g:Cacao powder', 'g:Protein powder', 'v:Bananas', 'g:Pumpkin seeds'],
     'Spinach and feta egg scramble': ['d:Eggs', 'v:Spinach', 'd:Feta', 'g:Sourdough bread'],
     'Tofu breakfast hash': ['p:Firm tofu', 'v:Sweet potatoes', 'v:Kale', 'g:Turmeric'],

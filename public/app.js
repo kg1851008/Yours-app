@@ -1500,6 +1500,7 @@
       ['Do I need a regular cycle?', 'No. YOURS has plans for irregular cycles, PCOS, hormonal birth control, perimenopause, menopause and postpartum. Without a natural cycle, your week follows your daily check-in instead.'],
       ['I have never lifted. Is it for me?', 'Yes. Beginner foundations teaches the basic movements in 8 weeks, and every exercise comes with simple cues and a suggested starting weight.'],
       ['Do I have to run?', 'No. YOURS is built around strength training. Running has its own section for when you want it, and your lifting plan stays the same unless you start a run plan. Runs are planned around your lifting and your cycle, with paces for outside and the treadmill.'],
+      ['Can I eat vegan or vegetarian?', 'Yes. Pick Vegan, Vegetarian or any allergies (dairy, gluten, eggs, nuts, soy, fish, shellfish) and your meal ideas and grocery list leave them out.'],
       ['Gym or home?', 'Both. Home strength needs only dumbbells and a band, and any exercise can be swapped if a machine is taken.'],
       ['What happens after the free trial?', `It becomes ${money(m)} a month or ${money(y)} a year. The app reminds you 2 days before the trial ends. Cancel in Profile, Manage membership, before it ends and you pay nothing.`],
       ['Where is YOURS available?', 'In the United States only, for now. We would rather tell you here than after you sign up.'],
@@ -1580,10 +1581,13 @@ ${prog ? `
           <p class="lp-stance">You can train hard any day.</p>
           <div>
             <p>For most women, research finds cycle phase has at most a small effect on strength. A 2020 review of 78 studies found a trivial dip in performance early in the cycle, with big differences from woman to woman<a class="lp-cite" href="https://rgu-repository.worktribe.com/output/940959" target="_blank" rel="noopener">1</a>. A 2023 review concluded the evidence is too weak to program training by phase<a class="lp-cite" href="https://doi.org/10.3389/fspor.2023.1054542" target="_blank" rel="noopener">2</a>.</p>
+            <p style="margin-top:12px"><strong>The bigger problem: women are barely studied.</strong> In sport and exercise science, only 6% of studies from 2014 to 2020 looked at women alone, and women were just 34% of all participants<a class="lp-cite" href="https://doi.org/10.1123/wspaj.2021-0028" target="_blank" rel="noopener">3</a>. In the United States, NIH-funded medical research didn't have to include women until 1993<a class="lp-cite" href="https://www.govinfo.gov/content/pkg/GAOREPORTS-HEHS-00-96/html/GAOREPORTS-HEHS-00-96.htm" target="_blank" rel="noopener">4</a>. Much of what we're told about training was learned from men.</p>
             <p style="margin-top:12px">So YOURS treats phases as a starting point, not rules. Your daily check-in and what you actually lift set your weights, and your Strength by phase chart shows your own pattern, not an average.</p>
             <ol class="lp-refs tiny muted">
               <li>McNulty et al. The Effects of Menstrual Cycle Phase on Exercise Performance in Eumenorrheic Women. <em>Sports Medicine</em>, 2020.</li>
               <li>Colenso-Semple et al. Current evidence shows no influence of women's menstrual cycle phase on acute strength performance or adaptations to resistance exercise training. <em>Frontiers in Sports and Active Living</em>, 2023.</li>
+              <li>Cowley et al. "Invisible Sportswomen": The Sex Data Gap in Sport and Exercise Science Research. <em>Women in Sport and Physical Activity Journal</em>, 2021.</li>
+              <li>U.S. General Accounting Office. Women's Health: NIH Has Increased Its Efforts to Include Women in Research, 2000.</li>
             </ol>
           </div>
         </div>
