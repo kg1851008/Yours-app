@@ -8,10 +8,10 @@
   --text: #2F3720;
   --muted: #666153;
   --line: #E4DDD3;
-  --accent: #D4845C;
-  --accent-soft: #F3E2D6;
+  --accent: #A9877A; /* dusty rose-nude */
+  --accent-soft: #EFE5DF;
   --accent-text: #1E2412;
-  --accent-ink: #9C5230; /* peach for text: readable on cream and white (WCAG AA) */
+  --accent-ink: #7A5A4E; /* rose-nude for text: readable on cream and white (WCAG AA) */
   --btn-nude: #E8DDD3; /* soft milky nude for secondary call-to-action buttons */
   --btn-nude-text: #2F3720;
   --green: #2F3720;
@@ -35,13 +35,13 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #12130E; --surface: #1B1D16; --surface-2: #24271D; --text: #EEEAE2; --muted: #A39E90;
-    --line: #2E3127; --accent: #E0956E; --accent-soft: #3A2A20; --accent-text: #1A1A14; --accent-ink: #E0956E; --green: #EEEAE2; --green-soft: #283020; --btn-nude: #3A352E; --btn-nude-text: #EEEAE2;
+    --line: #2E3127; --accent: #C9A99C; --accent-soft: #352D29; --accent-text: #1A1A14; --accent-ink: #D6B8AC; --green: #EEEAE2; --green-soft: #283020; --btn-nude: #3A352E; --btn-nude-text: #EEEAE2;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #12130E; --surface: #1B1D16; --surface-2: #24271D; --text: #EEEAE2; --muted: #A39E90;
-  --line: #2E3127; --accent: #E0956E; --accent-soft: #3A2A20; --accent-text: #1A1A14; --accent-ink: #E0956E; --green: #EEEAE2; --green-soft: #283020; --btn-nude: #3A352E; --btn-nude-text: #EEEAE2;
+  --line: #2E3127; --accent: #C9A99C; --accent-soft: #352D29; --accent-text: #1A1A14; --accent-ink: #D6B8AC; --green: #EEEAE2; --green-soft: #283020; --btn-nude: #3A352E; --btn-nude-text: #EEEAE2;
   color-scheme: dark;
 }
 
@@ -435,7 +435,7 @@ h3 { font-size: 16px; font-weight: 600; }
 .scan-box { position: absolute; left: 12%; right: 12%; top: 34%; height: 30%; }
 .scan-box::before, .scan-box::after { content: ''; position: absolute; inset: 0; border: 2px solid #D8E0A2; border-radius: 14px; -webkit-mask: linear-gradient(#000 0 0) top left / 28px 28px no-repeat, linear-gradient(#000 0 0) top right / 28px 28px no-repeat, linear-gradient(#000 0 0) bottom left / 28px 28px no-repeat, linear-gradient(#000 0 0) bottom right / 28px 28px no-repeat; mask: linear-gradient(#000 0 0) top left / 28px 28px no-repeat, linear-gradient(#000 0 0) top right / 28px 28px no-repeat, linear-gradient(#000 0 0) bottom left / 28px 28px no-repeat, linear-gradient(#000 0 0) bottom right / 28px 28px no-repeat; }
 .scan-box::after { display: none; }
-.scan-box span { position: absolute; left: 6%; right: 6%; height: 2px; background: #D4845C; box-shadow: 0 0 12px #D4845C; top: 10%; animation: sweep 1.8s ease-in-out infinite alternate; }
+.scan-box span { position: absolute; left: 6%; right: 6%; height: 2px; background: #E8D5CC; box-shadow: 0 0 12px #E8D5CC; top: 10%; animation: sweep 1.8s ease-in-out infinite alternate; }
 @keyframes sweep { to { top: 88%; } }
 
 /* ---------- menopause ---------- */
