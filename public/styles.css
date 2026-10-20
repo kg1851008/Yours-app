@@ -579,6 +579,17 @@ a.link { text-decoration: none; overflow-wrap: anywhere; }
 .lp-promises li { padding: 14px 0; border-bottom: 1px solid var(--hair); font-size: 16px; line-height: 1.5; color: var(--muted); }
 .lp-promises strong { color: var(--text); }
 .lp-inline { color: var(--text); text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; }
+/* Phase quiz (/phase) */
+.quiz-mast { display: block; color: var(--text); font-size: clamp(56px, 14vw, 160px); }
+.quiz .lp-h1 { font-size: clamp(42px, 8vw, 88px); }
+.quiz-qs { list-style: none; padding: 0; margin: 32px 0 0; border-top: 1px solid var(--rule); max-width: 720px; }
+.quiz-qs li { display: flex; gap: 18px; align-items: flex-start; padding: 22px 0; border-bottom: 1px solid var(--hair); }
+.quiz-qs .lp-big { font-size: 40px; }
+.quiz-qs h3 { margin-top: 2px; }
+.quiz-qs .input { max-width: 320px; }
+.quiz-out { margin-top: 44px; padding-top: 22px; border-top: 1px solid var(--rule); max-width: 720px; scroll-margin-top: 72px; }
+.quiz-res { margin-top: 12px; }
+.quiz-res .serif { display: block; }
 .lp-index { list-style: none; padding: 0; margin: 0; }
 .lp-index li { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding: 18px 0; border-bottom: 1px solid var(--hair); }
 .lp-index strong { font-weight: 800; font-size: clamp(24px, 3.6vw, 42px); letter-spacing: -0.03em; }

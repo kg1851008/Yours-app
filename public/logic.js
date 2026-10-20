@@ -1154,7 +1154,7 @@
 
   const api = {
     dateKey, parseKey, today, addDays, daysBetween, clamp, round, mean, weekdayIndex,
-    GOALS, LEVELS, ACTIVITY, goalOf, activityOf, STEADY_MODES, MENO_MODES, menoInsights, checkinDay, checkinTomorrow,
+    GOALS, LEVELS, ACTIVITY, goalOf, activityOf, STEADY_MODES, MENO_MODES, ESTIMATE_MODES, menoInsights, checkinDay, checkinTomorrow,
     learnCycle, addPeriod, cycleInfo, targets, readiness, readinessLabel, patterns,
     workoutById, plannedWorkout, workoutFor, programById, programDay, programProgress, adjustSets, parseReps, e1rm, suggestLoad, detectPRs, strengthByPhase, exerciseHistory,
     mealOptions, mealFor, proteinFor, aisleFor, storeLink, buildTotals, macrosFor, parseOFF, foodMacros, canWeigh, gramsOf, convertAmount, FAST_WINDOWS, fastStatus, fastSummary, fmtHM, sleepStats, validBarcode, recipeTotals, recipeFood, groceryList, parseFoodText, usualRequest, usualMeal, cleanEstimates, estimateFood, parseRest, isBarbell, platesFor, defaultBar, BARS, streak, weeklyStats, weeklyAdjust, applyAdjustments, weeklyDue,
