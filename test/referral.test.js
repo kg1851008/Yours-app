@@ -155,3 +155,32 @@ test('an inviter without a membership keeps her reward until she joins, and rewa
   assert.equal(credits.length, 12);
   assert.equal(db.referrals.find((x) => x.referred_id === 'f12').status, 'void');
 });
+
+test('friend codes: request by code, the other side accepts by code, invites become friends', async () => {
+  const db = { subscriptions: [], referral_codes: [{ user_id: 'amy', code: 'AMY234' }, { user_id: 'bea', code: 'BEA234' }, { user_id: 'cat', code: 'CAT234' }], referrals: [], friendships: [] };
+  global.fetch = fakeDb(db, { tA: { id: 'amy', created_at: fresh(90) }, tB: { id: 'bea', created_at: fresh(90) }, tD: { id: 'dee', created_at: fresh(0) } });
+  const call = async (t, code) => { const r = res(); await referral({ method: 'POST', headers: { authorization: `Bearer ${t}` }, body: { action: 'friend', code } }, r); return r; };
+
+  let r = await call('tA', 'nope');
+  assert.equal(r.statusCode, 400);
+  r = await call('tA', 'AMY234');
+  assert.match(r.body.error, /own/);
+  r = await call('tA', 'bea234');
+  assert.deepEqual(r.body, { ok: true, status: 'requested', id: 'bea' });
+  assert.equal(db.friendships.length, 1);
+  r = await call('tA', 'BEA234'); // asking twice changes nothing
+  assert.equal(r.body.status, 'requested');
+  assert.equal(db.friendships.length, 1);
+  r = await call('tB', 'AMY234'); // she adds back: accepted
+  assert.equal(r.body.status, 'friends');
+  assert.equal(db.friendships.length, 1);
+  assert.equal(db.friendships[0].status, 'accepted');
+
+  // Joining from Cat's invite link makes Dee and Cat friends.
+  const claim = res();
+  await referral({ method: 'POST', headers: { authorization: 'Bearer tD' }, body: { action: 'claim', code: 'CAT234' } }, claim);
+  assert.equal(claim.body.ok, true);
+  const f = db.friendships.find((x) => x.requester === 'cat');
+  assert.equal(f.addressee, 'dee');
+  assert.equal(f.status, 'accepted');
+});

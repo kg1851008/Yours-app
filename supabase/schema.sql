@@ -365,3 +365,64 @@ alter policy "likes read" on public.likes using ((select public.has_access()));
 alter policy "likes insert own" on public.likes with check (user_id = (select auth.uid()) and (select public.has_access()));
 alter policy "messages send own" on public.messages with check (from_id = (select auth.uid()) and (select public.has_access()));
 alter policy "profiles read" on public.profiles using (id = (select auth.uid()) or (select public.has_access()));
+
+-- ---------- Friends and shared wins ----------
+-- A member sends a friend request (pending); the other member accepts it. Either can cancel, decline or unfriend.
+-- Adding by friend code (the invite code) goes through api/referral.js with the secret key, as codes are server-only;
+-- joining from someone's invite link makes the two friends straight away.
+-- Wins are short titles ("Finished Lower body A", "New personal record: Hip thrust", "30-day streak") that a member
+-- shares only after turning on "Share my wins with friends" (off by default). Only she and her friends can read them.
+create table if not exists public.friendships (
+  requester uuid not null references auth.users(id) on delete cascade,
+  addressee uuid not null references auth.users(id) on delete cascade,
+  status text not null default 'pending' check (status in ('pending','accepted')),
+  created_at timestamptz not null default now(),
+  accepted_at timestamptz,
+  primary key (requester, addressee),
+  check (requester <> addressee)
+);
+create unique index if not exists friendships_pair on public.friendships (least(requester, addressee), greatest(requester, addressee));
+create index if not exists friendships_addressee on public.friendships (addressee);
+alter table public.friendships enable row level security;
+
+create or replace function public.are_friends(a uuid, b uuid) returns boolean language sql stable security definer set search_path = public as $fn$
+  select exists (select 1 from public.friendships f where f.status = 'accepted' and ((f.requester = a and f.addressee = b) or (f.requester = b and f.addressee = a)));
+$fn$;
+revoke all on function public.are_friends(uuid, uuid) from public;
+grant execute on function public.are_friends(uuid, uuid) to authenticated;
+
+drop policy if exists "friendships: see your own" on public.friendships;
+create policy "friendships: see your own" on public.friendships for select using (auth.uid() = requester or auth.uid() = addressee);
+drop policy if exists "friendships: send a request" on public.friendships;
+create policy "friendships: send a request" on public.friendships for insert with check (requester = auth.uid() and status = 'pending' and accepted_at is null and public.has_access());
+drop policy if exists "friendships: accept a request sent to you" on public.friendships;
+create policy "friendships: accept a request sent to you" on public.friendships for update using (addressee = auth.uid() and status = 'pending') with check (addressee = auth.uid() and status = 'accepted');
+drop policy if exists "friendships: cancel, decline or unfriend" on public.friendships;
+create policy "friendships: cancel, decline or unfriend" on public.friendships for delete using (auth.uid() = requester or auth.uid() = addressee);
+
+create table if not exists public.wins (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  kind text not null check (kind in ('workout','pr','streak','run','program')),
+  title text not null check (char_length(title) between 1 and 120),
+  created_at timestamptz not null default now()
+);
+create index if not exists wins_user_time on public.wins (user_id, created_at desc);
+alter table public.wins enable row level security;
+drop policy if exists "wins: share your own" on public.wins;
+create policy "wins: share your own" on public.wins for insert with check (user_id = auth.uid() and public.has_access());
+drop policy if exists "wins: you and your friends" on public.wins;
+create policy "wins: you and your friends" on public.wins for select using (user_id = auth.uid() or (public.has_access() and public.are_friends(auth.uid(), user_id)));
+drop policy if exists "wins: delete your own" on public.wins;
+create policy "wins: delete your own" on public.wins for delete using (user_id = auth.uid());
+do $$ begin
+  begin alter publication supabase_realtime add table public.friendships; exception when duplicate_object then null; end;
+  begin alter publication supabase_realtime add table public.wins; exception when duplicate_object then null; end;
+end $$;
+
+-- ---------- Profile photo ----------
+-- A small square JPEG (made on her device) as a data URL, shown next to her name to members. Only a plain
+-- JPEG data URL under 60,000 characters is accepted, so nothing else can be stored or injected through it.
+alter table public.profiles add column if not exists avatar text;
+alter table public.profiles drop constraint if exists profiles_avatar_jpeg;
+alter table public.profiles add constraint profiles_avatar_jpeg check (avatar is null or (char_length(avatar) <= 60000 and avatar ~ '^data:image/jpeg;base64,[A-Za-z0-9+/]+={0,2}$'));

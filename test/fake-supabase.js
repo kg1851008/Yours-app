@@ -6,7 +6,7 @@ const crypto = require('node:crypto');
 
 function createBackend(opts) {
   const confirmEmail = !!(opts && opts.confirmEmail);
-  const db = { users: [], profiles: [], user_data: [], posts: [], comments: [], likes: [], messages: [], reports: [], subscriptions: [], consents: [], push_subscriptions: [], email_prefs: [], files: {} };
+  const db = { users: [], profiles: [], user_data: [], posts: [], comments: [], likes: [], messages: [], friendships: [], wins: [], reports: [], subscriptions: [], consents: [], push_subscriptions: [], email_prefs: [], files: {} };
   const tokens = {};
   const now = () => new Date(Date.now() + (db.tick = (db.tick || 0) + 1)).toISOString();
   const err = (message) => ({ data: null, error: { message } });
@@ -57,6 +57,8 @@ function createBackend(opts) {
       let rows = t.filter((r) => match(r, q.filters));
       if (['user_data', 'subscriptions', 'push_subscriptions', 'email_prefs'].includes(q.table)) rows = rows.filter((r) => r.user_id === u.id);
       if (q.table === 'messages') rows = rows.filter((r) => r.from_id === u.id || r.to_id === u.id);
+      if (q.table === 'friendships') rows = rows.filter((r) => r.requester === u.id || r.addressee === u.id);
+      if (q.table === 'wins') rows = rows.filter((r) => r.user_id === u.id || areFriends(u.id, r.user_id));
       if (q.order) rows = rows.slice().sort((a, b) => (a[q.order.col] < b[q.order.col] ? -1 : 1) * (q.order.ascending ? 1 : -1));
       if (q.limit) rows = rows.slice(0, q.limit);
       if (q.table === 'posts') rows = rows.map((p) => ({ ...p, likes: db.likes.filter((l) => l.post_id === p.id).map((l) => ({ user_id: l.user_id })), comments: db.comments.filter((c) => c.post_id === p.id) }));
@@ -67,6 +69,12 @@ function createBackend(opts) {
       if (q.table === 'posts' || q.table === 'comments') { v.id = crypto.randomUUID(); v.user_id = u.id; v.author_name = (db.profiles.find((p) => p.id === u.id) || {}).name || 'Member'; v.created_at = now(); }
       if (q.table === 'messages') { v.id = crypto.randomUUID(); v.from_id = u.id; v.created_at = now(); }
       if (q.table === 'reports') { v.reporter_id = u.id; }
+      if (q.table === 'friendships') {
+        if (v.requester !== u.id || v.status !== 'pending' || v.addressee === u.id) return err('row-level security');
+        if (t.some((r) => (r.requester === v.requester && r.addressee === v.addressee) || (r.requester === v.addressee && r.addressee === v.requester))) return err('duplicate key value violates unique constraint');
+        v.created_at = now();
+      }
+      if (q.table === 'wins') { v.id = crypto.randomUUID(); v.user_id = u.id; v.created_at = now(); }
       if (q.table === 'consents') { v.user_id = u.id; v.accepted_at = now(); }
       if (q.table === 'push_subscriptions' || q.table === 'email_prefs') { v.user_id = u.id; const key = q.table === 'push_subscriptions' ? 'endpoint' : 'user_id'; const i = t.findIndex((r) => r[key] === v[key]); if (i > -1) { t[i] = { ...t[i], ...v }; return { data: null, error: null }; } }
       if (q.table === 'user_data') { if (v.user_id !== u.id) return err('row-level security'); const i = t.findIndex((r) => r.user_id === u.id); if (i > -1) t[i] = v; else t.push(v); return { data: null, error: null }; }
@@ -74,17 +82,25 @@ function createBackend(opts) {
       t.push(v);
       return { data: q.select ? (q.single ? JSON.parse(JSON.stringify(v)) : [JSON.parse(JSON.stringify(v))]) : null, error: null };
     }
+    if (q.action === 'update' && q.table === 'friendships') {
+      if (q.values.status !== 'accepted') return err('row-level security');
+      t.filter((r) => match(r, q.filters) && r.addressee === u.id && r.status === 'pending').forEach((r) => Object.assign(r, q.values));
+      return { data: null, error: null };
+    }
+    if (q.action === 'update' && q.table === 'profiles' && q.values.avatar != null && !(q.values.avatar.length <= 60000 && /^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(q.values.avatar))) return err('violates check constraint "profiles_avatar_jpeg"');
     if (q.action === 'update') {
       t.filter((r) => match(r, q.filters) && (r.id === u.id || r.user_id === u.id)).forEach((r) => Object.assign(r, q.values));
       return { data: null, error: null };
     }
     if (q.action === 'delete') {
-      db[q.table] = t.filter((r) => !(match(r, q.filters) && (r.user_id === u.id)));
+      db[q.table] = t.filter((r) => !(match(r, q.filters) && (q.table === 'friendships' ? r.requester === u.id || r.addressee === u.id : r.user_id === u.id)));
       if (q.table === 'posts') { const ids = new Set(db.posts.map((p) => p.id)); db.comments = db.comments.filter((c) => ids.has(c.post_id)); db.likes = db.likes.filter((l) => ids.has(l.post_id)); }
       return { data: null, error: null };
     }
     return err('unsupported');
   }
+
+  const areFriends = (a, b) => db.friendships.some((f) => f.status === 'accepted' && ((f.requester === a && f.addressee === b) || (f.requester === b && f.addressee === a)));
 
   function storage(token, fn, args) {
     const u = userOf(token);
@@ -103,7 +119,8 @@ function createBackend(opts) {
     if (name === 'delete_my_account') {
       db.users = db.users.filter((x) => x.id !== u.id);
       ['profiles'].forEach((k) => { db[k] = db[k].filter((r) => r.id !== u.id); });
-      ['user_data', 'posts', 'comments', 'likes'].forEach((k) => { db[k] = db[k].filter((r) => r.user_id !== u.id); });
+      ['user_data', 'posts', 'comments', 'likes', 'wins'].forEach((k) => { db[k] = db[k].filter((r) => r.user_id !== u.id); });
+      db.friendships = db.friendships.filter((f) => f.requester !== u.id && f.addressee !== u.id);
       db.messages = db.messages.filter((m) => m.from_id !== u.id && m.to_id !== u.id);
       return { data: null, error: null };
     }
