@@ -170,6 +170,33 @@
       },
       async send(toId, text) { must(await sb.from('messages').insert({ to_id: UID(toId), text })); },
 
+      // ---- friends (requests she sends, accepted by the other member) and wins shared with friends ----
+      async friends() {
+        const me = user.id;
+        const rows = must(await sb.from('friendships').select('requester, addressee, status, created_at').or(`requester.eq.${me},addressee.eq.${me}`));
+        const out = { friends: [], incoming: [], outgoing: [] };
+        (rows || []).forEach((r) => {
+          const other = ID(r.requester === me ? r.addressee : r.requester);
+          if (r.status === 'accepted') out.friends.push(other);
+          else if (r.addressee === me) out.incoming.push(other);
+          else out.outgoing.push(other);
+        });
+        out.names = await api.names(out.friends.concat(out.incoming, out.outgoing));
+        return out;
+      },
+      async requestFriend(id) { must(await sb.from('friendships').insert({ requester: user.id, addressee: UID(id), status: 'pending' })); },
+      async acceptFriend(id) { must(await sb.from('friendships').update({ status: 'accepted', accepted_at: new Date().toISOString() }).eq('requester', UID(id)).eq('addressee', user.id)); },
+      async removeFriend(id) {
+        const other = UID(id);
+        must(await sb.from('friendships').delete().eq('requester', user.id).eq('addressee', other));
+        must(await sb.from('friendships').delete().eq('requester', other).eq('addressee', user.id));
+      },
+      async wins() {
+        const rows = must(await sb.from('wins').select('id, user_id, kind, title, created_at').order('created_at', { ascending: false }).limit(80));
+        return (rows || []).map((r) => ({ id: r.id, author: ID(r.user_id), kind: r.kind, title: r.title, ts: Date.parse(r.created_at) }));
+      },
+      async shareWin(kind, title) { must(await sb.from('wins').insert({ kind, title: String(title || '').slice(0, 120) })); },
+
       // Live updates: any change to the feed or her messages calls back (debounced by the app).
       subscribe(onChange) {
         const ch = sb.channel('yours-community')
@@ -177,6 +204,8 @@
           .on('postgres_changes', { event: '*', schema: 'public', table: 'comments' }, () => onChange('feed'))
           .on('postgres_changes', { event: '*', schema: 'public', table: 'likes' }, () => onChange('feed'))
           .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => onChange('messages'))
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'friendships' }, () => onChange('friends'))
+          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'wins' }, () => onChange('friends'))
           .subscribe();
         return () => { try { sb.removeChannel(ch); } catch { /* already gone */ } };
       },

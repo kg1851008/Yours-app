@@ -207,6 +207,13 @@
         S.cloudFeed = await cloud.feed(blocked);
         S.cloudFeed.forEach((p) => { S.cloudNames[p.author] = p.authorName; p.comments.forEach((c) => { S.cloudNames[c.author] = c.authorName; }); });
       }
+      if (!which || which === 'friends') {
+        const [f, wins] = await Promise.all([cloud.friends(), cloud.wins()]);
+        const keep = (id) => !blocked.includes(id);
+        S.friends = { friends: f.friends.filter(keep), incoming: f.incoming.filter(keep), outgoing: f.outgoing.filter(keep) };
+        S.cloudWins = wins.filter((w) => keep(w.author));
+        Object.assign(S.cloudNames, f.names);
+      }
       if (!which || which === 'messages') {
         const t = await cloud.threads(blocked);
         S.cloudThreads = t.threads;
@@ -214,7 +221,7 @@
       }
       S.communityError = false;
     } catch { S.communityError = true; }
-    if (S.tab === 'community' && !(S.modal && S.modal.type !== 'report')) {
+    if (S.tab === 'community' && !(S.modal && !['report', 'member'].includes(S.modal.type))) {
       const ta = root.querySelector('[data-form="post"] textarea, [data-form="dm"] textarea');
       const keep = ta ? ta.value : null;
       render();
@@ -231,7 +238,7 @@
   function stopCloudCommunity() {
     if (unsubscribeCommunity) unsubscribeCommunity();
     unsubscribeCommunity = null;
-    S.cloudFeed = null; S.cloudThreads = null; S.cloudNames = {};
+    S.cloudFeed = null; S.cloudThreads = null; S.cloudNames = {}; S.friends = null; S.cloudWins = null;
   }
   async function cloudCall(fn, okMsg) {
     try { await fn(); if (okMsg) toast(okMsg); return true; }
@@ -1977,6 +1984,7 @@ ${prog ? `
       ]],
       ['Community and help', [
         ['community', 'community', 'Community', 'Women who lift'],
+        ['friends', 'heart', 'Friends', 'Follow friends and cheer their wins'],
         ['privacy', 'shield', 'Privacy and your data', 'Export your data any time'],
       ]],
     ];
@@ -2006,6 +2014,7 @@ ${prog ? `
     weight: () => goTab('progress'),
     report: () => goTab('insights'),
     community: () => goTab('community'),
+    friends: () => { goTab('community'); S.communityView = 'friends'; if (isCloud()) { if (!S.invite) loadInvite().then(render); refreshCommunity('friends'); } },
     privacy: () => { S.modal = { type: 'privacy' }; },
   };
 
@@ -2595,7 +2604,7 @@ ${prog ? `
     const maxDay = Math.max(1, ...d.days.map((x) => x.app_open));
     const bars = d.days.map((x, i) => `<rect x="${i * 10 + 1}" y="${60 - (x.app_open / maxDay) * 56}" width="8" height="${Math.max(1, (x.app_open / maxDay) * 56)}" rx="2" fill="var(--accent)"><title>${x.day}: ${x.app_open} opens, ${x.workout_done} workouts</title></rect>`).join('');
     const mem = d.members;
-    const engagement = ['workout_done', 'weekly_checkin', 'program_start', 'library_open', 'exercise_view', 'workout_created', 'home_mode', 'run_on', 'run_plan_start', 'run_logged', 'more_open', 'glp1_on', 'fast_started', 'sleep_logged', 'measurement_logged', 'lp_postpartum', 'start_postpartum', 'lp_menopause', 'start_menopause', 'lp_beginner', 'start_beginner', 'lp_home', 'start_home', 'lp_bridal', 'start_bridal', 'exercise_swap', 'photo_compare', 'badge_earned', 'share_card', 'install_done', 'invite_shared', 'invite_opened', 'invite_claimed', 'membership_canceled'].filter((k) => ev[k]);
+    const engagement = ['workout_done', 'weekly_checkin', 'program_start', 'library_open', 'exercise_view', 'workout_created', 'home_mode', 'run_on', 'run_plan_start', 'run_logged', 'more_open', 'friend_request', 'friend_accept', 'wins_on', 'glp1_on', 'fast_started', 'sleep_logged', 'measurement_logged', 'lp_postpartum', 'start_postpartum', 'lp_menopause', 'start_menopause', 'lp_beginner', 'start_beginner', 'lp_home', 'start_home', 'lp_bridal', 'start_bridal', 'exercise_swap', 'photo_compare', 'badge_earned', 'share_card', 'install_done', 'invite_shared', 'invite_opened', 'invite_claimed', 'membership_canceled'].filter((k) => ev[k]);
     return `<div class="stats">${statTile('Paying', n(mem.active), '')}${statTile('In trial', n(mem.trialing), '')}</div>
       <p class="tiny muted" style="margin-top:8px">${n(mem.yearly)} yearly · ${n(mem.monthly)} monthly · ${n(mem.cancelling)} set to cancel · ${n(mem.pastDue)} card failing · ${n(mem.ended)} ended${mem.comp ? ` · ${n(mem.comp)} complimentary` : ''}</p>
       ${membersCard(m, d.people)}
@@ -3310,6 +3319,7 @@ ${prog ? `
     S.data.activeWorkout = null;
     save();
     logEvent('workout_done');
+    shareWorkoutWins(record, prs);
     const unlocked = awardBadges(false);
     S.modal = { type: 'summary', record, prs, volume, badges: unlocked };
     render();
@@ -3599,8 +3609,8 @@ ${prog ? `
   function viewCommunity() {
     return `<div class="screen">
       ${header('Your<br>people.', 'Community · wins and support', 'caps')}
-      <div class="segment" style="margin-bottom:20px"><button class="${S.communityView === 'feed' ? 'active' : ''}" data-action="community-view" data-value="feed">Feed</button><button class="${S.communityView === 'messages' ? 'active' : ''}" data-action="community-view" data-value="messages">Messages</button></div>
-      ${S.communityView === 'feed' ? viewFeed() : S.openThread ? viewThread() : viewThreads()}
+      <div class="segment" style="margin-bottom:20px"><button class="${S.communityView === 'feed' ? 'active' : ''}" data-action="community-view" data-value="feed">Feed</button><button class="${S.communityView === 'friends' ? 'active' : ''}" data-action="community-view" data-value="friends">Friends</button><button class="${S.communityView === 'messages' ? 'active' : ''}" data-action="community-view" data-value="messages">Messages</button></div>
+      ${S.communityView === 'feed' ? viewFeed() : S.communityView === 'friends' ? viewFriends() : S.openThread ? viewThread() : viewThreads()}
     </div>`;
   }
 
@@ -3614,15 +3624,80 @@ ${prog ? `
         <button class="btn accent sm" type="submit">Post</button></div>
       </form>
       ${posts.map((p) => { const liked = me && p.likedBy.includes(me); const open = S.openComments[p.id]; return `<div class="card post">
-        <div class="head"><div class="avatar sm ${p.author.startsWith('u:') ? '' : 'alt'}">${esc(initials(memberName(p.author)))}</div><div class="grow"><strong>${esc(memberName(p.author))}</strong><div class="tiny muted">${timeAgo(p.ts)}${p.phase && Object.prototype.hasOwnProperty.call(D.PHASES, p.phase) && p.phase !== 'steady' ? ` · ${esc(phaseName(p.phase))} phase` : ''}</div></div><span class="tag ${p.tag === 'Win' ? 'accent' : ''}">${esc(p.tag)}</span></div>
+        <div class="head"><div class="avatar sm ${p.author.startsWith('u:') ? '' : 'alt'}">${esc(initials(memberName(p.author)))}</div><div class="grow">${memberLink(p.author)}<div class="tiny muted">${timeAgo(p.ts)}${p.phase && Object.prototype.hasOwnProperty.call(D.PHASES, p.phase) && p.phase !== 'steady' ? ` · ${esc(phaseName(p.phase))} phase` : ''}</div></div><span class="tag ${p.tag === 'Win' ? 'accent' : ''}">${esc(p.tag)}</span></div>
         <div class="body">${esc(p.text)}</div>
         <div class="foot"><button class="${liked ? 'on' : ''}" data-action="like" data-id="${p.id}" aria-label="Like">${icon('heart', 18)} ${p.baseLikes + p.likedBy.length}</button><button data-action="toggle-comments" data-id="${p.id}">${icon('comment', 18)} ${p.comments.length}</button>${p.author !== me ? `<button data-action="message" data-id="${esc(p.author)}">Message</button>` : ''}${isCloud() ? (p.author === me ? `<button data-action="post-delete" data-id="${p.id}" aria-label="Delete your post">${icon('trash', 16)}</button>` : `<button data-action="report" data-post="${p.id}" data-author="${esc(p.author)}" aria-label="Report or hide">More</button>`) : ''}</div>
-        ${open ? `${p.comments.map((cm) => `<div class="comment"><div class="avatar sm ${cm.author.startsWith('u:') ? '' : 'alt'}">${esc(initials(memberName(cm.author)))}</div><div class="c"><strong class="small">${esc(memberName(cm.author))}</strong><div class="small">${esc(cm.text)}</div></div></div>`).join('')}
+        ${open ? `${p.comments.map((cm) => `<div class="comment"><div class="avatar sm ${cm.author.startsWith('u:') ? '' : 'alt'}">${esc(initials(memberName(cm.author)))}</div><div class="c">${memberLink(cm.author, 'small')}<div class="small">${esc(cm.text)}</div></div></div>`).join('')}
           <form class="row" style="margin-top:10px" data-form="comment" data-id="${p.id}"><input class="input grow" style="height:42px" name="text" placeholder="Add a comment" maxlength="300" required><button class="btn primary sm" type="submit">Reply</button></form>` : ''}
       </div>`; }).join('')}
       ${isCloud() && S.cloudFeed && !posts.length ? '<div class="card empty">No posts yet. Share the first win.</div>' : ''}
       ${isCloud() && !S.cloudFeed ? `<div class="empty">${S.communityError ? 'Could not load the community. Check your connection.' : 'Loading...'}</div>` : ''}
       <p class="tiny muted center" style="margin-top:16px">${isCloud() ? 'Be kind. No body shaming, diet pills or selling. Tap More on any post to report it or hide that member.' : isGuest() && cloud ? 'This is a preview. Create a free account to join the real YOURS community.' : 'Community posts are shared between accounts on this device in this preview.'}</p>`;
+  }
+
+  // ---------- friends ----------
+  // Friends see each other's posts in Following, plus wins each one chose to share (off by default).
+  // A shared win is only a title like "Finished Lower body A": never weights, food, cycle or photos.
+  const WIN_STREAKS = [7, 14, 30, 60, 100, 200, 365];
+  const friendIds = () => (S.friends ? S.friends.friends : []);
+  function friendState(id) {
+    const f = S.friends;
+    if (!f) return 'none';
+    return f.friends.includes(id) ? 'friends' : f.incoming.includes(id) ? 'incoming' : f.outgoing.includes(id) ? 'outgoing' : 'none';
+  }
+  function memberLink(id, cls) {
+    const name = `<strong${cls ? ` class="${cls}"` : ''}>${esc(memberName(id))}</strong>`;
+    if (!isCloud() || id === meId()) return name;
+    return `<button class="link-plain" data-action="member" data-id="${esc(id)}" aria-label="${esc(memberName(id))}: add friend or message">${name}${friendState(id) === 'friends' ? ' <span class="tiny muted">· Friend</span>' : ''}</button>`;
+  }
+  function friendButton(id) {
+    const st = friendState(id);
+    if (st === 'friends') return `<button class="btn ghost sm" data-action="friend-remove" data-id="${esc(id)}" data-confirm="1">${icon('check', 14)} Friends</button>`;
+    if (st === 'incoming') return `<button class="btn accent sm" data-action="friend-accept" data-id="${esc(id)}">Accept request</button>`;
+    if (st === 'outgoing') return `<button class="btn ghost sm" data-action="friend-remove" data-id="${esc(id)}">Requested · Cancel</button>`;
+    return `<button class="btn accent sm" data-action="friend-add" data-id="${esc(id)}">${icon('plus', 14)} Add friend</button>`;
+  }
+  function shareWin(kind, title) {
+    if (!isCloud() || !S.data.shareWins || !cloud.shareWin) return;
+    cloud.shareWin(kind, title).then(() => refreshCommunity('friends')).catch(() => {});
+  }
+  function shareWorkoutWins(record, prs) {
+    if (!isCloud() || !S.data.shareWins) return;
+    shareWin('workout', `Finished ${record.name}`);
+    [...new Set(prs.map((p) => p.name))].slice(0, 3).forEach((n) => shareWin('pr', `New personal record: ${n}`));
+    const st = L.streak(S.data).count;
+    const hit = WIN_STREAKS.filter((n) => st >= n).pop();
+    if (hit && (S.data.sharedStreak || 0) < hit) { S.data.sharedStreak = hit; save(); shareWin('streak', `${hit}-day streak`); }
+  }
+  function viewFriends() {
+    if (isGuest()) {
+      return `<div class="card lock">${icon('community', 32)}<h2 style="margin-top:14px">Follow your friends</h2><p class="muted small" style="margin:8px 0 18px">Create a free account to add friends, see their posts and cheer on their workouts.</p><button class="btn primary" data-action="open-signup" data-reason="community">Create account</button></div>`;
+    }
+    if (!isCloud()) return '<div class="card empty">Friends work with a YOURS account. Sign in to add friends and follow their wins.</div>';
+    const f = S.friends;
+    if (!f) return `<div class="empty">${S.communityError ? 'Could not load your friends. Check your connection.' : 'Loading...'}</div>`;
+    const person = (id, btns) => `<div class="list-item"><div class="avatar alt sm">${esc(initials(memberName(id)))}</div><div class="grow">${memberLink(id)}</div>${btns}</div>`;
+    const ids = friendIds();
+    const me = meId();
+    const items = (S.cloudFeed || []).filter((p) => ids.includes(p.author)).map((p) => ({ ts: p.ts, html: `<div class="card post"><div class="head"><div class="avatar sm alt">${esc(initials(memberName(p.author)))}</div><div class="grow">${memberLink(p.author)}<div class="tiny muted">${timeAgo(p.ts)}</div></div><span class="tag ${p.tag === 'Win' ? 'accent' : ''}">${esc(p.tag)}</span></div><div class="body">${esc(p.text)}</div></div>` }))
+      .concat((S.cloudWins || []).filter((w) => w.author === me || ids.includes(w.author)).map((w) => ({ ts: w.ts, html: `<div class="card win-card"><span class="badge-medal earned">${icon(w.kind === 'pr' ? 'award' : w.kind === 'streak' ? 'flame' : w.kind === 'run' ? 'foot' : 'workouts', 18)}</span><div class="grow"><div class="small">${w.author === me ? '<strong>You</strong>' : memberLink(w.author)}</div><div class="small">${esc(w.title)}</div><div class="tiny muted">${timeAgo(w.ts)}</div></div>${w.author !== me ? `<button class="icon-btn" data-action="cheer" data-id="${esc(w.author)}" data-title="${esc(w.title)}" aria-label="Cheer ${esc(firstName(memberName(w.author)))} on">${icon('heart', 18)}</button>` : ''}</div>` })))
+      .sort((a, b) => b.ts - a.ts).slice(0, 60);
+    const code = myInviteCode();
+    return `${f.incoming.length ? `<div class="card"><div class="eyebrow">Friend requests</div>${f.incoming.map((id) => person(id, `<button class="btn accent sm" data-action="friend-accept" data-id="${esc(id)}">Accept</button><button class="btn ghost sm" data-action="friend-remove" data-id="${esc(id)}" aria-label="Decline ${esc(memberName(id))}">Decline</button>`)).join('')}</div>` : ''}
+      <div class="card">
+        <div class="eyebrow">Add a friend</div>
+        <p class="small muted" style="margin:6px 0 10px">Share your friend code, or tap anyone's name in the feed. They accept, and you follow each other.</p>
+        ${code ? `<div class="row between"><div><div class="tiny muted">Your friend code</div><strong class="friend-code">${esc(code)}</strong></div><button class="btn ghost sm" data-action="friend-code-copy">Copy</button></div>` : `<button class="btn ghost sm" data-action="invite-load">Show my friend code</button>`}
+        <form class="row" style="margin-top:12px" data-form="friend-code"><input class="input grow" style="height:42px;text-transform:uppercase" name="code" placeholder="Their friend code" maxlength="6" autocomplete="off" autocapitalize="characters" aria-label="Friend code" required><button class="btn primary sm" type="submit">Add</button></form>
+      </div>
+      <div class="card">
+        <div class="row between"><div class="grow"><strong>Share my wins with friends</strong><div class="tiny muted">${S.data.shareWins ? 'On' : 'Off'} · finished workouts, new PRs and streaks</div></div><button class="toggle ${S.data.shareWins ? 'on' : ''}" role="switch" aria-checked="${S.data.shareWins ? 'true' : 'false'}" aria-label="Share my wins with friends" data-action="share-wins"><span></span></button></div>
+        <p class="tiny muted" style="margin-top:8px">Only friends see them. We share the workout or exercise name only: never weights, food, your cycle or photos.</p>
+      </div>
+      ${f.outgoing.length ? `<div class="card"><div class="eyebrow">Sent requests</div>${f.outgoing.map((id) => person(id, `<button class="btn ghost sm" data-action="friend-remove" data-id="${esc(id)}">Cancel</button>`)).join('')}</div>` : ''}
+      ${ids.length ? `<div class="card"><div class="eyebrow">Friends · ${ids.length}</div>${ids.map((id) => person(id, `<button class="btn ghost sm" data-action="message" data-id="${esc(id)}">Message</button>`)).join('')}</div>` : ''}
+      <div class="eyebrow" style="margin:22px 0 10px">Following</div>
+      ${items.length ? items.map((x) => x.html).join('') : `<div class="card empty">${ids.length ? 'Nothing from your friends yet. Their posts and shared wins show up here.' : 'Add a friend to see their posts and wins here.'}</div>`}`;
   }
 
   function viewThreads() {
@@ -3668,6 +3743,12 @@ ${prog ? `
     if (m.type === 'active') return viewActive();
     const sheet = (title, body) => `<div class="overlay" data-action="overlay"><div class="sheet" role="dialog" aria-label="${esc(title.replace(/<[^>]+>/g, ''))}"><div class="grab"></div><div class="sheet-head"><h2>${title}</h2><button class="icon-btn" data-action="close-modal" aria-label="Close">${icon('x', 18)}</button></div>${body}</div></div>`;
 
+    if (m.type === 'member') {
+      const id = m.id;
+      return sheet(esc(memberName(id)), `<div class="row" style="gap:14px"><div class="avatar alt">${esc(initials(memberName(id)))}</div><div class="grow small muted">${friendState(id) === 'friends' ? 'You follow each other. You see her posts and the wins she shares.' : friendState(id) === 'incoming' ? 'She sent you a friend request.' : 'Friends see each other\'s posts and the wins they choose to share.'}</div></div>
+        <div class="row" style="gap:8px;margin-top:18px">${friendButton(id)}<button class="btn ghost sm" data-action="message" data-id="${esc(id)}">Message</button></div>
+        <p class="tiny muted" style="margin-top:16px"><button class="link tiny" data-action="report" data-author="${esc(id)}">Report or block</button></p>`);
+    }
     if (m.type === 'signup') {
       const why = { progress: 'Progress photos are private to your account.', community: 'You need an account to post and message.' }[m.reason] || 'Keep your plan, history and coach chats safe.';
       return sheet('Save your plan', `<p class="muted small" style="margin-bottom:16px">${why} Everything you have done as a guest moves to your new account.</p>${signupForm('sheet')}<p class="center small" style="margin-top:14px"><button class="link" data-action="go-login">I already have an account</button></p>`);
@@ -4907,7 +4988,33 @@ ${prog ? `
     },
     'lock-vault': () => { S.vaultUnlocked = false; S.photoKey = null; S.backupKey = null; S.photos = []; S.revealed = {}; S.compare = []; S.cmp.shown = false; render(); },
 
-    'community-view': (el) => { S.communityView = el.dataset.value; S.openThread = null; render(); },
+    'community-view': (el) => { S.communityView = el.dataset.value; S.openThread = null; render(); if (el.dataset.value === 'friends' && isCloud()) { if (!S.invite) loadInvite().then(render); refreshCommunity('friends'); } },
+    member: (el) => { if (!isCloud()) return; S.modal = { type: 'member', id: el.dataset.id }; render(); },
+    'friend-add': async (el) => {
+      const id = el.dataset.id;
+      if (friendState(id) === 'incoming') return actions['friend-accept'](el);
+      if (await cloudCall(() => cloud.requestFriend(id), `Friend request sent to ${firstName(memberName(id))}`)) logEvent('friend_request');
+      refreshCommunity('friends');
+    },
+    'friend-accept': async (el) => {
+      const id = el.dataset.id;
+      if (await cloudCall(() => cloud.acceptFriend(id), `You and ${firstName(memberName(id))} are friends`)) logEvent('friend_accept');
+      refreshCommunity('friends');
+    },
+    'friend-remove': async (el) => {
+      const id = el.dataset.id;
+      if (el.dataset.confirm && !confirm(`Remove ${memberName(id)} as a friend? You will stop seeing each other's wins.`)) return;
+      await cloudCall(() => cloud.removeFriend(id));
+      refreshCommunity('friends');
+    },
+    'friend-code-copy': async () => { const code = myInviteCode(); if (!code) return; try { await navigator.clipboard.writeText(code); toast('Friend code copied'); } catch { prompt('Your friend code', code); } },
+    'share-wins': () => {
+      S.data.shareWins = !S.data.shareWins;
+      if (S.data.shareWins) { S.data.sharedStreak = Math.max(S.data.sharedStreak || 0, WIN_STREAKS.filter((n) => L.streak(S.data).count >= n).pop() || 0); logEvent('wins_on'); }
+      save(); render();
+      toast(S.data.shareWins ? 'Your wins will show up for your friends' : 'Your wins are private again');
+    },
+    cheer: (el) => { S.modal = null; S.communityView = 'messages'; S.openThread = el.dataset.id; S.draftDm = `Congrats on "${el.dataset.title}"! 🎉`; render(); const ta = root.querySelector('[data-form="dm"] textarea'); if (ta) { ta.value = S.draftDm; ta.focus(); } S.draftDm = null; window.scrollTo(0, 0); },
     'post-tag': (el) => { S.postTag = el.dataset.value; const ta = root.querySelector('[data-form="post"] textarea'); const keep = ta ? ta.value : ''; render(); const nt = root.querySelector('[data-form="post"] textarea'); if (nt) nt.value = keep; },
     like: (el) => {
       if (!requireAccount('community')) return;
@@ -4954,7 +5061,7 @@ ${prog ? `
     message: (el) => {
       if (!requireAccount('community')) return;
       if (el.dataset.id === meId()) return;
-      S.communityView = 'messages'; S.openThread = el.dataset.id; render(); window.scrollTo(0, 0);
+      S.modal = null; S.communityView = 'messages'; S.openThread = el.dataset.id; render(); window.scrollTo(0, 0);
     },
     'open-thread': (el) => { S.openThread = el.dataset.id; render(); scrollChat(); },
     'close-thread': () => { S.openThread = null; render(); },
@@ -5111,6 +5218,18 @@ ${prog ? `
     ev.preventDefault();
     if (type === 'login') return login(form);
     if (type === 'signup') return signup(form);
+    if (type === 'friend-code') {
+      const code = form.code.value.trim().toUpperCase();
+      if (!/^[A-HJ-NP-Z2-9]{6}$/.test(code)) return toast('Friend codes are 6 letters and numbers');
+      try {
+        const j = await referralCall({ action: 'friend', code });
+        if (!j.ok) return toast(j.error || 'Could not add that friend. Try again.');
+        form.reset();
+        logEvent(j.status === 'friends' ? 'friend_accept' : 'friend_request');
+        toast(j.status === 'friends' ? 'You are friends now' : 'Friend request sent');
+      } catch { toast('You seem to be offline. Try again.'); }
+      return refreshCommunity('friends');
+    }
     if (type === 'run-log') {
       const tr = todaysRun(); const m = S.modal;
       if (!tr || !m) return;
@@ -5126,6 +5245,7 @@ ${prog ? `
       if (next.pace) S.data.profile.runPace = next.pace;
       S.data.workouts.push({ date: todayKey(), name: `${tr.rd.plan.name}: ${tr.t.title}`, minutes: clamp(Number(form.minutes.value) || tr.t.minutes, 1, 400), phase: cyc().phase, run: entry });
       logEvent('run_logged'); awardBadges(true); save(); S.modal = null; render();
+      if (entry.completed) shareWin('run', `Finished a run: ${tr.t.title}`);
       const easy = L.fmtPace(S.data.profile.runPace, u);
       toast(next.change === 'faster' ? `Run saved. Your paces just got faster: easy ${easy}` : next.change === 'set' ? `Run saved. Your targets are set from easy ${easy}` : next.change === 'easier' ? 'Run saved. We eased your paces a little for next time.' : 'Run saved. Same paces next time.');
       return;

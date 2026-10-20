@@ -696,3 +696,14 @@ a.link { text-decoration: none; overflow-wrap: anywhere; }
 .sl-bar span.short { background: var(--accent); }
 .sl-goal { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--muted); pointer-events: none; }
 .sl-goal span { position: absolute; right: 0; top: -16px; color: var(--muted); }
+
+/* friends */
+.link-plain { background: none; border: 0; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.link-plain strong { text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+.friend-code { font-family: var(--mono); font-size: 22px; letter-spacing: .12em; }
+.win-card { display: flex; align-items: center; gap: 12px; }
+.win-card .badge-medal { width: 38px; height: 38px; }
+.toggle { position: relative; width: 50px; height: 30px; border-radius: 999px; border: 0; background: var(--surface-2); flex: none; cursor: pointer; transition: background .2s; }
+.toggle span { position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: var(--surface); box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .2s; }
+.toggle.on { background: var(--accent); }
+.toggle.on span { transform: translateX(20px); }

@@ -1,6 +1,7 @@
 // Invite friends (Vercel function; also mounted by server.js locally).
 // POST /api/referral { action: 'me' }            -> { code, joined, paid, rewarded, invited, bonusDays }
 // POST /api/referral { action: 'claim', code }    -> { ok, bonusDays } or { ok: false, error }
+// POST /api/referral { action: 'friend', code }   -> { ok, status: 'requested' | 'friends', id } or { ok: false, error }
 // Needs the member's Supabase session token as "Authorization: Bearer <token>".
 
 const B = require('../lib/billing');
@@ -18,6 +19,10 @@ module.exports = async function handler(req, res) {
   try {
     if (body.action === 'claim') {
       const out = await R.claim(user, body.code);
+      return res.status(out.ok ? 200 : 400).json(out);
+    }
+    if (body.action === 'friend') {
+      const out = await R.addFriend(user, body.code);
       return res.status(out.ok ? 200 : 400).json(out);
     }
     if (body.action === 'me') {
