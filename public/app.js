@@ -1496,6 +1496,8 @@
   // Gym or home: home swaps each planned session for its dumbbell-and-band version.
   const atHome = () => L.trainsAtHome(S.data);
   const trainAtSegment = () => `<div class="segment" style="margin-bottom:12px" role="group" aria-label="Where you train">${[['gym', 'Gym'], ['home', 'At home']].map(([v, l]) => `<button class="${(atHome() ? 'home' : 'gym') === v ? 'active' : ''}" data-action="set-train-at" data-value="${v}" aria-pressed="${(atHome() ? 'home' : 'gym') === v}">${l}</button>`).join('')}</div>`;
+  const ED_TONES = ['ed-caramel', 'ed-slate', 'ed-oxblood', 'ed-olive', 'ed-plum', 'ed-mocha', 'ed-ink'];
+  const edTone = (i) => ED_TONES[i % ED_TONES.length];
   function backdrop(kind) {
     const img = D.IMAGERY[kind];
     return img ? `<img class="poster-img" src="${esc(img)}" alt=""><div class="shade"></div>` : `<div class="art art-${kind}"></div><div class="shade"></div>`;
@@ -2331,13 +2333,12 @@ ${prog ? `
     </div>`;
   }
 
-  // The next six days of her plan as swipeable poster cards, in the warm artwork.
+  // The next six days of her plan as swipeable poster cards, each in its own editorial tone.
   function weekCarousel() {
-    const WARM = ['ovulation', 'menstrual'];
     const days = [1, 2, 3, 4, 5, 6].map((i) => { const d = addDays(today(), i); return { d, w: L.workoutFor(S.data, d) }; }).filter((x) => x.w);
     if (!days.length) return '';
     return `<div class="section-title"><h2>Your week</h2><button class="link" data-action="tab" data-tab="workouts">All workouts</button></div>
-      <div class="h-scroll week-carousel" role="list" aria-label="Your workouts for the next six days">${days.map(({ d, w }, i) => `<button class="poster mini" role="listitem" data-action="view-workout" data-id="${esc(w.id)}" aria-label="${esc(i === 0 ? 'Tomorrow' : fmtDate(d, { weekday: 'long' }))}: ${esc(w.name)}, ${w.minutes} minutes">${backdrop(WARM[i % WARM.length])}
+      <div class="h-scroll week-carousel" role="list" aria-label="Your workouts for the next six days">${days.map(({ d, w }, i) => `<button class="poster mini" role="listitem" data-action="view-workout" data-id="${esc(w.id)}" aria-label="${esc(i === 0 ? 'Tomorrow' : fmtDate(d, { weekday: 'long' }))}: ${esc(w.name)}, ${w.minutes} minutes">${backdrop(edTone(i))}
         <div class="p-row"><span>${esc(i === 0 ? 'Tomorrow' : fmtDate(d, { weekday: 'short' }))}</span><span>${w.minutes ? `${w.minutes} min` : ''}</span></div>
         <div class="p-body"><div class="p-title">${esc(w.name)}</div><div class="p-cap" style="letter-spacing:.2em">${esc(w.focus)}</div></div></button>`).join('')}</div>`;
   }
@@ -2417,7 +2418,7 @@ ${prog ? `
       <button class="card lib-entry" data-action="open-library"><div class="row between"><div><div class="eyebrow">Exercise library</div><strong style="display:block;margin-top:4px">Every exercise, with form guides and your records</strong><div class="tiny muted" style="margin-top:4px">Muscles worked, how to do it, common mistakes, strength charts and history.</div></div>${icon('search', 22)}</div></button>
       <div class="section-title"><h2>Workout library</h2></div>
       <div class="chips">${D.PHASE_ORDER.concat(['menopause']).map((p) => `<button class="chip ${lib === p ? 'selected' : ''}" data-action="lib-phase" data-phase="${p}"><span class="dot" style="background:var(--${p})"></span>${phaseName(p)}</button>`).join('')}<button class="chip ${lib === 'home' ? 'selected' : ''}" data-action="lib-phase" data-phase="home">${icon('home', 14)}At home</button><button class="chip ${lib === 'pilates' ? 'selected' : ''}" data-action="lib-phase" data-phase="pilates">Mat Pilates</button><button class="chip ${lib === 'yoga' ? 'selected' : ''}" data-action="lib-phase" data-phase="yoga">Yoga</button></div>
-      <div class="h-scroll" style="margin-top:14px">${D.WORKOUTS.filter((w) => (lib === 'home' ? w.home : lib === 'pilates' || lib === 'yoga' ? w.style === lib : w.phase === lib && !w.home && !w.style)).map((w) => `<button class="poster mini" data-action="view-workout" data-id="${w.id}">${backdrop(lib === 'home' || w.style ? (w.phase === 'any' ? 'steady' : w.phase) : lib)}<div class="p-row"><span>${w.minutes} min</span><span>${esc(w.intensity)}</span></div><div class="p-body"><div class="p-title">${esc(w.name)}</div><div class="p-cap" style="letter-spacing:.2em">${esc(w.focus)}</div></div></button>`).join('')}</div>
+      <div class="h-scroll" style="margin-top:14px">${D.WORKOUTS.filter((w) => (lib === 'home' ? w.home : lib === 'pilates' || lib === 'yoga' ? w.style === lib : w.phase === lib && !w.home && !w.style)).map((w, i) => `<button class="poster mini" data-action="view-workout" data-id="${w.id}">${backdrop(edTone(i))}<div class="p-row"><span>${w.minutes} min</span><span>${esc(w.intensity)}</span></div><div class="p-body"><div class="p-title">${esc(w.name)}</div><div class="p-cap" style="letter-spacing:.2em">${esc(w.focus)}</div></div></button>`).join('')}</div>
     </div>`;
   }
 

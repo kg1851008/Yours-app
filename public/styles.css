@@ -111,6 +111,14 @@ h3 { font-size: 16px; font-weight: 600; }
 .art-luteal { background: radial-gradient(45% 55% at 30% 30%, #CDB89A, transparent 70%), radial-gradient(55% 60% at 75% 75%, #4A3A2E, transparent 70%), linear-gradient(160deg, #9A8466, #3E3127); }
 .art-steady { background: radial-gradient(45% 55% at 30% 25%, #EDE6DA, transparent 70%), radial-gradient(55% 60% at 78% 78%, #7E7264, transparent 70%), linear-gradient(160deg, #B9AD9C, #5C5145); }
 .art-session { background: radial-gradient(40% 50% at 72% 30%, #6A7A48, transparent 70%), radial-gradient(55% 60% at 22% 80%, #15170F, transparent 70%), linear-gradient(160deg, #2F3720, #121409); }
+/* Editorial tones for workout cards: each card in a carousel takes the next one. */
+.art-ed-caramel { background: radial-gradient(45% 55% at 30% 28%, #F1D2B0, transparent 70%), radial-gradient(55% 60% at 78% 75%, #6B3A22, transparent 70%), linear-gradient(160deg, #C98A5E, #6B3A22); }
+.art-ed-oxblood { background: radial-gradient(45% 55% at 30% 28%, #C97A72, transparent 70%), radial-gradient(55% 60% at 78% 75%, #241112, transparent 70%), linear-gradient(160deg, #7A2E30, #241112); }
+.art-ed-olive { background: radial-gradient(45% 55% at 30% 28%, #D3DC94, transparent 70%), radial-gradient(55% 60% at 78% 75%, #252B17, transparent 70%), linear-gradient(160deg, #6F7D45, #252B17); }
+.art-ed-slate { background: radial-gradient(45% 55% at 30% 28%, #B7C6D4, transparent 70%), radial-gradient(55% 60% at 78% 75%, #1C232C, transparent 70%), linear-gradient(160deg, #56677A, #1C232C); }
+.art-ed-mocha { background: radial-gradient(45% 55% at 30% 28%, #DCC6B4, transparent 70%), radial-gradient(55% 60% at 78% 75%, #33271F, transparent 70%), linear-gradient(160deg, #8A7262, #33271F); }
+.art-ed-plum { background: radial-gradient(45% 55% at 30% 28%, #D2B4C6, transparent 70%), radial-gradient(55% 60% at 78% 75%, #2A1D26, transparent 70%), linear-gradient(160deg, #7B5A70, #2A1D26); }
+.art-ed-ink { background: radial-gradient(45% 55% at 30% 28%, #98A2C4, transparent 70%), radial-gradient(55% 60% at 78% 75%, #10131F, transparent 70%), linear-gradient(160deg, #323B5A, #10131F); }
 .art-welcome { background: radial-gradient(40% 45% at 68% 30%, #F2DCC2, transparent 70%), radial-gradient(55% 60% at 25% 78%, #6B5646, transparent 70%), radial-gradient(35% 40% at 30% 30%, #D4845C, transparent 70%), linear-gradient(165deg, #B8A48F, #4A3A2E); }
 
 /* ---------- posters ---------- */
