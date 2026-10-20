@@ -590,6 +590,13 @@ a.link { text-decoration: none; overflow-wrap: anywhere; }
 .quiz-out { margin-top: 44px; padding-top: 22px; border-top: 1px solid var(--rule); max-width: 720px; scroll-margin-top: 72px; }
 .quiz-res { margin-top: 12px; }
 .quiz-res .serif { display: block; }
+.quiz-mail { margin-top: 36px; padding-top: 22px; border-top: 1px solid var(--hair); }
+.quiz-mail h3 { margin-top: 0; }
+.quiz-mail-row { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+.quiz-mail-row .input { flex: 1 1 220px; min-width: 0; }
+.quiz-consent { display: flex; gap: 10px; align-items: flex-start; margin-top: 12px; color: var(--muted); line-height: 1.5; }
+.quiz-consent input { margin-top: 3px; flex: none; }
+.quiz-hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
 .lp-index { list-style: none; padding: 0; margin: 0; }
 .lp-index li { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding: 18px 0; border-bottom: 1px solid var(--hair); }
 .lp-index strong { font-weight: 800; font-size: clamp(24px, 3.6vw, 42px); letter-spacing: -0.03em; }

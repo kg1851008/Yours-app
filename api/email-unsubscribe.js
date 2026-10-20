@@ -10,6 +10,22 @@ module.exports = async function handler(req, res) {
   const url = new URL(req.url, 'https://x');
   const u = url.searchParams.get('u') || '';
   const t = url.searchParams.get('t') || '';
+  const e = (url.searchParams.get('e') || '').toLowerCase();
+  // Phase quiz sign-ups (no account): ?e=<email>&t=<token>
+  if (e) {
+    let ok = false;
+    if (E.validLeadUnsub(e, t)) {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/leads?email=eq.${encodeURIComponent(e)}`, {
+        method: 'PATCH',
+        headers: { apikey: SECRET, Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify({ unsubscribed_at: new Date().toISOString() }),
+      }).catch(() => null);
+      ok = !!(r && r.ok);
+    }
+    if (req.method === 'POST') return res.status(ok ? 200 : 400).json({ ok });
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.status(ok ? 200 : 400).send(ok ? page("You're unsubscribed", 'You will not get any more emails from YOURS.') : page('Link not valid', `This unsubscribe link is not valid. Write to ${E.SUPPORT} and we will take you off the list.`));
+  }
   if (!/^[0-9a-f-]{36}$/i.test(u) || !E.validUnsub(u, t)) {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     return res.status(400).send(page('Link not valid', 'This unsubscribe link is not valid. You can turn weekly emails off in YOURS under Profile.'));

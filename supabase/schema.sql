@@ -360,3 +360,16 @@ alter policy "likes read" on public.likes using ((select public.has_access()));
 alter policy "likes insert own" on public.likes with check (user_id = (select auth.uid()) and (select public.has_access()));
 alter policy "messages send own" on public.messages with check (from_id = (select auth.uid()) and (select public.has_access()));
 alter policy "profiles read" on public.profiles using (id = (select auth.uid()) or (select public.has_access()));
+
+-- Email sign-ups from the free phase quiz (/phase), before she has an account. Server only: RLS on, no policies.
+-- Only the email address and where it came from; never her cycle answers. guide_sent_at stops repeat emails
+-- if the same address is entered twice, and unsubscribed_at is set by the link in every email.
+create table if not exists public.leads (
+  email text primary key check (email = lower(email) and length(email) <= 254),
+  source text not null default 'phase',
+  consent_at timestamptz not null default now(),
+  guide_sent_at timestamptz,
+  unsubscribed_at timestamptz,
+  created_at timestamptz not null default now()
+);
+alter table public.leads enable row level security;

@@ -21,6 +21,7 @@ app.all('/api/referral', require('./api/referral'));
 app.all('/api/event', require('./api/event'));
 app.all('/api/stats', require('./api/stats'));
 app.all('/api/email-unsubscribe', require('./api/email-unsubscribe'));
+app.all('/api/lead', require('./api/lead'));
 
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));

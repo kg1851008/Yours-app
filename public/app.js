@@ -1375,7 +1375,7 @@
   // Anonymous counts only: an event name, nothing about her. Views are counted once a day per device,
   // funnel steps once per device. Browsers set to Do Not Track or Global Privacy Control send nothing.
   const ONCE_A_DAY = ['app_open', 'landing_view'];
-  const ONCE_EVER = ['signup_start', 'onboarding_done', 'account_created', 'checkout_start', 'invite_opened', 'invite_claimed', 'install_done', 'quiz_result'];
+  const ONCE_EVER = ['signup_start', 'onboarding_done', 'account_created', 'checkout_start', 'invite_opened', 'invite_claimed', 'install_done', 'quiz_result', 'quiz_email'];
   function logEventNow(name) {
     if (navigator.doNotTrack === '1' || window.doNotTrack === '1' || navigator.globalPrivacyControl) return;
     if (/^(localhost|127\.)/.test(location.hostname) && !window.YOURS_TRACK_LOCAL) return;
@@ -1483,6 +1483,19 @@
     if (since > c.len + 10) return { kind: 'long', since };
     return { kind: 'phase', c, estimate: L.ESTIMATE_MODES.includes(q.mode) || !q.len };
   }
+  // Optional: the cheat sheet by email. Only the address is sent, never her answers.
+  function quizEmailForm() {
+    const e = S.quizEmail || {};
+    if (e.sent) return `<div class="quiz-mail"><h3>Check your inbox.</h3><p class="small muted" style="margin-top:6px">Your phase cheat sheet is on its way. Unsubscribe any time from the link in the email.</p></div>`;
+    return `<form class="quiz-mail" data-form="quiz-email" novalidate>
+      <h3>Get the phase cheat sheet <span class="serif">by email.</span></h3>
+      <p class="small muted" style="margin-top:6px">All four phases on one page, plus the occasional training tip. Just your email, never your cycle answers.</p>
+      <div class="quiz-mail-row"><input class="input" type="email" name="email" autocomplete="email" placeholder="you@email.com" value="${esc(e.email || '')}" required><button class="btn primary" type="submit" ${e.busy ? 'disabled' : ''}>${e.busy ? 'Sending...' : 'Send it'}</button></div>
+      <input type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" class="quiz-hp">
+      <label class="quiz-consent small"><input type="checkbox" name="consent" ${e.consent ? 'checked' : ''}> <span>Email me the cheat sheet and occasional tips from YOURS. Unsubscribe any time. <button type="button" class="link small" data-action="open-privacy">Privacy</button></span></label>
+      ${e.error ? `<p class="error" role="alert" style="margin-top:8px">${esc(e.error)}</p>` : ''}
+    </form>`;
+  }
   function viewPhaseQuiz() {
     logEvent('lp_phase');
     const q = S.quiz;
@@ -1502,7 +1515,7 @@
     } else if (r) {
       const c = r.c;
       const [name, it, p] = QUIZ_COPY[c.phase];
-      const next = c.late ? `Your period is ${c.daysLate} day${c.daysLate === 1 ? '' : 's'} late by this estimate.` : `${D.PHASES[c.next].name} in about ${c.daysToNext} day${c.daysToNext === 1 ? '' : 's'}. Period in about ${c.daysToPeriod} day${c.daysToPeriod === 1 ? '' : 's'}.`;
+      const next = c.late ? `Your period is ${c.daysLate} day${c.daysLate === 1 ? '' : 's'} late by this estimate.` : `${c.next === 'menstrual' ? '' : `${D.PHASES[c.next].name} in about ${c.daysToNext} day${c.daysToNext === 1 ? '' : 's'}. `}Period in about ${c.daysToPeriod} day${c.daysToPeriod === 1 ? '' : 's'}.`;
       out = `<div class="mono muted">Your result · day ${c.day} of ${c.len}</div>
         <h2 class="lp-h2 quiz-res">${esc(name)}, <span class="serif">${esc(it)}</span></h2>
         <p class="mono muted" style="margin-top:14px">${esc(next)}</p>
@@ -1530,8 +1543,9 @@
         <button class="btn primary" data-action="quiz-go" style="margin-top:24px" ${!steady && !q.start ? 'disabled' : ''}>Show my phase</button>
         ${out ? `<div class="quiz-out" id="quiz-out">${out}
           <div class="lp-cta"><button class="btn primary" data-action="quiz-start">Build my plan</button><button class="btn soft" data-action="quiz-share">Send to a friend</button></div>
-          <p class="small muted" style="margin-top:12px">Building your plan is free. See your workouts, weights and meals for this phase before you pay anything.</p></div>` : ''}
-        <p class="tiny muted" style="margin-top:28px">An estimate for training, not medical advice. Never use it as contraception or to plan a pregnancy. Nothing you enter here leaves your phone.</p>
+          <p class="small muted" style="margin-top:12px">Building your plan is free. See your workouts, weights and meals for this phase before you pay anything.</p>
+          ${quizEmailForm()}</div>` : ''}
+        <p class="tiny muted" style="margin-top:28px">An estimate for training, not medical advice. Never use it as contraception or to plan a pregnancy. Your cycle answers never leave your phone; only an email you choose to give us is sent.</p>
       </section>
     </div>`;
   }
@@ -3757,11 +3771,13 @@ ${prog ? `
         <p class="small" style="margin-top:6px">To see what's working, YOURS counts simple events like "a workout was finished" or "a trial started". Each count is just the event and the date: no name, email, account, device ID, IP address or health details. If your browser is set to Do Not Track or Global Privacy Control, nothing is counted.</p>
         ${h('Invites')}
         <p class="small" style="margin-top:6px">If you join with a friend's invite, we note that you were invited so they can get their free month. They only see how many friends joined, never who.</p>
+        ${h('The free phase check')}
+        <p class="small" style="margin-top:6px">Your answers on yoursfit.app/phase are worked out on your phone and never sent to us. If you ask for the cheat sheet, we keep only your email address, the date you agreed and that it came from the quiz. We use it to email you about YOURS and nothing else, and every email has a one-click unsubscribe.</p>
         ${h('Where it lives')}
         ${li(['On your phone, and in your private YOURS account so it syncs across your devices. Other members can never see it; only your posts and messages are shared, with the people you share them with.', 'Progress photos stay on your phone, locked with your PIN. If you turn on backup, they are encrypted on your phone with your passphrase first, so we cannot see them.'])}
         ${h('Services that help run YOURS')}
         <p class="tiny muted" style="margin-top:4px">They process data only to provide their part of the app, not for their own purposes.</p>
-        ${li(['<strong>Supabase</strong>: accounts and storage.', '<strong>Vercel</strong>: hosts the app.', '<strong>Stripe</strong>: payments.', S.ai || S.aiCoach || S.aiReview ? `<strong>Anthropic (Claude)</strong>: ${[S.aiCoach && 'coach answers', S.ai && 'food estimates', S.aiReview && 'progress photo reviews'].filter(Boolean).join(', ')}, only when you use them. ${S.ai || S.aiReview ? 'Photos are sent only when you ask, and are' : 'Nothing is'} not stored or used to train AI models.` : '<strong>No AI services.</strong> Your coach, food logging and progress reviews run from your own data. Your photos are never analyzed by AI.', '<strong>Open Food Facts</strong>: the barcode number when you scan.', '<strong>Nutritionix</strong>: what you type when you search restaurant menus.', '<strong>Have I Been Pwned</strong>: a 5-character fragment of a scrambled version of a new password, to check it has not been leaked. Never the password itself.'])}
+        ${li(['<strong>Supabase</strong>: accounts and storage.', '<strong>Vercel</strong>: hosts the app.', '<strong>Stripe</strong>: payments.', '<strong>Resend</strong>: sends our emails.', S.ai || S.aiCoach || S.aiReview ? `<strong>Anthropic (Claude)</strong>: ${[S.aiCoach && 'coach answers', S.ai && 'food estimates', S.aiReview && 'progress photo reviews'].filter(Boolean).join(', ')}, only when you use them. ${S.ai || S.aiReview ? 'Photos are sent only when you ask, and are' : 'Nothing is'} not stored or used to train AI models.` : '<strong>No AI services.</strong> Your coach, food logging and progress reviews run from your own data. Your photos are never analyzed by AI.', '<strong>Open Food Facts</strong>: the barcode number when you scan.', '<strong>Nutritionix</strong>: what you type when you search restaurant menus.', '<strong>Have I Been Pwned</strong>: a 5-character fragment of a scrambled version of a new password, to check it has not been leaked. Never the password itself.'])}
         ${h('Legal requests')}
         <p class="small" style="margin-top:6px">We only disclose data when legally required, such as by a valid court order. We push back on overly broad requests and tell you about any request for your data unless the law forbids it. We keep as little as we need: your period and health data is never used for advertising, and progress photos stay on your phone unless you back them up encrypted.</p>
         ${h('How long we keep it')}
@@ -4857,6 +4873,23 @@ ${prog ? `
   });
 
   document.addEventListener('submit', async (ev) => {
+    if (ev.target.dataset.form === 'quiz-email') {
+      ev.preventDefault();
+      const f = ev.target;
+      const e = (S.quizEmail = { email: f.email.value.trim(), consent: f.consent.checked });
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e.email)) { e.error = 'Please check your email address.'; render(); return; }
+      if (!e.consent) { e.error = 'Please tick the box so we can email you.'; render(); return; }
+      e.busy = true; render();
+      try {
+        const r = await fetch('/api/lead', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: e.email, consent: true, source: 'phase', website: f.website.value }) });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(j.error || 'Could not sign you up. Try again in a moment.');
+        S.quizEmail = { sent: true };
+        logEvent('quiz_email');
+      } catch (err) { e.error = err.message === 'Failed to fetch' ? 'No connection. Try again in a moment.' : err.message; e.busy = false; }
+      render();
+      return;
+    }
     const form = ev.target;
     const type = form.dataset.form;
     if (!type) return;
