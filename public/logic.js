@@ -1035,6 +1035,21 @@
     easySec = validPace(easySec);
     return easySec && z && z.mult ? easySec * z.mult * (factor || 1) : null; // unrounded: rounding happens only for display
   };
+  // A finished workout or run as a community post: only what she would show a friend. Never body weight,
+  // cycle day or notes. text is the plain version older app versions show.
+  function activityPost(rec, prs, volume) {
+    const name = String(rec.name || 'Workout').slice(0, 80);
+    if (rec.run) {
+      const km = Number(rec.run.distanceKm) > 0 ? Math.round(rec.run.distanceKm * 100) / 100 : null;
+      const pace = validPace(rec.run.pace);
+      const activity = { kind: 'run', title: name, minutes: rec.minutes, ...(km ? { km } : {}), ...(pace ? { pace: Math.round(pace) } : {}), ...(rec.run.where === 'treadmill' ? { treadmill: true } : {}) };
+      return { text: `Ran ${name}: ${rec.minutes} min${km ? `, ${km} km` : ''}.`, activity };
+    }
+    const top = (prs || []).slice(0, 3).map((p) => ({ name: String(p.name).slice(0, 60), weight: Number(p.weight) || 0, unit: p.unit === 'kg' ? 'kg' : 'lb', reps: Number(p.reps) || 0 }));
+    const activity = { kind: 'workout', title: name, minutes: rec.minutes, sets: rec.sets, ...(volume > 0 ? { volume: Math.round(volume), unit: rec.unit === 'kg' ? 'kg' : 'lb' } : {}), ...(top.length ? { prs: top } : {}) };
+    return { text: `Finished ${name}: ${rec.sets} sets in ${rec.minutes} min${top.length ? `, ${top.length} new PR${top.length === 1 ? '' : 's'}` : ''}.`, activity };
+  }
+
   function fmtPace(secPerKm, units) {
     secPerKm = validPace(secPerKm);
     if (!secPerKm) return '';
@@ -1153,6 +1168,7 @@
   const checkinTomorrow = (data, now) => ((now || today()).getDay() + 1) % 7 === checkinDay(data);
 
   const api = {
+    activityPost,
     dateKey, parseKey, today, addDays, daysBetween, clamp, round, mean, weekdayIndex,
     GOALS, LEVELS, ACTIVITY, goalOf, activityOf, STEADY_MODES, MENO_MODES, ESTIMATE_MODES, menoInsights, checkinDay, checkinTomorrow,
     learnCycle, addPeriod, cycleInfo, targets, readiness, readinessLabel, patterns,
