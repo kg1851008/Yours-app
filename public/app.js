@@ -2800,6 +2800,26 @@ ${prog ? `
       <p class="tiny muted" style="margin-top:10px">Stored with your private data. Never shared.</p>`;
   }
 
+  // ---------- exercise demonstrations (public/anim.js): an editorial plate that loops start to finish ----------
+  function animFrame(name, gd, t) {
+    return window.YOURS_ANIM.svg(name, { t, primary: gd ? gd.muscles.p : [], secondary: gd ? gd.muscles.s : [], equipment: L.equipmentOf(name), label: name });
+  }
+  let animClock = null;
+  // One loop drives whichever demo is on screen. Still frame (the hard part of the move) when reduced motion is on.
+  function tickAnims(now) {
+    animClock = null;
+    const els = document.querySelectorAll('[data-anim]');
+    if (!els.length || document.hidden) return;
+    const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!still) {
+      const t = window.YOURS_ANIM.phaseAt(now, window.YOURS_ANIM.period);
+      els.forEach((el) => { const n = el.dataset.anim; const svg = el.querySelector('svg'); if (svg) svg.outerHTML = animFrame(n, L.guideFor(n), t); });
+      animClock = requestAnimationFrame(tickAnims);
+    }
+  }
+  function startAnims() { if (!animClock && window.YOURS_ANIM && document.querySelector('[data-anim]')) animClock = requestAnimationFrame(tickAnims); }
+  document.addEventListener('visibilitychange', startAnims);
+
   // ---------- exercise library and exercise pages ----------
   // Front and back body diagram: primary muscles in the accent colour, secondary muscles lighter.
   function bodyMap(primary, secondary) {
@@ -2892,12 +2912,13 @@ ${prog ? `
       const cue = cueFor(name);
       const similar = L.swapOptions(name).slice(0, 6);
       const list = (items, ordered) => `<${ordered ? 'ol' : 'ul'} class="guide-list">${items.map((x) => `<li>${esc(x)}</li>`).join('')}</${ordered ? 'ol' : 'ul'}>`;
-      body = `<div class="card bodymap-card">${bodyMap(gd ? gd.muscles.p : [], gd ? gd.muscles.s : [])}
+      const anim = window.YOURS_ANIM && window.YOURS_ANIM.patternFor(name);
+      body = `${anim ? `<figure class="ex-anim" data-anim="${esc(name)}">${animFrame(name, gd, 1)}<figcaption class="row between"><span class="mono">How it moves</span><span class="mono">Loop · 3 sec</span></figcaption></figure>` : ''}
+        <div class="card bodymap-card"${anim ? ' style="margin-top:12px"' : ''}>${bodyMap(gd ? gd.muscles.p : [], gd ? gd.muscles.s : [])}
           <div class="row" style="gap:14px;justify-content:center;margin-top:4px"><span class="tiny"><span class="bm-dot" style="background:var(--accent)"></span> Main</span><span class="tiny"><span class="bm-dot" style="background:var(--bm-sec)"></span> Also works</span></div></div>
         ${gd ? `<p class="small" style="margin-top:4px"><strong>Main:</strong> ${esc(muscleNames(gd.muscles.p))}${gd.muscles.s.length ? `<br><span class="muted"><strong>Also:</strong> ${esc(muscleNames(gd.muscles.s))}</span>` : ''}</p>` : ''}
         <div class="ex-actions">
           <button class="btn ghost sm" data-action="ex-fav" aria-pressed="${fav}">${icon('heart', 16)} ${fav ? 'Saved' : 'Save'}</button>
-          <a class="btn ghost sm" href="https://www.youtube.com/results?search_query=${encodeURIComponent(`${name} proper form`)}" target="_blank" rel="noopener">${icon('eye', 16)} Form videos</a>
           <button class="btn ghost sm" data-action="ex-share">${icon('share', 16)} Share</button>
           <span class="tag">${esc(L.equipmentOf(name))}</span>
         </div>
@@ -4162,6 +4183,7 @@ ${prog ? `
     const liveFrame = S.modal && S.modal.type === 'scanner' ? root.querySelector('.scan-frame') : null;
     const liveStatus = liveFrame && document.getElementById('scan-status') ? document.getElementById('scan-status').textContent : null;
     root.innerHTML = html + viewModal();
+    startAnims();
     if (liveFrame) {
       const fresh = root.querySelector('.scan-frame');
       if (fresh) {
