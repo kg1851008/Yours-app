@@ -79,6 +79,7 @@
     session: store.get('yours.session', null), // { kind: 'user', email } | { kind: 'guest' }
     data: null,
     screen: 'welcome',
+    quiz: { mode: 'natural', start: '', len: '', done: false },
     tab: 'home',
     advisorView: 'coach',
     communityView: 'feed',
@@ -1374,7 +1375,7 @@
   // Anonymous counts only: an event name, nothing about her. Views are counted once a day per device,
   // funnel steps once per device. Browsers set to Do Not Track or Global Privacy Control send nothing.
   const ONCE_A_DAY = ['app_open', 'landing_view'];
-  const ONCE_EVER = ['signup_start', 'onboarding_done', 'account_created', 'checkout_start', 'invite_opened', 'invite_claimed', 'install_done'];
+  const ONCE_EVER = ['signup_start', 'onboarding_done', 'account_created', 'checkout_start', 'invite_opened', 'invite_claimed', 'install_done', 'quiz_result'];
   function logEventNow(name) {
     if (navigator.doNotTrack === '1' || window.doNotTrack === '1' || navigator.globalPrivacyControl) return;
     if (/^(localhost|127\.)/.test(location.hostname) && !window.YOURS_TRACK_LOCAL) return;
@@ -1465,6 +1466,75 @@
     return a;
   }
   const showLanding = () => !S.session && S.screen !== 'login' && !isStandalone();
+
+  // ---------- free phase quiz (yoursfit.app/phase): three questions, no account, same cycle math as the app ----------
+  const isQuizPage = () => !S.session && S.screen !== 'login' && /^\/phase\/?$/.test(location.pathname);
+  const QUIZ_COPY = {
+    menstrual: ['Period week', 'go by feel.', 'YOURS starts your weights a little lighter and keeps mobility ready for cramp days. Feel strong? Lift heavy. Iron-rich meals help too.'],
+    follicular: ['Follicular', 'energy often climbs.', 'A good window to add weight or learn a new lift. YOURS nudges your weights up when your check-ins say you are ready.'],
+    ovulation: ['Ovulation', 'often feels strongest.', 'Many women feel strongest around now. YOURS plans heavier days and personal-record attempts, with a longer warm-up.'],
+    luteal: ['Luteal', 'steady wins.', 'Energy can dip as your period gets closer, and you may need a little more food. YOURS holds your weights steady, adds calories on purpose, and swaps in something lighter on wiped-out days.'],
+  };
+  function quizResult(q) {
+    if (L.STEADY_MODES.includes(q.mode) || q.mode === 'none') return { kind: 'steady' };
+    if (!q.start || q.start > todayKey()) return null;
+    const c = L.cycleInfo({ cycleMode: q.mode, periodStart: q.start, cycleLength: q.len || 28 });
+    const since = L.daysBetween(L.parseKey(q.start), L.today()) + 1;
+    if (since > c.len + 10) return { kind: 'long', since };
+    return { kind: 'phase', c, estimate: L.ESTIMATE_MODES.includes(q.mode) || !q.len };
+  }
+  function viewPhaseQuiz() {
+    logEvent('lp_phase');
+    const q = S.quiz;
+    const steady = L.STEADY_MODES.includes(q.mode) || q.mode === 'none';
+    const r = q.done ? quizResult(q) : null;
+    const modeLabel = (D.CYCLE_MODES.find((m) => m.id === q.mode) || {}).label || '';
+    let out = '';
+    if (r && r.kind === 'steady') {
+      const [h, it, p] = q.mode === 'menopause'
+        ? ['Menopause', 'strong for life.', 'No phases to follow. YOURS plans heavy strength work for bone and muscle, balance, more protein, and check-ins that track hot flashes and sleep.']
+        : q.mode === 'hormonal'
+          ? ['No phases', 'and that\'s fine.', 'The pill, implant, injection and hormonal IUD keep hormones fairly steady, so YOURS doesn\'t invent phases. Your week follows a steady rhythm and how you feel each day.']
+          : ['No phases', 'right now.', 'Your plan follows a steady weekly rhythm and your daily check-in. After baby, the postpartum program starts with breath and pelvic floor once your doctor clears you.'];
+      out = `<div class="mono muted">Your result</div><h2 class="lp-h2 quiz-res">${esc(h)} <span class="serif">${esc(it)}</span></h2><p class="lp-lead">${esc(p)}</p>`;
+    } else if (r && r.kind === 'long') {
+      out = `<div class="mono muted">Your result</div><h2 class="lp-h2 quiz-res">Day ${r.since}. <span class="serif">Hard to place.</span></h2><p class="lp-lead">That's longer than your usual cycle, so we can't say which phase you're in. If your period is late, tap when it starts and YOURS picks up from there. If periods stop for 3 months and you're not pregnant, it's worth talking to your doctor.</p>`;
+    } else if (r) {
+      const c = r.c;
+      const [name, it, p] = QUIZ_COPY[c.phase];
+      const next = c.late ? `Your period is ${c.daysLate} day${c.daysLate === 1 ? '' : 's'} late by this estimate.` : `${D.PHASES[c.next].name} in about ${c.daysToNext} day${c.daysToNext === 1 ? '' : 's'}. Period in about ${c.daysToPeriod} day${c.daysToPeriod === 1 ? '' : 's'}.`;
+      out = `<div class="mono muted">Your result · day ${c.day} of ${c.len}</div>
+        <h2 class="lp-h2 quiz-res">${esc(name)}, <span class="serif">${esc(it)}</span></h2>
+        <p class="mono muted" style="margin-top:14px">${esc(next)}</p>
+        <p class="lp-lead">${esc(p)}</p>
+        <p class="small muted" style="margin-top:14px">${r.estimate ? `${q.len ? `With ${modeLabel.toLowerCase()}, cycles vary` : 'Without your cycle length we assumed 28 days'}, so this is an estimate. ` : ''}Phases are a starting point, not rules: you can train hard any day you feel good. YOURS learns your real cycle from every period you log.</p>`;
+    }
+    const lens = [['', 'Not sure']].concat(Array.from({ length: 25 }, (_, i) => [String(21 + i), `${21 + i} days`]));
+    return `<div class="lp">
+      <header class="lp-top"><a class="mono lp-issue" href="/" style="color:inherit;text-decoration:none">Issue 01 · The phase check</a><div class="row" style="gap:12px"><button class="link small" data-action="go-login">Sign in</button><button class="btn primary xs" data-action="quiz-start">Start free</button></div></header>
+      <div class="lp-wrap">
+        <a class="wordmark lp-mast quiz-mast" href="/" style="text-decoration:none">yours.</a>
+        <div class="lp-strip mono"><span>Free · No account</span><span>30 seconds</span></div>
+      </div>
+      <section class="lp-wrap lp-sec quiz" style="margin-top:36px">
+        <h1 class="lp-h1">Which phase <span class="serif">are you in?</span></h1>
+        <ol class="quiz-qs">
+          <li><span class="lp-big">01</span><div class="grow"><h3>What is your cycle like?</h3>
+            <div class="chips" style="margin-top:12px">${D.CYCLE_MODES.map((m) => `<button type="button" class="chip ${q.mode === m.id ? 'selected' : ''}" data-action="quiz-mode" data-value="${m.id}">${esc(m.label)}</button>`).join('')}</div>
+            <p class="small muted" style="margin-top:10px">${esc((D.CYCLE_MODES.find((m) => m.id === q.mode) || {}).desc || '')}</p></div></li>
+          ${steady ? '' : `<li><span class="lp-big">02</span><div class="grow"><h3>When did your last period start?</h3>
+            <label class="field" style="margin-top:12px"><span class="label">First day of bleeding. Your best guess is fine.</span><input class="input" type="date" data-quiz="start" value="${esc(q.start)}" max="${todayKey()}"></label></div></li>
+          <li><span class="lp-big">03</span><div class="grow"><h3>How long is your cycle, usually?</h3>
+            <label class="field" style="margin-top:12px"><span class="label">From the first day of one period to the next</span><select class="input" data-quiz="len">${lens.map(([v, t]) => `<option value="${v}" ${String(q.len || '') === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label></div></li>`}
+        </ol>
+        <button class="btn primary" data-action="quiz-go" style="margin-top:24px" ${!steady && !q.start ? 'disabled' : ''}>Show my phase</button>
+        ${out ? `<div class="quiz-out" id="quiz-out">${out}
+          <div class="lp-cta"><button class="btn primary" data-action="quiz-start">Build my plan</button><button class="btn soft" data-action="quiz-share">Send to a friend</button></div>
+          <p class="small muted" style="margin-top:12px">Building your plan is free. See your workouts, weights and meals for this phase before you pay anything.</p></div>` : ''}
+        <p class="tiny muted" style="margin-top:28px">An estimate for training, not medical advice. Never use it as contraception or to plan a pregnancy. Nothing you enter here leaves your phone.</p>
+      </section>
+    </div>`;
+  }
   function viewLanding() {
     logEvent('landing_view');
     const aud = landingAudience();
@@ -1480,7 +1550,7 @@
     const cta = (cls) => `<button class="btn primary ${cls || ''}" data-action="start">${esc(ctaText)}</button>`;
     const phone = (img, alt) => `<div class="lp-phone"><img src="/img/landing/${img}.jpg" alt="${esc(alt)}" width="390" height="844" loading="lazy"></div>`;
     const phases = [
-      ['01', 'Days 1-5', 'Period week', 'lighter, slower, kinder.', 'Lighter lifts, mobility and more rest. Iron-rich meals and gentle movement for cramps.'],
+      ['01', 'Days 1-5', 'Period week', 'go by feel.', 'Weights start a little lighter, with mobility for cramp days. Feel strong? Lift heavy. Iron-rich meals help.'],
       ['02', 'Days 6-13', 'Follicular', 'energy climbs.', 'Your best window to add weight and learn new lifts.'],
       ['03', 'Days 14-16', 'Ovulation', 'often feels strongest.', 'Heavy days, personal records and power work.'],
       ['04', 'Days 17-28', 'Luteal', 'steady wins.', 'Steady weights, quality reps and a little more food, on purpose.'],
@@ -1541,6 +1611,7 @@
           <p class="lp-lead">${A ? esc(A.lead) : 'YOURS plans every workout, weight and meal around your cycle, so you get stronger in every phase.'}</p>
           <div class="lp-cta">${cta()}</div>
           <p class="small muted" style="margin-top:12px">${paid ? `${days} days free, then ${money(m)} a month. Cancel anytime. <a href="#lp-pricing" class="lp-inline">How pricing works</a>` : 'Your plan in about 2 minutes.'}</p>
+          <p class="small" style="margin-top:8px"><a href="/phase" class="lp-inline">Not sure which phase you're in? Free 30-second check</a></p>
         </div>
         <nav class="lp-toc lp-wide" aria-label="On this page">
           <div class="mono muted">In this issue</div>
@@ -1566,7 +1637,7 @@ ${prog ? `
       <section class="lp-wrap lp-sec" id="lp-cycle">
         ${head('lp-cycle', 'Four phases,', 'one plan.')}
         <div class="lp-phases">${phases.map(([n, d, t, it, p]) => `<article class="lp-phase"><span class="lp-big">${n}</span><span class="mono muted">${d}</span><h3>${esc(t)}</h3><div class="serif lp-it">${esc(it)}</div><p class="small muted">${esc(p)}</p></article>`).join('')}</div>
-        <p class="small muted" style="margin-top:16px">Days shown for a 28-day cycle; yours follows your own length. Phases are a starting point, not rules: feel strong on day 2? Train hard.</p>
+        <p class="small muted" style="margin-top:16px">Days shown for a 28-day cycle; yours follows your own length. Phases are a starting point, not rules: feel strong on day 2? Train hard. <a href="/phase" class="lp-inline">Which phase am I in?</a></p>
       </section>
 
       <section class="lp-wrap lp-sec" id="lp-every">
@@ -3794,9 +3865,10 @@ ${prog ? `
       L.setCustomWorkouts(S.data.customWorkouts);
     }
     let html;
-    const landing = showLanding();
+    const quiz = isQuizPage();
+    const landing = quiz || showLanding();
     root.classList.toggle('wide', landing);
-    if (!S.session) html = S.screen === 'login' ? viewLogin() : landing ? viewLanding() : viewWelcome();
+    if (!S.session) html = S.screen === 'login' ? viewLogin() : quiz ? viewPhaseQuiz() : landing ? viewLanding() : viewWelcome();
     else if (!S.data.onboarded) html = viewOnboarding();
     else if (!S.data.planSeen) html = viewReveal();
     else if (!termsOk()) html = viewAgreement();
@@ -4176,6 +4248,38 @@ ${prog ? `
       const i = list.indexOf(el.dataset.value);
       if (i > -1) list.splice(i, 1); else list.push(el.dataset.value);
       save(); render();
+    },
+    'quiz-mode': (el) => { S.quiz.mode = el.dataset.value; S.quiz.done = false; render(); },
+    'quiz-go': () => {
+      S.quiz.done = true;
+      logEvent('quiz_result');
+      render();
+      const out = document.getElementById('quiz-out');
+      if (out) out.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    },
+    // Her answers carry into onboarding, so the plan she builds starts on the day the quiz showed.
+    'quiz-start': () => {
+      const q = S.quiz;
+      S.authError = '';
+      logEvent('signup_start'); logEvent('start_phase');
+      startSession({ kind: 'guest' }).then(() => {
+        const p = S.data.profile;
+        if (!S.data.onboarded) {
+          p.cycleMode = q.mode;
+          if (q.start && q.start <= todayKey()) p.periodStart = q.start;
+          if (q.len) p.cycleLength = Number(q.len);
+          save();
+        }
+        history.replaceState(null, '', '/');
+        render();
+      });
+    },
+    'quiz-share': async () => {
+      const url = `${location.origin}/phase`;
+      try {
+        if (navigator.share) await navigator.share({ title: 'Which phase are you in?', text: 'A free 30-second cycle phase check from YOURS', url });
+        else { await navigator.clipboard.writeText(url); toast('Link copied'); }
+      } catch { /* she closed the share sheet */ }
     },
     'ob-units': (el) => { S.data.profile.units = el.dataset.value; save(); render(); },
     'ob-back': () => {
@@ -4648,6 +4752,15 @@ ${prog ? `
       x[f] = f === 'name' || f === 'portion' ? el.value : Math.max(0, Number(el.value) || 0);
       x.edited = true;
       x.confidence = 'high';
+      return;
+    }
+    if (el.dataset.quiz && !S.session) {
+      S.quiz[el.dataset.quiz] = el.value;
+      S.quiz.done = false;
+      const go = root.querySelector('[data-action="quiz-go"]');
+      if (go) go.disabled = !(L.STEADY_MODES.includes(S.quiz.mode) || S.quiz.mode === 'none' || S.quiz.start);
+      const out = document.getElementById('quiz-out');
+      if (out) out.remove();
       return;
     }
     if (el.dataset.bind && S.data) {
