@@ -5,7 +5,7 @@
 ## Features
 
 - **Try before signing up.** Welcome, then 7 onboarding steps, then a personal plan. She can save the plan to an account or continue as a guest. Guest data moves into the account on signup. There is also a one-tap demo.
-- **Onboarding:** fitness level, main goal, period start date, height/weight/age (metric or imperial), activity level, cycle and period length, favourite foods and foods to avoid.
+- **Onboarding:** fitness level, main goal, period start date, height/weight/age (metric or imperial), activity level, cycle and period length, favourite foods and foods to avoid (Vegan, Vegetarian and common allergies; every phase has at least two vegan meals for each meal slot, each with a grocery list).
 - **Home:** date, cycle ring with the current phase, hormone notes and tips, today's workout, protein/calorie/water/step targets, and a coach note.
 - **Workouts:** 12 preloaded sessions grouped by phase, a daily recommendation based on cycle day, sets adjusted for fitness level, a set-by-set logger, a weekly overview and a library.
 - **Meals (food diary):** a MyFitnessPal-style diary with Breakfast, Lunch, Dinner and Snacks, calories remaining (goal minus food) and macro bars. She can add food per meal, tap an entry to change the amount, and move between days to log past meals. Phase meal ideas sit below as optional suggestions with a "Log this" button (portion-adjustable, macros estimated), plus a grocery list.

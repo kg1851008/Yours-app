@@ -582,3 +582,18 @@ test('running: a corrupted saved pace shows nothing and is replaced by the next 
   }
   assert.equal(L.nextRunPace(391, { zone: 'easy', kind: 'easy', pace: 'x' }).change, 'same');
 });
+
+test('vegan: every phase and meal has plant-based options, each with a grocery list', () => {
+  const vegan = D.AVOID_OPTIONS.find((o) => o.label === 'Vegan');
+  assert.ok(vegan, 'Vegan is a diet option');
+  const profile = { avoid: ['Vegan'], favorites: [], foodNotes: '' };
+  for (const phase of Object.keys(D.MEALS)) for (const slot of ['breakfast', 'lunch', 'dinner', 'snack']) {
+    const { list, compromised } = L.mealOptions(profile, phase, slot);
+    assert.equal(compromised, false, `${phase} ${slot} has a vegan meal`);
+    assert.ok(list.length >= 2, `${phase} ${slot} has at least two vegan meals`);
+    for (const meal of list) {
+      assert.ok(!meal.tags.some((t) => vegan.tags.includes(t)), `${meal.name} is vegan`);
+      assert.ok(D.GROCERY[meal.name], `${meal.name} has groceries`);
+    }
+  }
+});
