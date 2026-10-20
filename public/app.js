@@ -43,6 +43,17 @@
     community: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.7a3.5 3.5 0 0 1 0 6.6M18 14.3A6.5 6.5 0 0 1 21.5 20"/>',
     send: '<path d="M12 19V5M5 12l7-7 7 7"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
+    minus: '<path d="M5 12h14"/>',
+    moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',
+    timer: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9.5 2h5"/>',
+    pill: '<rect x="2.5" y="9" width="19" height="6" rx="3" transform="rotate(-45 12 12)"/><path d="m9.5 9.5 5 5"/>',
+    bell: '<path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
+    user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+    target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
+    ruler: '<path d="M3 17 17 3l4 4L7 21z"/><path d="m7 13 2 2m1-5 2 2m1-5 2 2"/>',
+    foot: '<path d="M8 3c2 0 3 2 3 5s-1 5-3 5-3-2-3-5 1-5 3-5zM6 16h4v1.5a2 2 0 0 1-4 0zM16 7c2 0 3 2 3 5s-1 5-3 5-3-2-3-5 1-5 3-5zM14 20h4v.5a2 2 0 0 1-4 0z"/>',
+    help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5V14M12 17h.01"/>',
+    chevron: '<path d="m9 6 6 6-6 6"/>',
     check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
     x: '<path d="M6 6l12 12M18 6 6 18"/>',
     back: '<path d="M15 5l-7 7 7 7"/>',
@@ -119,6 +130,9 @@
     const d = S.data;
     // Migrate older saves.
     d.profile.cycleMode = d.profile.cycleMode || 'natural';
+    d.sleep = d.sleep || {};
+    d.fasting = d.fasting || { goal: 14, active: null, history: [] };
+    d.glp1Log = d.glp1Log || {};
     if (!d.periods.length && d.profile.periodStart) d.periods = [d.profile.periodStart];
     d.plan = Object.assign({ volume: 0, stepBonus: 0, kcalAdjust: 0 }, d.plan);
   }
@@ -449,6 +463,9 @@
     if (a.type === 'swap_workout') return `Switch today to ${workoutById(a.value).name}`;
     if (a.type === 'log_water') return `Log ${a.value} ml water`;
     if (a.value === 'checkin') return 'Do my daily check-in';
+    if (a.value === 'glp1') return 'Open GLP-1 support';
+    if (a.value === 'fasting') return 'Open fasting timer';
+    if (a.value === 'sleep') return 'Log my sleep';
     return `Open ${a.value[0].toUpperCase() + a.value.slice(1)}`;
   }
   const lighterOption = (c) => (readinessToday() != null && readinessToday() < 30 ? 'm-restore' : { menstrual: 'm-restore', luteal: 'l-pilates', menopause: 'mp-mobility' }[c.phase] || 'm-light');
@@ -505,6 +522,10 @@
     }
     if (has('glute', 'booty', 'bum', 'butt', 'hip thrust')) {
       return `${hi}for glute growth, focus on three things:\n\n- Progressive overload on hip thrusts, RDLs and split squats. I suggest your exact weights each session.\n- 10-20 hard sets for glutes per week, spread over 2-3 sessions.\n- Eat enough: ${t.protein} g of protein and do not under-eat calories.\n\n${c.phase === 'ovulation' || c.phase === 'follicular' ? 'You are in a high-output phase, so this is the time to push your glute day.' : 'Keep the weights steady and focus on the mind-muscle connection.'}${c.phase !== 'menstrual' ? '\n[[action:swap_workout:o-glute]]' : ''}`;
+    }
+    if (has('glp', 'ozempic', 'wegovy', 'mounjaro', 'zepbound', 'semaglutide', 'tirzepatide')) {
+      const on = p.glp1 && p.glp1.on;
+      return `${hi}on a GLP-1 medication, the goal is to lose fat and keep your muscle. ${on ? 'GLP-1 mode is on, so your plan already puts protein first.' : 'Turning on GLP-1 mode puts protein first in your plan.'}\n\n- Protein first: about ${t.protein} g a day, ${Math.round(t.protein / 4)} g a meal. A protein shake counts when appetite is low.\n- Lift 2-3 times a week. Strength training is what tells your body to keep muscle.\n- Smaller meals, eaten slowly. Greasy, very sweet or large meals make nausea worse.\n- Water and fiber help with constipation, and so does a daily walk.\n\nFollow your prescriber on dosing and side effects. YOURS is fitness support, not medical advice.\n[[action:open:glp1]]`;
     }
     if (has('sleep', 'insomnia', 'rest day', 'recover')) {
       return `${hi}recovery is where the results happen. Aim for 7-9 hours.\n\n- Keep a consistent wake time, even on weekends\n- Get daylight within an hour of waking\n- Have complex carbs and magnesium at dinner${c.phase === 'luteal' ? ' (especially now, when progesterone raises body temperature)' : ''}\n- Keep a cool, dark room and no screens for the last 30 minutes\n\nOn a poor-sleep day, lower the weights by about 10% instead of skipping.`;
@@ -583,6 +604,7 @@
   function goTab(tab) {
     if (tab === 'progress' || tab === 'insights') { S.tab = 'advisor'; S.advisorView = tab; }
     else if (tab === 'checkin') { openCheckin(); return; }
+    else if (['glp1', 'fasting', 'sleep', 'more'].includes(tab)) { S.modal = { type: tab }; return; }
     else S.tab = tab;
     if (tab !== 'meals') S.diaryDate = null;
     S.modal = null;
@@ -1088,10 +1110,21 @@
 
   function foodLabel(food, amount, mode) {
     if (mode === 'grams') return `${amount} g`;
+    if (mode === 'oz') return `${amount} oz`;
     const s = food.serving.label;
     return amount === 1 ? s : `${amount} x ${s}`;
   }
 
+  // Serving size and amount, like a nutrition label: the package serving, grams or ounces, and any number of them.
+  const AMOUNT_UNITS = { servings: { step: 0.5, max: 50, label: 'Number of servings' }, grams: { step: 10, max: 5000, label: 'Grams' }, oz: { step: 0.5, max: 200, label: 'Ounces' } };
+  function foodAmountPicker(f, m) {
+    const units = [['servings', f.serving.label]].concat(L.canWeigh(f) ? [['grams', 'grams (g)'], ['oz', 'ounces (oz)']] : []);
+    const u = AMOUNT_UNITS[m.mode] || AMOUNT_UNITS.servings;
+    return `${units.length > 1 ? `<div class="label" style="margin-top:16px">Serving size</div><div class="chips" role="group" aria-label="Serving size">${units.map(([v, l]) => `<button class="chip ${m.mode === v ? 'selected' : ''}" data-action="food-mode" data-value="${v}" aria-pressed="${m.mode === v}">${esc(l)}</button>`).join('')}</div>` : `<div class="label" style="margin-top:16px">Serving size</div><p class="small">${esc(f.serving.label)}</p>`}
+        <label class="label" style="margin-top:14px;display:block" for="food-amount">${u.label}</label>
+        <div class="row" style="gap:10px"><button class="icon-btn" data-action="food-step" data-d="-${u.step}" aria-label="Less">${icon('minus', 16)}</button><input id="food-amount" class="input grow center" type="number" inputmode="decimal" step="any" min="0" max="${u.max}" value="${m.amount}" data-food-amount style="font-size:20px;font-weight:700"><button class="icon-btn" data-action="food-step" data-d="${u.step}" aria-label="More">${icon('plus', 16)}</button></div>
+        ${m.mode === 'servings' && f.serving.grams && L.canWeigh(f) ? `<p class="tiny muted" style="margin-top:6px">${esc(String(Math.round(m.amount * f.serving.grams)))} g total</p>` : m.mode !== 'servings' ? '<p class="tiny muted" style="margin-top:6px">A food scale gives the most accurate number here. Optional.</p>' : ''}`;
+  }
   const foodMacroTiles = (mac) => [[calU() === 'cal' ? 'Calories' : 'kcal', mac.kcal, ''], ['Protein', mac.protein, 'g'], ['Carbs', mac.carbs, 'g'], ['Fat', mac.fat, 'g']].map(([l, v, u]) => `<div class="stat" style="padding:10px"><div class="eyebrow" style="font-size:9px">${l}</div><div class="value" style="font-size:24px">${Math.round(v)}<small>${u}</small></div></div>`).join('');
 
   function rememberFood(f, amount, mode) {
@@ -1103,6 +1136,7 @@
   function logFood() {
     const m = S.modal;
     const f = m.food;
+    if (!(Number(m.amount) > 0)) { toast('Enter how much you had'); return; }
     const mac = L.foodMacros(f, m.amount, m.mode);
     const item = { name: f.name, brand: f.brand || '', barcode: f.barcode || null, food: f, amount: m.amount, mode: m.mode, label: foodLabel(f, m.amount, m.mode), ...mac };
     rememberFood(f, m.amount, m.mode);
@@ -1173,7 +1207,7 @@
 
   // Her saved and recent foods count as known foods for the offline parser, ahead of the built-in list.
   function talkFoods() {
-    const mine = (S.data.recentFoods || []).map((r) => ({ id: 'r', names: [r.food.name.toLowerCase()], unit: foodLabel(r.food, r.amount, r.mode), grams: (r.food.serving.grams || 100) * (r.mode === 'grams' ? r.amount / (r.food.serving.grams || 100) : r.amount), ...L.foodMacros(r.food, r.amount, r.mode) }));
+    const mine = (S.data.recentFoods || []).map((r) => ({ id: 'r', names: [r.food.name.toLowerCase()], unit: foodLabel(r.food, r.amount, r.mode), grams: L.gramsOf(r.food, r.amount, r.mode) || (r.food.serving.grams || 100) * r.amount, ...L.foodMacros(r.food, r.amount, r.mode) }));
     return mine.concat(D.BASIC_FOODS);
   }
 
@@ -1833,6 +1867,190 @@ ${prog ? `
     </svg>`;
   }
 
+
+  // ---------- More: every feature in one list ----------
+  function moreItems() {
+    const steady = cyc().steady;
+    const glp = S.data.profile.glp1 && S.data.profile.glp1.on;
+    const fast = S.data.fasting && S.data.fasting.active;
+    const sl = L.sleepStats(S.data.sleep, today(), 7);
+    return [
+      ['You', [
+        ['profile', 'user', 'My profile and settings', 'Plan, cycle type, units, membership'],
+        ['goals', 'target', 'Goals and plan', `${goalOf(S.data.profile).label} · ${tgt(cyc()).kcal.toLocaleString()} ${calU()} · ${tgt(cyc()).protein} g protein`],
+        ['reminders', 'bell', 'Reminders', 'Workouts, check-ins and cycle'],
+        ['invite', 'gift', 'Invite friends', 'A free month for every friend who joins'],
+      ]],
+      ['Health', [
+        ['glp1', 'pill', 'GLP-1 support', glp ? 'On · protein first' : 'Ozempic, Wegovy, Mounjaro, Zepbound'],
+        ['fasting', 'timer', 'Intermittent fasting', fast ? `Fasting now · ${L.fmtHM(L.fastStatus(fast).mins)}` : 'Timer, windows and history'],
+        ['sleep', 'moon', 'Sleep', sl.avg7 != null ? `${sl.avg7} h average this week` : 'Log your hours and see the trend'],
+        ['steps', 'foot', 'Steps', `${(S.data.steps[todayKey()] || 0).toLocaleString()} today`],
+        ['checkin', 'check', 'Daily check-in', 'Energy, sleep, mood and symptoms'],
+        ...(steady ? [] : [['period', 'calendar', 'Log a period', 'Keeps your phase predictions accurate']]),
+      ]],
+      ['Training', [
+        ['workouts', 'workouts', 'Workouts and programs', 'Today, programs and your own workouts'],
+        ['library', 'list', 'Exercise library', 'How to do every move'],
+        ['running', 'flame', 'Running', 'Couch to 5K, 10K and speed'],
+      ]],
+      ['Food', [
+        ['nutrition', 'meals', 'Nutrition and food diary', 'Calories, protein, carbs and fat'],
+        ['recipes', 'fork', 'My meals, recipes and foods', 'Saved recipes and foods'],
+        ['scan', 'barcode', 'Scan a barcode', 'Log packaged food in seconds'],
+        ['grocery', 'store', 'Grocery list', 'This week\'s meal ideas, by aisle'],
+      ]],
+      ['Progress', [
+        ['weight', 'ruler', 'Weight and measurements', 'Weigh-ins, measurements and photos'],
+        ['report', 'trend', 'My weekly report', 'Your week, strength by phase and trends'],
+      ]],
+      ['Community and help', [
+        ['community', 'community', 'Community', 'Women who lift'],
+        ['privacy', 'shield', 'Privacy and your data', 'Export your data any time'],
+      ]],
+    ];
+  }
+  function viewMore(sheet) {
+    return sheet('More', `${moreItems().map(([sec, rows]) => `<div class="more-sec"><div class="eyebrow">${esc(sec)}</div>${rows.map(([k, ic, t, sub]) => `<button class="more-row" data-action="more-go" data-go="${k}">${icon(ic, 22)}<span class="grow"><strong>${esc(t)}</strong><span class="tiny muted">${esc(sub)}</span></span>${icon('chevron', 18)}</button>`).join('')}</div>`).join('')}
+      <div class="more-sec"><div class="eyebrow">Contact</div><p class="small" style="padding:12px 0">${mailLink('YOURS question', 'Email us')}</p></div>`);
+  }
+  const MORE_GO = {
+    profile: () => { S.modal = { type: 'settings' }; },
+    goals: () => { S.modal = { type: 'settings' }; },
+    reminders: () => { S.modal = { type: 'settings' }; },
+    invite: () => { S.modal = { type: 'settings' }; },
+    glp1: () => { S.modal = { type: 'glp1' }; },
+    fasting: () => { S.modal = { type: 'fasting' }; },
+    sleep: () => { S.modal = { type: 'sleep' }; },
+    steps: () => { S.modal = { type: 'steps' }; },
+    checkin: () => { S.modal = null; openCheckin(); },
+    period: () => { S.modal = { type: 'period' }; },
+    workouts: () => { goTab('workouts'); S.workoutsView = 'lift'; },
+    library: () => { S.modal = null; openLibrary(); },
+    running: () => { goTab('workouts'); S.workoutsView = 'run'; },
+    nutrition: () => goTab('meals'),
+    recipes: () => { S.foodTarget = null; S.modal = { type: 'recipes' }; },
+    scan: () => { goTab('meals'); },
+    grocery: () => { S.modal = { type: 'grocery' }; },
+    weight: () => goTab('progress'),
+    report: () => goTab('insights'),
+    community: () => goTab('community'),
+    privacy: () => { S.modal = { type: 'privacy' }; },
+  };
+
+  // ---------- sleep ----------
+  function viewSleep(sheet) {
+    const st = L.sleepStats(S.data.sleep, today(), 14);
+    const last = S.data.sleep[todayKey()];
+    const max = 10;
+    const bars = st.days.map((d) => `<div class="sl-bar" title="${esc(shortDate(d.key))}: ${d.h == null ? 'not logged' : `${d.h} h`}"><span style="height:${d.h == null ? 0 : Math.min(100, (d.h / max) * 100)}%" class="${d.h != null && d.h < 7 ? 'short' : ''}"></span></div>`).join('');
+    const diff = st.avg7 != null && st.avgPrev7 != null ? Math.round((st.avg7 - st.avgPrev7) * 10) / 10 : null;
+    return sheet('Sleep', `<form data-form="sleep"><label class="field"><span class="label">Hours slept last night</span><input class="input" name="hours" type="number" inputmode="decimal" step="0.25" min="0" max="16" value="${last != null ? last : ''}" placeholder="e.g. 7.5" required></label><button class="btn primary block" style="margin-top:12px" type="submit">Save</button></form>
+      <div class="row between" style="margin-top:22px;align-items:flex-end"><div><div class="eyebrow">Last 7 nights</div><div class="big-number" style="font-size:44px">${st.avg7 != null ? st.avg7 : '-'}<small style="font-size:14px"> h avg</small></div></div><div class="small muted" style="text-align:right">${st.logged7} of 7 nights logged${diff != null && diff !== 0 ? `<br>${diff > 0 ? '+' : ''}${diff} h vs the week before` : ''}</div></div>
+      <div class="sl-chart" role="img" aria-label="Hours slept over the last 14 nights"><div class="sl-goal" style="bottom:70%"><span class="tiny">7 h</span></div>${bars}</div>
+      <div class="row between tiny muted" style="margin-top:6px"><span>2 weeks ago</span><span>Last night</span></div>
+      <p class="small" style="margin-top:16px">${st.short7 >= 3 ? `You slept under 7 hours on ${st.short7} of the last 7 nights. Short sleep lowers strength, raises appetite and slows recovery, so protect the next few nights where you can.` : 'Aim for 7 to 9 hours. Sleep is when muscle repairs, and it steadies appetite and mood.'}</p>
+      <p class="tiny muted" style="margin-top:8px">Rate how well you slept in your daily check-in; it adjusts today's weights. Hours here show the pattern over time.</p>`);
+  }
+
+  // ---------- fasting ----------
+  let fastTimer = null;
+  function tickFast() {
+    const f = S.data && S.data.fasting && S.data.fasting.active;
+    if (!f) return;
+    const st = L.fastStatus(f);
+    document.querySelectorAll('[data-fast-clock]').forEach((el) => { el.textContent = L.fmtHM(st.mins); });
+    const bar = document.getElementById('fast-bar'); if (bar) bar.style.width = `${Math.round(st.pct * 100)}%`;
+  }
+  function startFastTicker() { if (!fastTimer) fastTimer = setInterval(tickFast, 30000); }
+  const fastCaution = () => {
+    const p = S.data.profile;
+    return `<div class="card soft small" style="margin-top:16px"><strong>Fasting is optional.</strong> Your plan works without it. On heavy lifting days, eat within about two hours of training. Skip fasting if you are pregnant, breastfeeding, under 18, have diabetes on medication, or have a history of disordered eating, and talk to your doctor first.${p.glp1 && p.glp1.on ? ' <strong>On a GLP-1 medication, check with your prescriber before fasting:</strong> appetite is already lower, and protein is harder to fit in.' : ''}${p.postpartum ? ' <strong>After a baby, especially while breastfeeding, regular meals usually serve you better.</strong>' : ''}</div>`;
+  };
+  function viewFasting(sheet) {
+    const F = S.data.fasting;
+    const sum = L.fastSummary(F.history);
+    const hist = (F.history || []).slice(-7).reverse();
+    const histHtml = hist.length ? `<div class="label" style="margin-top:20px">Recent fasts</div>${hist.map((h) => { const st = L.fastStatus(h); return `<div class="list-item" style="padding:10px 0"><span class="grow small">${esc(fmtDate(new Date(h.start), { weekday: 'short', month: 'short', day: 'numeric' }))}</span><span class="small" style="font-family:var(--mono)">${L.fmtHM(st.mins)} / ${h.goal} h</span>${st.met ? `<span class="tag accent" style="margin-left:8px">${icon('check', 12, 2.4)}</span>` : ''}</div>`; }).join('')}` : '';
+    if (F.active) {
+      const st = L.fastStatus(F.active);
+      const ends = new Date(st.endsAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      startFastTicker();
+      return sheet('Intermittent fasting', `<div class="center" style="padding:10px 0"><div class="eyebrow">Fasting</div><div class="big-number" style="font-size:72px" data-fast-clock>${L.fmtHM(st.mins)}</div><div class="small muted">of ${F.active.goal} hours · ${st.met ? 'goal reached' : `goal at ${esc(ends)}`}</div></div>
+        <div class="meter" style="margin-top:10px"><div id="fast-bar" style="width:${Math.round(st.pct * 100)}%"></div></div>
+        <button class="btn primary block" style="margin-top:18px" data-action="fast-end">End fast</button>
+        <p class="center" style="margin-top:10px"><button class="link small" data-action="fast-cancel">Started by mistake? Discard it</button></p>${histHtml}${fastCaution()}`);
+    }
+    const goal = F.goal || 14;
+    return sheet('Intermittent fasting', `<div class="label">Fasting window</div><div class="chips">${L.FAST_WINDOWS.map((h) => `<button class="chip ${goal === h ? 'selected' : ''}" data-action="fast-window" data-value="${h}">${h}:${24 - h}</button>`).join('')}</div>
+      <p class="tiny muted" style="margin-top:8px">${goal} hours fasting, ${24 - goal} hours to eat. 12:12 and 14:10 are gentle places to start.</p>
+      <label class="field" style="margin-top:14px"><span class="label">Last meal finished at</span><input class="input" type="time" data-fast-start value="${new Date().toTimeString().slice(0, 5)}"></label>
+      <button class="btn primary block" style="margin-top:12px" data-action="fast-start">Start fast</button>
+      ${sum.count ? `<p class="small" style="margin-top:16px">This week: ${plural(sum.count, 'fast')}, ${sum.met} reached the goal${sum.avgMin != null ? `, average ${L.fmtHM(sum.avgMin)}` : ''}.</p>` : ''}${histHtml}${fastCaution()}`);
+  }
+  function fastHomeCard() {
+    const f = S.data.fasting && S.data.fasting.active;
+    if (!f) return '';
+    const st = L.fastStatus(f);
+    startFastTicker();
+    return `<button class="banner" style="width:100%;text-align:left" data-action="open-fasting">${icon('timer', 18)}<div class="grow small"><strong>Fasting <span data-fast-clock>${L.fmtHM(st.mins)}</span></strong> of ${f.goal} h${st.met ? ' · goal reached' : ''}</div>${icon('chevron', 16)}</button>`;
+  }
+
+  // ---------- GLP-1 support ----------
+  const GLP1_MEDS = [['semaglutide', 'Semaglutide', 'Ozempic, Wegovy, Rybelsus'], ['tirzepatide', 'Tirzepatide', 'Mounjaro, Zepbound'], ['other', 'Other', 'Another GLP-1 medication']];
+  const GLP1_EFFECTS = ['Nausea', 'Low appetite', 'Constipation', 'Reflux', 'Fatigue', 'Headache'];
+  const GLP1_TIPS = {
+    Nausea: 'Nausea: smaller meals, eaten slowly, and stop at the first sign of fullness. Bland, cold or ginger foods often sit better than greasy or very sweet ones.',
+    'Low appetite': 'Low appetite: eat your protein first at every meal. A protein shake or Greek yogurt counts when a full meal feels like too much.',
+    Constipation: 'Constipation: water through the day, fiber from fruit, vegetables, oats and beans, and a daily walk.',
+    Reflux: 'Reflux: avoid lying down for 2 to 3 hours after eating, and go easy on fatty, spicy and fizzy foods.',
+    Fatigue: 'Fatigue: keep training, lighter if you need to. Check that you are eating enough protein and drinking enough water.',
+    Headache: 'Headache: often thirst or very low intake. Drink water and add a little salt to a meal if you are sweating a lot.',
+  };
+  function viewGlp1(sheet) {
+    const g = S.data.profile.glp1 || {};
+    const t = tgt(cyc());
+    const disclaimer = '<p class="tiny muted" style="margin-top:16px">YOURS is fitness and nutrition support, not medical advice. It never gives dosing advice. Follow your prescriber, and call them about severe or lasting side effects, especially strong stomach pain or vomiting.</p>';
+    if (!g.on) {
+      return sheet('GLP-1 support', `<p class="lp-lead" style="margin:0;font-size:17px;color:var(--text)">On Ozempic, Wegovy, Mounjaro or Zepbound? These medications lower appetite, and weight lost quickly can take muscle with it. GLP-1 mode helps you keep it.</p>
+        <ul class="phase-list" style="margin-top:14px">
+          <li>Protein first: your target rises to about 2 g per kg of body weight.</li>
+          <li>Strength training 2 to 3 times a week is the priority, because it tells your body to keep muscle.</li>
+          <li>Smaller, protein-forward meal ideas for days with little appetite.</li>
+          <li>Track side effects next to your training, with tips for each.</li>
+        </ul>
+        <button class="btn primary block" style="margin-top:18px" data-action="glp1-on">Turn on GLP-1 mode</button>${disclaimer}`);
+    }
+    const day = todayKey();
+    const todayFx = S.data.glp1Log[day] || [];
+    const week = [];
+    for (let i = 0; i < 7; i++) week.push(S.data.glp1Log[L.dateKey(L.addDays(today(), -i))] || []);
+    const counts = GLP1_EFFECTS.map((e) => [e, week.filter((d) => d.includes(e)).length]).filter(([, n]) => n);
+    const protein = L.proteinFor(S.data, day);
+    return sheet('GLP-1 support', `<div class="card soft" style="margin:0"><div class="eyebrow">Protein first</div><div class="big-number" style="font-size:40px;margin-top:6px">${Math.round(protein)}<small style="font-size:14px"> / ${t.protein} g today</small></div><div class="meter green" style="margin-top:8px"><div style="width:${clamp((protein / t.protein) * 100, 0, 100)}%"></div></div><p class="tiny muted" style="margin-top:8px">About ${Math.round(t.protein / 4)} g a meal. Eat it first, before the rest of the plate.</p></div>
+      <div class="label" style="margin-top:18px">How are you feeling today?</div>
+      <div class="chips">${GLP1_EFFECTS.map((e) => `<button class="chip ${todayFx.includes(e) ? 'selected' : ''}" data-action="glp1-effect" data-value="${esc(e)}" aria-pressed="${todayFx.includes(e)}">${esc(e)}</button>`).join('')}</div>
+      ${todayFx.length ? `<ul class="phase-list" style="margin-top:12px">${todayFx.map((e) => `<li>${esc(GLP1_TIPS[e])}</li>`).join('')}</ul>` : '<p class="tiny muted" style="margin-top:8px">Tap anything you notice. Nothing selected means a good day.</p>'}
+      ${counts.length ? `<p class="small" style="margin-top:12px"><strong>Last 7 days:</strong> ${counts.map(([e, n]) => `${esc(e.toLowerCase())} ${plural(n, 'day')}`).join(', ')}.</p>` : ''}
+      <div class="label" style="margin-top:18px">Medication</div>
+      <div class="chips">${GLP1_MEDS.map(([v, l, sub]) => `<button class="chip ${g.med === v ? 'selected' : ''}" data-action="glp1-med" data-value="${v}" title="${esc(sub)}">${esc(l)}</button>`).join('')}</div>
+      ${g.med ? `<p class="tiny muted" style="margin-top:6px">${esc((GLP1_MEDS.find((x) => x[0] === g.med) || [])[2] || '')}</p>` : ''}
+      <div class="label" style="margin-top:14px">Weekly dose day (optional)</div>
+      <div class="chips">${WEEKDAYS.map((w, i) => `<button class="chip ${g.doseDay === i ? 'selected' : ''}" data-action="glp1-day" data-value="${i}">${w.slice(0, 3)}</button>`).join('')}</div>
+      <p class="tiny muted" style="margin-top:6px">On dose day and the day after, Home reminds you that lighter training and a protein shake are fine if you feel off.</p>
+      <div class="card flat small" style="margin-top:16px"><strong>Training on GLP-1s.</strong> Keep lifting 2 to 3 times a week, even when you feel low on energy. Lighter weights still count. Muscle is what keeps your metabolism and strength up as the scale moves.</div>
+      ${disclaimer}
+      <p class="center" style="margin-top:12px"><button class="link small" data-action="glp1-off">Turn off GLP-1 mode</button></p>`);
+  }
+  function glp1HomeCard(t) {
+    const g = S.data.profile.glp1;
+    if (!g || !g.on) return '';
+    const dow = today().getDay(); // Sunday = 0, like WEEKDAYS
+    const doseNear = g.doseDay != null && (dow === g.doseDay || dow === (g.doseDay + 1) % 7);
+    const protein = Math.round(L.proteinFor(S.data, todayKey()));
+    return `<button class="banner" style="width:100%;text-align:left" data-action="open-glp1">${icon('pill', 18)}<div class="grow small"><strong>GLP-1 mode · protein ${protein} / ${t.protein} g</strong>${doseNear ? '<br>Dose day window: if you feel off, train lighter and sip a protein shake. It all counts.' : ''}</div>${icon('chevron', 16)}</button>`;
+  }
+
   // ---------- home ----------
   function header(title, sub, style) {
     const name = myName();
@@ -1840,7 +2058,7 @@ ${prog ? `
       : style === 'caps' ? `<div class="stack-caps" style="font-size:44px;margin-top:10px">${title}</div>`
       : style ? `<div class="masthead" style="margin-top:8px">${title}</div>` : `<h1 class="serif" style="margin-top:6px">${title}</h1>`;
     return `<div class="top"><div class="grow"><div class="eyebrow">${esc(sub)}</div>${t}</div>
-      <button class="avatar" data-action="open-settings" aria-label="Profile and settings">${isGuest() ? icon('settings', 18) : esc(initials(name))}</button></div>`;
+      <button class="avatar" data-action="open-more" aria-label="More: profile, settings and every feature">${isGuest() ? icon('settings', 18) : esc(initials(name))}</button></div>`;
   }
 
   function resumeBanner() {
@@ -1926,7 +2144,7 @@ ${prog ? `
       ${header(`${greet}${name ? `, ${esc(name)}` : ''}`, fmtDate(today()))}
       ${st.count >= 2 ? `<button class="tag accent" style="margin:-8px 0 16px;height:30px;gap:6px" data-action="share-streak">${icon('flame', 15)} ${st.count}-day streak${st.todayDone ? '' : ' · keep it alive today'}</button>` : ''}
       ${resumeBanner()}${guestBanner()}${checkinDayBanner()}
-      ${installCard()}
+      ${installCard()}${fastHomeCard()}${glp1HomeCard(t)}
       ${studio(c.phase, `
         ${corners(c.phase === 'menopause' ? 'Life stage' : c.steady ? 'Steady mode' : `Day ${c.day} / ${c.len}${c.estimate ? ' · est.' : ''}`, c.steady ? 'Readiness' : c.late ? 'Period late' : `${esc(phaseName(c.next))} in ${plural(c.daysToNext, 'day')}`, '', '')}
         <div class="p-body">
@@ -2306,7 +2524,7 @@ ${prog ? `
     const maxDay = Math.max(1, ...d.days.map((x) => x.app_open));
     const bars = d.days.map((x, i) => `<rect x="${i * 10 + 1}" y="${60 - (x.app_open / maxDay) * 56}" width="8" height="${Math.max(1, (x.app_open / maxDay) * 56)}" rx="2" fill="var(--accent)"><title>${x.day}: ${x.app_open} opens, ${x.workout_done} workouts</title></rect>`).join('');
     const mem = d.members;
-    const engagement = ['workout_done', 'weekly_checkin', 'program_start', 'library_open', 'exercise_view', 'workout_created', 'home_mode', 'run_on', 'run_plan_start', 'run_logged', 'measurement_logged', 'lp_postpartum', 'start_postpartum', 'lp_menopause', 'start_menopause', 'lp_beginner', 'start_beginner', 'lp_home', 'start_home', 'lp_bridal', 'start_bridal', 'exercise_swap', 'photo_compare', 'badge_earned', 'share_card', 'install_done', 'invite_shared', 'invite_opened', 'invite_claimed', 'membership_canceled'].filter((k) => ev[k]);
+    const engagement = ['workout_done', 'weekly_checkin', 'program_start', 'library_open', 'exercise_view', 'workout_created', 'home_mode', 'run_on', 'run_plan_start', 'run_logged', 'more_open', 'glp1_on', 'fast_started', 'sleep_logged', 'measurement_logged', 'lp_postpartum', 'start_postpartum', 'lp_menopause', 'start_menopause', 'lp_beginner', 'start_beginner', 'lp_home', 'start_home', 'lp_bridal', 'start_bridal', 'exercise_swap', 'photo_compare', 'badge_earned', 'share_card', 'install_done', 'invite_shared', 'invite_opened', 'invite_claimed', 'membership_canceled'].filter((k) => ev[k]);
     return `<div class="stats">${statTile('Paying', n(mem.active), '')}${statTile('In trial', n(mem.trialing), '')}</div>
       <p class="tiny muted" style="margin-top:8px">${n(mem.yearly)} yearly · ${n(mem.monthly)} monthly · ${n(mem.cancelling)} set to cancel · ${n(mem.pastDue)} card failing · ${n(mem.ended)} ended${mem.comp ? ` · ${n(mem.comp)} complimentary` : ''}</p>
       ${membersCard(m, d.people)}
@@ -3485,10 +3703,7 @@ ${prog ? `
       const f = m.food;
       const mac = L.foodMacros(f, m.amount, m.mode);
       return sheet(m.target === 'recipe' ? 'Add ingredient' : m.editId ? 'Edit entry' : 'Log food', `<div class="row" style="gap:14px;align-items:flex-start">${f.image ? `<img src="${esc(f.image)}" alt="" style="width:64px;height:64px;object-fit:contain;border-radius:12px;background:#fff;flex-shrink:0" referrerpolicy="no-referrer">` : ''}<div class="grow"><div class="serif" style="font-size:26px;line-height:1.05">${esc(f.name)}</div><div class="eyebrow" style="margin-top:6px">${esc(f.brand || 'Food')}${f.barcode ? ` · ${esc(f.barcode)}` : ''}</div></div></div>
-        ${f.per100 && f.serving.grams !== 100 ? `<div class="segment" style="margin-top:16px">${[['servings', 'Servings'], ['grams', 'Grams']].map(([v, l]) => `<button class="${m.mode === v ? 'active' : ''}" data-action="food-mode" data-value="${v}">${l}</button>`).join('')}</div>` : ''}
-        ${m.mode === 'grams'
-          ? `<label class="field" style="margin-top:14px"><span class="label">Amount in grams</span><input class="input" type="number" inputmode="decimal" min="1" max="2000" value="${m.amount}" data-food-grams></label><p class="tiny muted" style="margin-top:6px">A food scale gives the most accurate number here. Optional.</p>`
-          : `<div class="row between" style="margin-top:16px"><button class="icon-btn" data-action="food-step" data-d="-0.5" aria-label="Less">${icon('x', 14)}</button><div class="center"><div class="big-number" style="font-size:48px">${m.amount}</div><div class="tiny muted">x ${esc(f.serving.label)}</div></div><button class="icon-btn" data-action="food-step" data-d="0.5" aria-label="More">${icon('plus', 16)}</button></div>`}
+        ${foodAmountPicker(f, m)}
         <div class="stats" id="food-macros" style="margin-top:16px;grid-template-columns:repeat(4,1fr)">${foodMacroTiles(mac)}</div>
         ${m.target === 'recipe' ? '' : `<div class="label" style="margin-top:16px">Meal</div><div class="chips">${Object.entries(SLOT_LABEL).map(([v, l]) => `<button class="chip ${m.slot === v ? 'selected' : ''}" data-action="food-slot" data-value="${v}">${l}</button>`).join('')}</div>`}
         <button class="btn primary block" style="margin-top:20px" data-action="food-log">${m.target === 'recipe' ? 'Add to recipe' : m.editId ? 'Save changes' : `Log to ${diaryDateLabel().toLowerCase() === 'today' ? SLOT_LABEL[m.slot].toLowerCase() : `${SLOT_LABEL[m.slot].toLowerCase()}, ${diaryDateLabel()}`}`}</button>
@@ -3738,6 +3953,10 @@ ${prog ? `
       return sheet('Choose today\'s workout', `<div class="segment" style="margin-bottom:12px" role="group" aria-label="Show workouts for">${[['gym', 'Gym'], ['home', 'At home']].map(([v, l]) => `<button class="${(home ? 'home' : 'gym') === v ? 'active' : ''}" data-action="swap-where" data-value="${v}" aria-pressed="${(home ? 'home' : 'gym') === v}">${l}</button>`).join('')}</div><p class="small muted" style="margin-bottom:14px">${c.steady ? 'Any session works in steady mode.' : `Options that suit your ${phaseName(c.phase).toLowerCase()} phase.`}</p><div class="options">${list.map((w) => `<button class="option ${todaysWorkout().id === w.id ? 'selected' : ''}" data-action="set-today" data-id="${w.id}"><strong>${esc(w.name)}</strong><span>${w.minutes} min · ${esc(w.intensity)} · ${esc(w.focus)}</span></button>`).join('')}</div>
         <button class="btn ghost block" style="margin-top:12px" data-action="reset-today">Use the recommended plan</button>`);
     }
+    if (m.type === 'more') return viewMore(sheet);
+    if (m.type === 'sleep') return viewSleep(sheet);
+    if (m.type === 'fasting') return viewFasting(sheet);
+    if (m.type === 'glp1') return viewGlp1(sheet);
     if (m.type === 'steps') {
       const v = S.data.steps[todayKey()] || '';
       return sheet('Log steps', `<form data-form="steps"><label class="field"><span class="label">Total steps today</span><input class="input" name="steps" type="number" inputmode="numeric" min="0" max="100000" value="${v}" required autofocus></label><p class="tiny muted" style="margin-top:8px">Copy the number from your phone or watch.</p><button class="btn primary block" style="margin-top:16px" type="submit">Save</button></form>`);
@@ -4203,6 +4422,30 @@ ${prog ? `
 
     tab: (el) => { goTab(el.dataset.tab); if (S.tab === 'community' && isCloud()) refreshCommunity(); render(); if (S.tab === 'advisor' && S.advisorView === 'coach') scrollChat(); },
     'open-settings': () => { S.modal = { type: 'settings' }; render(); },
+    'open-more': () => { S.modal = { type: 'more' }; logEvent('more_open'); render(); },
+    'more-go': (el) => { const go = MORE_GO[el.dataset.go]; if (!go) return; S.modal = null; go(); render(); if (el.dataset.go === 'scan') actions['open-scanner'](); },
+    'open-sleep': () => { S.modal = { type: 'sleep' }; render(); },
+    'open-fasting': () => { S.modal = { type: 'fasting' }; render(); },
+    'open-glp1': () => { S.modal = { type: 'glp1' }; render(); },
+    'fast-window': (el) => { S.data.fasting.goal = Number(el.dataset.value) || 14; save(); render(); },
+    'fast-start': () => {
+      const F = S.data.fasting; const inp = document.querySelector('[data-fast-start]');
+      let start = Date.now();
+      if (inp && /^\d{2}:\d{2}$/.test(inp.value)) { const [h, mi] = inp.value.split(':').map(Number); const d = new Date(); d.setHours(h, mi, 0, 0); if (d.getTime() > Date.now() + 60000) d.setDate(d.getDate() - 1); start = d.getTime(); }
+      F.active = { start, goal: F.goal || 14 }; save(); logEvent('fast_started'); render(); toast('Fast started');
+    },
+    'fast-end': () => {
+      const F = S.data.fasting; if (!F.active) return;
+      const done = { ...F.active, end: Date.now() }; const st = L.fastStatus(done);
+      F.history = (F.history || []).concat([done]).slice(-60); F.active = null; save(); render();
+      toast(st.met ? `Goal reached: ${L.fmtHM(st.mins)} fasted` : `Fast ended at ${L.fmtHM(st.mins)}`);
+    },
+    'fast-cancel': () => { S.data.fasting.active = null; save(); render(); },
+    'glp1-on': () => { S.data.profile.glp1 = { ...(S.data.profile.glp1 || {}), on: true }; save(); logEvent('glp1_on'); render(); toast('GLP-1 mode is on. Your protein target went up.'); },
+    'glp1-off': () => { S.data.profile.glp1 = { ...(S.data.profile.glp1 || {}), on: false }; save(); render(); toast('GLP-1 mode is off'); },
+    'glp1-med': (el) => { S.data.profile.glp1.med = el.dataset.value; save(); render(); },
+    'glp1-day': (el) => { const g = S.data.profile.glp1; const v = Number(el.dataset.value); g.doseDay = g.doseDay === v ? null : v; save(); render(); },
+    'glp1-effect': (el) => { const k = todayKey(); const list = S.data.glp1Log[k] || []; const e = el.dataset.value; S.data.glp1Log[k] = list.includes(e) ? list.filter((x) => x !== e) : list.concat([e]); save(); render(); },
     'close-modal': () => { stopDictation(); if (S.modal && ['addFood', 'food', 'foodSearch', 'foodManual', 'quickAdd', 'scanner', 'talk', 'estimate', 'restaurants', 'restaurant', 'restaurantBuild', 'restaurantSearch'].includes(S.modal.type)) return closeFoodFlow(); if (S.modal && S.modal.type === 'recipe') { S.recipeDraft = null; S.foodTarget = null; } stopScanner(); S.modal = null; render(); },
     overlay: (el, ev) => { if (ev.target === el) actions['close-modal'](); },
     water: (el) => { addWater(Number(el.dataset.ml)); render(); },
@@ -4432,8 +4675,12 @@ ${prog ? `
     'open-food-manual': () => { stopScanner(); S.modal = { type: 'foodManual' }; render(); },
     'recent-food': (el) => { stopScanner(); const r = S.data.recentFoods[el.dataset.i]; if (r) openFood(r.food, r.amount, r.mode); },
     'search-pick': (el) => { const f = S.modal.results[el.dataset.i]; if (f) openFood(f); },
-    'food-step': (el) => { S.modal.amount = clamp(Math.round((S.modal.amount + Number(el.dataset.d)) * 2) / 2, 0.5, 20); render(); },
-    'food-mode': (el) => { const m = S.modal; if (m.mode === el.dataset.value) return; m.mode = el.dataset.value; m.amount = m.mode === 'grams' ? (m.food.serving.grams || 100) : 1; render(); },
+    'food-step': (el) => {
+      const m = S.modal; const u = AMOUNT_UNITS[m.mode] || AMOUNT_UNITS.servings; const d = Number(el.dataset.d);
+      const next = Math.round(((Number(m.amount) || 0) + d) * 100) / 100;
+      m.amount = next > 0 ? Math.min(next, u.max) : m.amount; render();
+    },
+    'food-mode': (el) => { const m = S.modal; const to = el.dataset.value; if (m.mode === to) return; m.amount = L.convertAmount(m.food, Number(m.amount) || 1, m.mode, to); m.mode = to; render(); },
     'food-slot': (el) => { S.modal.slot = el.dataset.value; render(); },
     'food-log': () => logFood(),
     'food-del': (el) => { const k = diaryKey(); S.data.foodLog[k] = (S.data.foodLog[k] || []).filter((f) => f.id !== el.dataset.id); save(); render(); },
@@ -4671,10 +4918,11 @@ ${prog ? `
       const box = document.getElementById('recipe-per');
       if (box && el.dataset.recipeField !== 'name') box.innerHTML = foodMacroTiles(L.recipeFood({ ...S.recipeDraft, servings: Number(S.recipeDraft.servings) || 1, totalGrams: Number(S.recipeDraft.totalGrams) || null }).perServing);
     }
-    if (el.matches('[data-food-grams]') && S.modal && S.modal.type === 'food') {
-      S.modal.amount = clamp(Number(el.value) || 0, 0, 2000);
+    if (el.matches('[data-food-amount]') && S.modal && S.modal.type === 'food') {
+      const u = AMOUNT_UNITS[S.modal.mode] || AMOUNT_UNITS.servings;
+      S.modal.amount = clamp(Number(el.value) || 0, 0, u.max);
       const box = document.getElementById('food-macros');
-      if (box) box.innerHTML = foodMacroTiles(L.foodMacros(S.modal.food, S.modal.amount, 'grams'));
+      if (box) box.innerHTML = foodMacroTiles(L.foodMacros(S.modal.food, S.modal.amount, S.modal.mode));
     }
     if (S.modal && S.modal.type === 'builder') {
       if (el.matches('[data-builder-name]')) { S.modal.name = el.value; const b = root.querySelector('[data-action=builder-save]'); if (b) b.disabled = !(el.value.trim() && S.modal.exercises.length); return; }
@@ -4864,6 +5112,11 @@ ${prog ? `
       }
       openFood(food);
       return logFood();
+    }
+    if (type === 'sleep') {
+      const h = Number(form.hours.value);
+      if (!(h >= 0 && h <= 16)) return toast('Enter hours between 0 and 16');
+      S.data.sleep[todayKey()] = Math.round(h * 4) / 4; save(); logEvent('sleep_logged'); render(); return toast('Sleep saved');
     }
     if (type === 'steps') { S.data.steps[todayKey()] = clamp(Number(form.steps.value) || 0, 0, 100000); S.modal = null; save(); render(); return toast('Steps updated'); }
     if (type === 'other') {
