@@ -707,3 +707,19 @@ a.link { text-decoration: none; overflow-wrap: anywhere; }
 .toggle span { position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: var(--surface); box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .2s; }
 .toggle.on { background: var(--accent); }
 .toggle.on span { transform: translateX(20px); }
+
+/* profile photos */
+.avatar.has-photo { padding: 0; overflow: hidden; background: var(--surface-2); }
+.avatar.has-photo img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 50%; }
+.avatar.lg { width: 56px; height: 56px; font-size: 17px; }
+.avatar.xl { width: 84px; height: 84px; font-size: 26px; }
+.avatar-pick { position: relative; display: inline-flex; cursor: pointer; flex: none; }
+.avatar-cam { position: absolute; right: -2px; bottom: -2px; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--accent-text); display: inline-flex; align-items: center; justify-content: center; border: 2px solid var(--surface); }
+.profile-head { display: flex; align-items: center; gap: 16px; padding: 4px 0 10px; }
+.profile-name { display: block; font-size: 24px; line-height: 1.15; letter-spacing: -0.01em; }
+.profile-stats { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; font-size: 15px; }
+.profile-stats span { display: inline-flex; align-items: center; gap: 6px; }
+.profile-stats svg { color: var(--accent); }
+.win-card { position: relative; }
+.win-card .win-kind { position: absolute; left: 44px; top: 44px; width: 22px; height: 22px; border: 2px solid var(--surface); }
+.win-card .win-kind svg { width: 12px; height: 12px; }

@@ -87,6 +87,7 @@ function createBackend(opts) {
       t.filter((r) => match(r, q.filters) && r.addressee === u.id && r.status === 'pending').forEach((r) => Object.assign(r, q.values));
       return { data: null, error: null };
     }
+    if (q.action === 'update' && q.table === 'profiles' && q.values.avatar != null && !(q.values.avatar.length <= 60000 && /^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(q.values.avatar))) return err('violates check constraint "profiles_avatar_jpeg"');
     if (q.action === 'update') {
       t.filter((r) => match(r, q.filters) && (r.id === u.id || r.user_id === u.id)).forEach((r) => Object.assign(r, q.values));
       return { data: null, error: null };

@@ -206,6 +206,7 @@
       if (!which || which === 'feed') {
         S.cloudFeed = await cloud.feed(blocked);
         S.cloudFeed.forEach((p) => { S.cloudNames[p.author] = p.authorName; p.comments.forEach((c) => { S.cloudNames[c.author] = c.authorName; }); });
+        Object.assign(S.cloudNames, await cloud.names(Object.keys(S.cloudNames)).catch(() => ({}))); // also loads profile photos
       }
       if (!which || which === 'friends') {
         const [f, wins] = await Promise.all([cloud.friends(), cloud.wins()]);
@@ -1388,6 +1389,47 @@
     const m = D.MEMBERS.find((x) => x.id === id);
     return m ? m.name : 'Member';
   }
+  // Profile photos: a small square JPEG she picks (members see it next to her name). Initials otherwise.
+  const PHOTO_OK = /^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/;
+  function photoOf(id) {
+    const url = !id || id === meId() ? S.data && S.data.avatar : isCloud() && cloud.photoOf ? cloud.photoOf(id) : null;
+    return url && url.length <= 60000 && PHOTO_OK.test(url) ? url : null;
+  }
+  function avatarHtml(id, name, cls) {
+    const url = photoOf(id);
+    if (url) return `<div class="avatar has-photo ${cls || ''}"><img src="${url}" alt=""></div>`;
+    return `<div class="avatar ${cls || ''}">${esc(initials(name || memberName(id)))}</div>`;
+  }
+  // Center-crop to a 320 px square JPEG, small enough to sit in her profile row (under 60 KB as text).
+  async function photoFromFile(file) {
+    const src = URL.createObjectURL(file);
+    try {
+      const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = src; });
+      const side = Math.min(img.naturalWidth, img.naturalHeight);
+      if (!side) throw new Error('empty');
+      const c = document.createElement('canvas');
+      c.width = c.height = 320;
+      c.getContext('2d').drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, 320, 320);
+      for (const [size, q] of [[320, 0.82], [320, 0.7], [240, 0.7], [200, 0.6]]) {
+        let canvas = c;
+        if (size !== 320) { canvas = document.createElement('canvas'); canvas.width = canvas.height = size; canvas.getContext('2d').drawImage(c, 0, 0, size, size); }
+        const url = canvas.toDataURL('image/jpeg', q);
+        if (url.length <= 58000 && PHOTO_OK.test(url)) return url;
+      }
+      throw new Error('too big');
+    } finally { URL.revokeObjectURL(src); }
+  }
+  async function setMyPhoto(url) {
+    if (isGuest()) { requireAccount('photo'); render(); return; }
+    if (isCloud()) {
+      try { await cloud.setAvatar(url); } catch (e) { toast(window.YOURS_CLOUD.friendlyError(e)); return; }
+    }
+    S.data.avatar = url || null;
+    save(); render();
+    toast(url ? 'Profile photo saved' : 'Profile photo removed');
+    if (url) logEvent('photo_added');
+  }
+
   function members() {
     const me = meId();
     if (isCloud()) {
@@ -1989,8 +2031,22 @@ ${prog ? `
       ]],
     ];
   }
+  function profileHead() {
+    if (isGuest()) return `<div class="profile-head"><div class="avatar xl">${icon('user', 30)}</div><div class="grow"><strong class="profile-name">Guest</strong><p class="small muted">Create a free account to add a profile photo and friends.</p><button class="btn accent sm" style="margin-top:8px" data-action="open-signup">Create account</button></div></div>`;
+    const name = myName() || 'You';
+    const done = (S.data.workouts || []).length;
+    const st = L.streak(S.data).count;
+    const nf = S.friends ? S.friends.friends.length : null;
+    return `<div class="profile-head">
+        <label class="avatar-pick" aria-label="${photoOf() ? 'Change' : 'Add'} profile photo">${avatarHtml(null, name, 'xl')}<span class="avatar-cam">${icon('camera', 16)}</span><input type="file" accept="image/*" data-avatar-input hidden></label>
+        <div class="grow"><strong class="profile-name">${esc(name)}</strong><div class="small muted">${plural(done, 'workout')}</div></div>
+      </div>
+      <div class="profile-stats">${st ? `<span>${icon('flame', 16)} <strong>${plural(st, 'day')}</strong> streak</span>` : ''}${isCloud() ? `<button class="link-plain" data-action="more-go" data-go="friends"><strong>${nf == null ? '' : nf}</strong> ${nf === 1 ? 'friend' : 'friends'}</button>` : ''}</div>
+      <div class="row" style="gap:8px;margin:14px 0 4px"><button class="btn ghost sm grow" data-action="more-go" data-go="profile">Edit profile</button>${photoOf() ? '<button class="btn ghost sm grow" data-action="photo-remove">Remove photo</button>' : `<label class="btn ghost sm grow" style="cursor:pointer">Add photo<input type="file" accept="image/*" data-avatar-input hidden></label>`}</div>
+      ${photoOf() || isCloud() ? `<p class="tiny muted" style="margin-bottom:6px">${isCloud() ? 'Members see your photo next to your name in the community.' : ''}</p>` : ''}`;
+  }
   function viewMore(sheet) {
-    return sheet('More', `${moreItems().map(([sec, rows]) => `<div class="more-sec"><div class="eyebrow">${esc(sec)}</div>${rows.map(([k, ic, t, sub]) => `<button class="more-row" data-action="more-go" data-go="${k}">${icon(ic, 22)}<span class="grow"><strong>${esc(t)}</strong><span class="tiny muted">${esc(sub)}</span></span>${icon('chevron', 18)}</button>`).join('')}</div>`).join('')}
+    return sheet('More', `${profileHead()}${moreItems().map(([sec, rows]) => `<div class="more-sec"><div class="eyebrow">${esc(sec)}</div>${rows.map(([k, ic, t, sub]) => `<button class="more-row" data-action="more-go" data-go="${k}">${icon(ic, 22)}<span class="grow"><strong>${esc(t)}</strong><span class="tiny muted">${esc(sub)}</span></span>${icon('chevron', 18)}</button>`).join('')}</div>`).join('')}
       <div class="more-sec"><div class="eyebrow">Contact</div><p class="small" style="padding:12px 0">${mailLink('YOURS question', 'Email us')}</p></div>`);
   }
   const MORE_GO = {
@@ -2138,7 +2194,7 @@ ${prog ? `
       : style === 'caps' ? `<div class="stack-caps" style="font-size:44px;margin-top:10px">${title}</div>`
       : style ? `<div class="masthead" style="margin-top:8px">${title}</div>` : `<h1 class="serif" style="margin-top:6px">${title}</h1>`;
     return `<div class="top"><div class="grow"><div class="eyebrow">${esc(sub)}</div>${t}</div>
-      <button class="avatar" data-action="open-more" aria-label="More: profile, settings and every feature">${isGuest() ? icon('settings', 18) : esc(initials(name))}</button></div>`;
+      <button class="avatar${!isGuest() && photoOf() ? ' has-photo' : ''}" data-action="open-more" aria-label="More: profile, settings and every feature">${isGuest() ? icon('settings', 18) : photoOf() ? `<img src="${photoOf()}" alt="">` : esc(initials(name))}</button></div>`;
   }
 
   function resumeBanner() {
@@ -2604,7 +2660,7 @@ ${prog ? `
     const maxDay = Math.max(1, ...d.days.map((x) => x.app_open));
     const bars = d.days.map((x, i) => `<rect x="${i * 10 + 1}" y="${60 - (x.app_open / maxDay) * 56}" width="8" height="${Math.max(1, (x.app_open / maxDay) * 56)}" rx="2" fill="var(--accent)"><title>${x.day}: ${x.app_open} opens, ${x.workout_done} workouts</title></rect>`).join('');
     const mem = d.members;
-    const engagement = ['workout_done', 'weekly_checkin', 'program_start', 'library_open', 'exercise_view', 'workout_created', 'home_mode', 'run_on', 'run_plan_start', 'run_logged', 'more_open', 'friend_request', 'friend_accept', 'wins_on', 'glp1_on', 'fast_started', 'sleep_logged', 'measurement_logged', 'lp_postpartum', 'start_postpartum', 'lp_menopause', 'start_menopause', 'lp_beginner', 'start_beginner', 'lp_home', 'start_home', 'lp_bridal', 'start_bridal', 'exercise_swap', 'photo_compare', 'badge_earned', 'share_card', 'install_done', 'invite_shared', 'invite_opened', 'invite_claimed', 'membership_canceled'].filter((k) => ev[k]);
+    const engagement = ['workout_done', 'weekly_checkin', 'program_start', 'library_open', 'exercise_view', 'workout_created', 'home_mode', 'run_on', 'run_plan_start', 'run_logged', 'more_open', 'photo_added', 'friend_request', 'friend_accept', 'wins_on', 'glp1_on', 'fast_started', 'sleep_logged', 'measurement_logged', 'lp_postpartum', 'start_postpartum', 'lp_menopause', 'start_menopause', 'lp_beginner', 'start_beginner', 'lp_home', 'start_home', 'lp_bridal', 'start_bridal', 'exercise_swap', 'photo_compare', 'badge_earned', 'share_card', 'install_done', 'invite_shared', 'invite_opened', 'invite_claimed', 'membership_canceled'].filter((k) => ev[k]);
     return `<div class="stats">${statTile('Paying', n(mem.active), '')}${statTile('In trial', n(mem.trialing), '')}</div>
       <p class="tiny muted" style="margin-top:8px">${n(mem.yearly)} yearly · ${n(mem.monthly)} monthly · ${n(mem.cancelling)} set to cancel · ${n(mem.pastDue)} card failing · ${n(mem.ended)} ended${mem.comp ? ` · ${n(mem.comp)} complimentary` : ''}</p>
       ${membersCard(m, d.people)}
@@ -3624,10 +3680,10 @@ ${prog ? `
         <button class="btn accent sm" type="submit">Post</button></div>
       </form>
       ${posts.map((p) => { const liked = me && p.likedBy.includes(me); const open = S.openComments[p.id]; return `<div class="card post">
-        <div class="head"><div class="avatar sm ${p.author.startsWith('u:') ? '' : 'alt'}">${esc(initials(memberName(p.author)))}</div><div class="grow">${memberLink(p.author)}<div class="tiny muted">${timeAgo(p.ts)}${p.phase && Object.prototype.hasOwnProperty.call(D.PHASES, p.phase) && p.phase !== 'steady' ? ` · ${esc(phaseName(p.phase))} phase` : ''}</div></div><span class="tag ${p.tag === 'Win' ? 'accent' : ''}">${esc(p.tag)}</span></div>
+        <div class="head">${avatarHtml(p.author, null, `sm ${p.author.startsWith('u:') ? '' : 'alt'}`)}<div class="grow">${memberLink(p.author)}<div class="tiny muted">${timeAgo(p.ts)}${p.phase && Object.prototype.hasOwnProperty.call(D.PHASES, p.phase) && p.phase !== 'steady' ? ` · ${esc(phaseName(p.phase))} phase` : ''}</div></div><span class="tag ${p.tag === 'Win' ? 'accent' : ''}">${esc(p.tag)}</span></div>
         <div class="body">${esc(p.text)}</div>
         <div class="foot"><button class="${liked ? 'on' : ''}" data-action="like" data-id="${p.id}" aria-label="Like">${icon('heart', 18)} ${p.baseLikes + p.likedBy.length}</button><button data-action="toggle-comments" data-id="${p.id}">${icon('comment', 18)} ${p.comments.length}</button>${p.author !== me ? `<button data-action="message" data-id="${esc(p.author)}">Message</button>` : ''}${isCloud() ? (p.author === me ? `<button data-action="post-delete" data-id="${p.id}" aria-label="Delete your post">${icon('trash', 16)}</button>` : `<button data-action="report" data-post="${p.id}" data-author="${esc(p.author)}" aria-label="Report or hide">More</button>`) : ''}</div>
-        ${open ? `${p.comments.map((cm) => `<div class="comment"><div class="avatar sm ${cm.author.startsWith('u:') ? '' : 'alt'}">${esc(initials(memberName(cm.author)))}</div><div class="c">${memberLink(cm.author, 'small')}<div class="small">${esc(cm.text)}</div></div></div>`).join('')}
+        ${open ? `${p.comments.map((cm) => `<div class="comment">${avatarHtml(cm.author, null, `sm ${cm.author.startsWith('u:') ? '' : 'alt'}`)}<div class="c">${memberLink(cm.author, 'small')}<div class="small">${esc(cm.text)}</div></div></div>`).join('')}
           <form class="row" style="margin-top:10px" data-form="comment" data-id="${p.id}"><input class="input grow" style="height:42px" name="text" placeholder="Add a comment" maxlength="300" required><button class="btn primary sm" type="submit">Reply</button></form>` : ''}
       </div>`; }).join('')}
       ${isCloud() && S.cloudFeed && !posts.length ? '<div class="card empty">No posts yet. Share the first win.</div>' : ''}
@@ -3676,11 +3732,11 @@ ${prog ? `
     if (!isCloud()) return '<div class="card empty">Friends work with a YOURS account. Sign in to add friends and follow their wins.</div>';
     const f = S.friends;
     if (!f) return `<div class="empty">${S.communityError ? 'Could not load your friends. Check your connection.' : 'Loading...'}</div>`;
-    const person = (id, btns) => `<div class="list-item"><div class="avatar alt sm">${esc(initials(memberName(id)))}</div><div class="grow">${memberLink(id)}</div>${btns}</div>`;
+    const person = (id, btns) => `<div class="list-item">${avatarHtml(id, null, 'alt sm')}<div class="grow">${memberLink(id)}</div>${btns}</div>`;
     const ids = friendIds();
     const me = meId();
-    const items = (S.cloudFeed || []).filter((p) => ids.includes(p.author)).map((p) => ({ ts: p.ts, html: `<div class="card post"><div class="head"><div class="avatar sm alt">${esc(initials(memberName(p.author)))}</div><div class="grow">${memberLink(p.author)}<div class="tiny muted">${timeAgo(p.ts)}</div></div><span class="tag ${p.tag === 'Win' ? 'accent' : ''}">${esc(p.tag)}</span></div><div class="body">${esc(p.text)}</div></div>` }))
-      .concat((S.cloudWins || []).filter((w) => w.author === me || ids.includes(w.author)).map((w) => ({ ts: w.ts, html: `<div class="card win-card"><span class="badge-medal earned">${icon(w.kind === 'pr' ? 'award' : w.kind === 'streak' ? 'flame' : w.kind === 'run' ? 'foot' : 'workouts', 18)}</span><div class="grow"><div class="small">${w.author === me ? '<strong>You</strong>' : memberLink(w.author)}</div><div class="small">${esc(w.title)}</div><div class="tiny muted">${timeAgo(w.ts)}</div></div>${w.author !== me ? `<button class="icon-btn" data-action="cheer" data-id="${esc(w.author)}" data-title="${esc(w.title)}" aria-label="Cheer ${esc(firstName(memberName(w.author)))} on">${icon('heart', 18)}</button>` : ''}</div>` })))
+    const items = (S.cloudFeed || []).filter((p) => ids.includes(p.author)).map((p) => ({ ts: p.ts, html: `<div class="card post"><div class="head">${avatarHtml(p.author, null, 'sm alt')}<div class="grow">${memberLink(p.author)}<div class="tiny muted">${timeAgo(p.ts)}</div></div><span class="tag ${p.tag === 'Win' ? 'accent' : ''}">${esc(p.tag)}</span></div><div class="body">${esc(p.text)}</div></div>` }))
+      .concat((S.cloudWins || []).filter((w) => w.author === me || ids.includes(w.author)).map((w) => ({ ts: w.ts, html: `<div class="card win-card">${avatarHtml(w.author, null, 'alt')}<span class="badge-medal earned win-kind">${icon(w.kind === 'pr' ? 'award' : w.kind === 'streak' ? 'flame' : w.kind === 'run' ? 'foot' : 'workouts', 18)}</span><div class="grow"><div class="small">${w.author === me ? '<strong>You</strong>' : memberLink(w.author)}</div><div class="small">${esc(w.title)}</div><div class="tiny muted">${timeAgo(w.ts)}</div></div>${w.author !== me ? `<button class="icon-btn" data-action="cheer" data-id="${esc(w.author)}" data-title="${esc(w.title)}" aria-label="Cheer ${esc(firstName(memberName(w.author)))} on">${icon('heart', 18)}</button>` : ''}</div>` })))
       .sort((a, b) => b.ts - a.ts).slice(0, 60);
     const code = myInviteCode();
     return `${f.incoming.length ? `<div class="card"><div class="eyebrow">Friend requests</div>${f.incoming.map((id) => person(id, `<button class="btn accent sm" data-action="friend-accept" data-id="${esc(id)}">Accept</button><button class="btn ghost sm" data-action="friend-remove" data-id="${esc(id)}" aria-label="Decline ${esc(memberName(id))}">Decline</button>`)).join('')}</div>` : ''}
@@ -3710,7 +3766,7 @@ ${prog ? `
     return `<div class="card">${members().map((m) => {
       const msgs = c.threads[threadKey(me, m.id)] || [];
       const last = msgs[msgs.length - 1];
-      return `<button class="list-item" style="width:100%;text-align:left" data-action="open-thread" data-id="${esc(m.id)}"><div class="avatar ${m.id.startsWith('u:') ? '' : 'alt'}">${esc(initials(m.name))}</div><div class="grow"><div class="row between"><strong>${esc(m.name)}</strong>${last ? `<span class="tiny muted">${timeAgo(last.ts)}</span>` : ''}</div><div class="small muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${last ? esc((last.from === me ? 'You: ' : '') + last.text) : esc(m.bio)}</div></div></button>`;
+      return `<button class="list-item" style="width:100%;text-align:left" data-action="open-thread" data-id="${esc(m.id)}">${avatarHtml(m.id, m.name, m.id.startsWith('u:') ? '' : 'alt')}<div class="grow"><div class="row between"><strong>${esc(m.name)}</strong>${last ? `<span class="tiny muted">${timeAgo(last.ts)}</span>` : ''}</div><div class="small muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${last ? esc((last.from === me ? 'You: ' : '') + last.text) : esc(m.bio)}</div></div></button>`;
     }).join('')}</div>`;
   }
 
@@ -3719,7 +3775,7 @@ ${prog ? `
     const me = meId();
     const other = S.openThread;
     const msgs = c.threads[threadKey(me, other)] || [];
-    return `<div class="row" style="margin-bottom:16px"><button class="icon-btn" data-action="close-thread" aria-label="Back to messages">${icon('back', 20)}</button><div class="avatar alt sm">${esc(initials(memberName(other)))}</div><strong>${esc(memberName(other))}</strong></div>
+    return `<div class="row" style="margin-bottom:16px"><button class="icon-btn" data-action="close-thread" aria-label="Back to messages">${icon('back', 20)}</button>${avatarHtml(other, null, 'alt sm')}<strong>${esc(memberName(other))}</strong></div>
       ${isCloud() ? `<p class="tiny muted" style="margin:-6px 0 12px"><button class="link tiny" data-action="report" data-author="${esc(other)}">Report or block ${esc(firstName(memberName(other)))}</button></p>` : ''}
       <div class="chat" style="padding-bottom:110px">${msgs.length ? msgs.map((m) => `<div class="bubble ${m.from === me ? 'user' : 'coach'}">${esc(m.text)}</div>`).join('') : '<div class="empty">Say hello and share what you are working on.</div>'}</div>
       <form class="composer" data-form="dm"><div class="composer-inner"><textarea name="msg" rows="1" placeholder="Message ${esc(firstName(memberName(other)))}" maxlength="1000" aria-label="Message"></textarea><button class="send" type="submit" aria-label="Send">${icon('send', 20, 2.2)}</button></div></form>`;
@@ -3745,12 +3801,12 @@ ${prog ? `
 
     if (m.type === 'member') {
       const id = m.id;
-      return sheet(esc(memberName(id)), `<div class="row" style="gap:14px"><div class="avatar alt">${esc(initials(memberName(id)))}</div><div class="grow small muted">${friendState(id) === 'friends' ? 'You follow each other. You see her posts and the wins she shares.' : friendState(id) === 'incoming' ? 'She sent you a friend request.' : 'Friends see each other\'s posts and the wins they choose to share.'}</div></div>
+      return sheet(esc(memberName(id)), `<div class="row" style="gap:14px">${avatarHtml(id, null, 'alt lg')}<div class="grow small muted">${friendState(id) === 'friends' ? 'You follow each other. You see her posts and the wins she shares.' : friendState(id) === 'incoming' ? 'She sent you a friend request.' : 'Friends see each other\'s posts and the wins they choose to share.'}</div></div>
         <div class="row" style="gap:8px;margin-top:18px">${friendButton(id)}<button class="btn ghost sm" data-action="message" data-id="${esc(id)}">Message</button></div>
         <p class="tiny muted" style="margin-top:16px"><button class="link tiny" data-action="report" data-author="${esc(id)}">Report or block</button></p>`);
     }
     if (m.type === 'signup') {
-      const why = { progress: 'Progress photos are private to your account.', community: 'You need an account to post and message.' }[m.reason] || 'Keep your plan, history and coach chats safe.';
+      const why = { photo: 'Your profile photo is saved to your account.', progress: 'Progress photos are private to your account.', community: 'You need an account to post and message.' }[m.reason] || 'Keep your plan, history and coach chats safe.';
       return sheet('Save your plan', `<p class="muted small" style="margin-bottom:16px">${why} Everything you have done as a guest moves to your new account.</p>${signupForm('sheet')}<p class="center small" style="margin-top:14px"><button class="link" data-action="go-login">I already have an account</button></p>`);
     }
     if (m.type === 'checkin') {
@@ -4127,7 +4183,7 @@ ${prog ? `
       const learned = L.learnCycle(S.data.periods);
       const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.navigator.standalone;
       return sheet('Profile', `
-        <div class="card flat row"><div class="avatar">${isGuest() ? icon('settings', 18) : esc(initials(u && u.name))}</div><div class="grow"><strong>${isGuest() ? 'Guest' : esc(u && u.name)}</strong><div class="small muted">${isGuest() ? 'Not saved to an account' : esc(u && u.email)}</div></div>${isGuest() ? '<button class="btn accent xs" data-action="open-signup">Save</button>' : ''}</div>
+        <div class="card flat row">${isGuest() ? `<div class="avatar">${icon('settings', 18)}</div>` : `<label class="avatar-pick" aria-label="Change profile photo">${avatarHtml(null, u && u.name, 'lg')}<span class="avatar-cam">${icon('camera', 13)}</span><input type="file" accept="image/*" data-avatar-input hidden></label>`}<div class="grow"><strong>${isGuest() ? 'Guest' : esc(u && u.name)}</strong><div class="small muted">${isGuest() ? 'Not saved to an account' : esc(u && u.email)}</div></div>${isGuest() ? '<button class="btn accent xs" data-action="open-signup">Save</button>' : ''}</div>
         <div class="card flat small"><div class="row between"><span class="muted">Goal</span><strong>${esc(goalOf(p).label)}</strong></div><div class="row between" style="margin-top:6px"><span class="muted">Level</span><strong>${esc((LEVELS.find((l) => l.id === p.level) || {}).label || '')}</strong></div><div class="row between" style="margin-top:6px"><span class="muted">Cycle type</span><strong>${esc((D.CYCLE_MODES.find((x) => x.id === p.cycleMode) || {}).label || '')}</strong></div>${c.steady ? '' : `<div class="row between" style="margin-top:6px"><span class="muted">Cycle length</span><strong>${learned ? `${learned.length} days (learned)` : `${p.cycleLength} days`}</strong></div><div class="row between" style="margin-top:6px"><span class="muted">Last period</span><strong>${esc(shortDate(p.periodStart))}</strong></div>`}
           <button class="btn ghost sm block" style="margin-top:14px" data-action="edit-plan">Edit my plan</button></div>
         ${c.steady ? '' : '<button class="btn soft block" style="margin-top:12px" data-action="open-period">Log a period start</button>'}
@@ -4989,6 +5045,7 @@ ${prog ? `
     'lock-vault': () => { S.vaultUnlocked = false; S.photoKey = null; S.backupKey = null; S.photos = []; S.revealed = {}; S.compare = []; S.cmp.shown = false; render(); },
 
     'community-view': (el) => { S.communityView = el.dataset.value; S.openThread = null; render(); if (el.dataset.value === 'friends' && isCloud()) { if (!S.invite) loadInvite().then(render); refreshCommunity('friends'); } },
+    'photo-remove': () => { if (confirm('Remove your profile photo?')) setMyPhoto(null); },
     member: (el) => { if (!isCloud()) return; S.modal = { type: 'member', id: el.dataset.id }; render(); },
     'friend-add': async (el) => {
       const id = el.dataset.id;
@@ -5170,6 +5227,14 @@ ${prog ? `
     if (S.modal && S.modal.type === 'run' && el.form && el.form.dataset.form === 'run-log' && el.type === 'checkbox') { S.modal.f_completed = el.checked; return; }
     if (el.dataset.bfield && S.modal && S.modal.type === 'builder') { const [i, f] = el.dataset.bfield.split('.'); if (S.modal.exercises[i]) S.modal.exercises[i][f] = el.value; return; }
     if (el.dataset.cmpPick) { S.cmp[el.dataset.cmpPick] = el.value; render(); return; }
+    if (el.hasAttribute && el.hasAttribute('data-avatar-input')) {
+      const file = el.files && el.files[0];
+      el.value = '';
+      if (!file) return;
+      if (!/^image\//.test(file.type || 'image/')) return toast('Choose a photo');
+      try { await setMyPhoto(await photoFromFile(file)); } catch { toast('That photo could not be used. Try another one.'); }
+      return;
+    }
     if (el.matches('[data-scan-photo]') && el.files && el.files[0]) { scanPhoto(el.files[0]); return; }
     if (el.dataset.reminderHour && S.data) { const k = el.dataset.reminderHour; S.data.reminders = S.data.reminders || {}; S.data.reminders[k] = { ...(S.data.reminders[k] || { on: true }), hour: Number(el.value) }; S.data.reminders.tz = Intl.DateTimeFormat().resolvedOptions().timeZone; save(); return; }
     if (el.matches('[data-plate-photo]') && el.files && el.files[0]) { handlePlate(el.files[0]); el.value = ''; return; }

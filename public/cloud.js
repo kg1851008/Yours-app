@@ -58,6 +58,7 @@
     if (!config || !config.supabaseUrl || !config.supabaseAnonKey || typeof createClient !== 'function') return null;
     const sb = createClient(config.supabaseUrl, config.supabaseAnonKey, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
     let user = null;
+    const photos = {}; // member id -> profile photo (data URL) or null, filled by names()
     const must = (res) => { if (res && res.error) throw res.error; return res ? res.data : null; };
     const setUser = (u) => { user = u ? { id: u.id, email: (u.email || '').toLowerCase(), name: (u.user_metadata && u.user_metadata.name) || '' } : null; return user; };
 
@@ -112,6 +113,9 @@
         return rows && rows[0] ? rows[0] : null;
       },
       async setName(name) { must(await sb.from('profiles').update({ name }).eq('id', user.id)); },
+      // Profile photo: a small square JPEG as a data URL (members see it next to her name), or null to remove it.
+      async setAvatar(dataUrl) { must(await sb.from('profiles').update({ avatar: dataUrl || null }).eq('id', user.id)); photos[api.myId()] = dataUrl || null; },
+      photoOf(id) { return photos[id] || null; },
       async deleteAccount() {
         const names = await api.listBackups();
         if (names.length) must(await sb.storage.from('vault').remove(names.map((n) => `${user.id}/${n}`)));
@@ -163,9 +167,9 @@
       async names(ids) {
         const uids = Array.from(new Set((ids || []).map(UID))).filter(Boolean);
         if (!uids.length) return {};
-        const rows = must(await sb.from('profiles').select('id, name').in('id', uids));
+        const rows = must(await sb.from('profiles').select('id, name, avatar').in('id', uids));
         const out = {};
-        (rows || []).forEach((r) => { out[ID(r.id)] = r.name; });
+        (rows || []).forEach((r) => { out[ID(r.id)] = r.name; photos[ID(r.id)] = r.avatar || null; });
         return out;
       },
       async send(toId, text) { must(await sb.from('messages').insert({ to_id: UID(toId), text })); },

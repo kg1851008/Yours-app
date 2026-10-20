@@ -414,3 +414,10 @@ do $$ begin
   begin alter publication supabase_realtime add table public.friendships; exception when duplicate_object then null; end;
   begin alter publication supabase_realtime add table public.wins; exception when duplicate_object then null; end;
 end $$;
+
+-- ---------- Profile photo ----------
+-- A small square JPEG (made on her device) as a data URL, shown next to her name to members. Only a plain
+-- JPEG data URL under 60,000 characters is accepted, so nothing else can be stored or injected through it.
+alter table public.profiles add column if not exists avatar text;
+alter table public.profiles drop constraint if exists profiles_avatar_jpeg;
+alter table public.profiles add constraint profiles_avatar_jpeg check (avatar is null or (char_length(avatar) <= 60000 and avatar ~ '^data:image/jpeg;base64,[A-Za-z0-9+/]+={0,2}$'));
