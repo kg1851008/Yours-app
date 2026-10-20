@@ -644,3 +644,16 @@ test('sleep stats: 7-day average, previous week and short nights', () => {
   assert.equal(st.avg7, 7.4); assert.equal(st.avgPrev7, 7);
   assert.equal(L.sleepStats({}, T).avg7, null);
 });
+
+test('a shared workout or run carries only what she would show a friend', () => {
+  const rec = { name: 'Lower body', minutes: 48, sets: 18, unit: 'lb', phase: 'ovulation', detail: [{ name: 'Hip thrust', note: 'felt my back', sets: [{ weight: 175, reps: 9 }] }] };
+  const prs = [{ name: 'Hip thrust', weight: 175, unit: 'lb', reps: 9 }, { name: 'RDL', weight: 115, unit: 'lb', reps: 8 }, { name: 'Squat', weight: 135, unit: 'lb', reps: 5 }, { name: 'Lunge', weight: 40, unit: 'lb', reps: 10 }];
+  const w = L.activityPost(rec, prs, 6230.4);
+  assert.equal(w.text, 'Finished Lower body: 18 sets in 48 min, 3 new PRs.');
+  assert.deepEqual(w.activity, { kind: 'workout', title: 'Lower body', minutes: 48, sets: 18, volume: 6230, unit: 'lb', prs: prs.slice(0, 3) });
+  assert.ok(!/note|back|weightKg|day/i.test(JSON.stringify(w.activity)));
+  const r = L.activityPost({ name: 'Couch to 5K: Week 3', minutes: 31, run: { distanceKm: 4.016, pace: 412.7, where: 'outside' } });
+  assert.deepEqual(r.activity, { kind: 'run', title: 'Couch to 5K: Week 3', minutes: 31, km: 4.02, pace: 413 });
+  assert.equal(L.activityPost({ name: 'Easy run', minutes: 20, run: { distanceKm: null, pace: null, where: 'treadmill' } }).activity.treadmill, true);
+  assert.ok(JSON.stringify(w.activity).length < 1000, 'fits the database limit');
+});

@@ -24,6 +24,7 @@
       text: r.text,
       tag: r.tag,
       phase: r.phase || null,
+      activity: r.activity && typeof r.activity === 'object' ? r.activity : null,
       ts: ts(r.created_at),
       baseLikes: 0,
       likedBy: (r.likes || []).map((l) => ID(l.user_id)),
@@ -139,10 +140,10 @@
 
       // ---- community ----
       async feed(blocked) {
-        const rows = must(await sb.from('posts').select('id, user_id, author_name, text, tag, phase, created_at, likes(user_id), comments(id, user_id, author_name, text, created_at)').order('created_at', { ascending: false }).limit(60));
+        const rows = must(await sb.from('posts').select('id, user_id, author_name, text, tag, phase, activity, created_at, likes(user_id), comments(id, user_id, author_name, text, created_at)').order('created_at', { ascending: false }).limit(60));
         return mapFeed(rows, api.myId(), blocked);
       },
-      async post(text, tag, phase) { must(await sb.from('posts').insert({ text, tag, phase, author_name: user.name || 'Member' })); },
+      async post(text, tag, phase, activity) { return must(await sb.from('posts').insert({ text, tag, phase, author_name: user.name || 'Member', ...(activity ? { activity } : {}) }).select('id').single()).id; },
       async comment(postId, text) { must(await sb.from('comments').insert({ post_id: postId, text, author_name: user.name || 'Member' })); },
       async like(postId, on) {
         if (on) must(await sb.from('likes').upsert({ post_id: postId, user_id: user.id }, { onConflict: 'post_id,user_id', ignoreDuplicates: true }));

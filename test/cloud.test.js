@@ -16,9 +16,12 @@ test('feed and threads map to the app shape and respect hidden members', () => {
   const rows = [
     { id: 'p1', user_id: 'a', author_name: 'Ana', text: 'PR!', tag: 'Win', phase: 'follicular', created_at: '2026-10-01T10:00:00Z', likes: [{ user_id: 'b' }], comments: [{ id: 'c2', user_id: 'b', author_name: 'Bea', text: 'yes', created_at: '2026-10-01T11:00:00Z' }, { id: 'c1', user_id: 'x', author_name: 'X', text: 'spam', created_at: '2026-10-01T10:30:00Z' }] },
     { id: 'p2', user_id: 'x', author_name: 'X', text: 'buy pills', tag: 'Tip', created_at: '2026-10-01T09:00:00Z' },
+    { id: 'p3', user_id: 'b', author_name: 'Bea', text: 'Ran 5K', tag: 'Workout', activity: { kind: 'run', minutes: 30 }, created_at: '2026-10-01T08:00:00Z' },
   ];
   const feed = C.mapFeed(rows, 'c:a', ['c:x']);
-  assert.equal(feed.length, 1);
+  assert.equal(feed.length, 2);
+  assert.equal(feed[0].activity, null);
+  assert.deepEqual(feed[1].activity, { kind: 'run', minutes: 30 });
   assert.equal(feed[0].author, 'c:a');
   assert.equal(feed[0].mine, true);
   assert.deepEqual(feed[0].likedBy, ['c:b']);

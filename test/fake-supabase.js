@@ -72,7 +72,7 @@ function createBackend(opts) {
       if (q.table === 'user_data') { if (v.user_id !== u.id) return err('row-level security'); const i = t.findIndex((r) => r.user_id === u.id); if (i > -1) t[i] = v; else t.push(v); return { data: null, error: null }; }
       if (q.table === 'likes') { v.user_id = u.id; if (t.some((r) => r.post_id === v.post_id && r.user_id === u.id)) return { data: null, error: null }; }
       t.push(v);
-      return { data: null, error: null };
+      return { data: q.select ? (q.single ? JSON.parse(JSON.stringify(v)) : [JSON.parse(JSON.stringify(v))]) : null, error: null };
     }
     if (q.action === 'update') {
       t.filter((r) => match(r, q.filters) && (r.id === u.id || r.user_id === u.id)).forEach((r) => Object.assign(r, q.values));
@@ -140,6 +140,7 @@ const BROWSER_CLIENT = `(() => {
       or(val) { q.filters.push({ op: 'or', val }); return b; },
       order(col, o) { q.order = { col, ascending: !(o && o.ascending === false) }; return b; },
       limit(n) { q.limit = n; return b; },
+      single() { q.single = true; return b; },
       insert(values) { q.action = 'insert'; q.values = values; return b; },
       upsert(values) { q.action = 'upsert'; q.values = values; return b; },
       update(values) { q.action = 'update'; q.values = values; return b; },
