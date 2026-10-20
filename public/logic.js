@@ -107,14 +107,47 @@
     const bmr = 10 * w + 6.25 * h - 5 * age - 161;
     const phaseKcal = { menstrual: 50, luteal: 150 }[cyc.phase] || 0;
     const kcal = round(Math.max(bmr * 1.1, bmr * act.mult * goal.kcal + (plan.kcalAdjust || 0)) + phaseKcal, 10);
-    const perKg = MENO_MODES.includes(profile.cycleMode) ? Math.max(goal.protein, 2.0) : goal.protein;
-    const protein = round(Math.min(w * perKg, (kcal * 0.35) / 4) + (cyc.phase === 'luteal' ? 5 : 0), 5);
+    // GLP-1 medications (semaglutide, tirzepatide) cut appetite, and weight lost fast takes muscle with it,
+    // so protein comes first: at least 2 g per kg, allowed up to 40% of calories.
+    const onGlp1 = !!(profile.glp1 && profile.glp1.on);
+    const perKg = MENO_MODES.includes(profile.cycleMode) || onGlp1 ? Math.max(goal.protein, 2.0) : goal.protein;
+    const protein = round(Math.min(w * perKg, (kcal * (onGlp1 ? 0.4 : 0.35)) / 4) + (cyc.phase === 'luteal' ? 5 : 0), 5);
     const fat = round(w * 0.9, 5);
     const carbs = Math.max(80, round((kcal - protein * 4 - fat * 9) / 4, 5));
     const waterMl = w * 35 + act.water + (cyc.phase === 'luteal' || cyc.phase === 'menstrual' ? 250 : 0);
     const stepPhase = { menstrual: -1500, follicular: 1000, ovulation: 1500 }[cyc.phase] || 0;
     const steps = Math.max(4000, round(act.steps + (profile.goal === 'lose' || profile.goal === 'recomp' ? 2000 : 0) + stepPhase + (plan.stepBonus || 0), 500));
     return { kcal, protein, fat, carbs, water: Math.round(waterMl / 100) / 10, waterMl: round(waterMl, 50), steps, bmr: Math.round(bmr) };
+  }
+
+  // ---------- fasting ----------
+  // A fast is { start, goal (hours) }; a finished one also has { end }. Times are epoch milliseconds.
+  const FAST_WINDOWS = [12, 14, 16, 18];
+  function fastStatus(fast, now) {
+    if (!fast || !fast.start) return null;
+    now = now || Date.now();
+    const end = fast.end || now;
+    const mins = Math.max(0, Math.round((end - fast.start) / 60000));
+    const goalMin = (Number(fast.goal) || 16) * 60;
+    return { mins, goalMin, pct: clamp(mins / goalMin, 0, 1), met: mins >= goalMin, endsAt: fast.start + goalMin * 60000, leftMin: Math.max(0, goalMin - mins) };
+  }
+  const fmtHM = (mins) => `${Math.floor(mins / 60)}:${String(mins % 60).padStart(2, '0')}`;
+  function fastSummary(history, now) {
+    now = now || Date.now();
+    const recent = (history || []).filter((f) => f && f.end && now - f.end < 7 * 864e5);
+    return { count: recent.length, met: recent.filter((f) => fastStatus(f).met).length, avgMin: recent.length ? Math.round(mean(recent.map((f) => fastStatus(f).mins))) : null };
+  }
+
+  // ---------- sleep ----------
+  // sleep is { 'YYYY-MM-DD': hours } for the night that ended that morning.
+  function sleepStats(sleep, date, days) {
+    date = date || today(); days = days || 14;
+    const list = [];
+    for (let i = days - 1; i >= 0; i--) { const k = dateKey(addDays(date, -i)); const h = Number((sleep || {})[k]); list.push({ key: k, h: Number.isFinite(h) && h > 0 ? h : null }); }
+    const week = list.slice(-7).map((d) => d.h).filter((h) => h != null);
+    const prev = list.slice(-14, -7).map((d) => d.h).filter((h) => h != null);
+    const avg = (xs) => (xs.length ? Math.round(mean(xs) * 10) / 10 : null);
+    return { days: list, avg7: avg(week), avgPrev7: avg(prev), logged7: week.length, short7: week.filter((h) => h < 7).length };
   }
 
   // ---------- readiness + check-ins ----------
@@ -1124,7 +1157,7 @@
     GOALS, LEVELS, ACTIVITY, goalOf, activityOf, STEADY_MODES, MENO_MODES, menoInsights, checkinDay, checkinTomorrow,
     learnCycle, addPeriod, cycleInfo, targets, readiness, readinessLabel, patterns,
     workoutById, plannedWorkout, workoutFor, programById, programDay, programProgress, adjustSets, parseReps, e1rm, suggestLoad, detectPRs, strengthByPhase, exerciseHistory,
-    mealOptions, mealFor, proteinFor, aisleFor, storeLink, buildTotals, macrosFor, parseOFF, foodMacros, canWeigh, gramsOf, convertAmount, validBarcode, recipeTotals, recipeFood, groceryList, parseFoodText, usualRequest, usualMeal, cleanEstimates, estimateFood, parseRest, isBarbell, platesFor, defaultBar, BARS, streak, weeklyStats, weeklyAdjust, applyAdjustments, weeklyDue,
+    mealOptions, mealFor, proteinFor, aisleFor, storeLink, buildTotals, macrosFor, parseOFF, foodMacros, canWeigh, gramsOf, convertAmount, FAST_WINDOWS, fastStatus, fastSummary, fmtHM, sleepStats, validBarcode, recipeTotals, recipeFood, groceryList, parseFoodText, usualRequest, usualMeal, cleanEstimates, estimateFood, parseRest, isBarbell, platesFor, defaultBar, BARS, streak, weeklyStats, weeklyAdjust, applyAdjustments, weeklyDue,
     equipmentOf, swapOptions, BADGES, badges, newBadges, guideFor, allExercises, liftStats,
     setCustomWorkouts, customToWorkout, trainsAtHome, runPlanById, paceFor, fmtPace, treadmillSpeed, parsePace, parseSpeed, runPhaseAdjust, runTargets, runPlanDay, nextRunPace, warmupSets, MEASURE_SITES, measurementSummary, measurementPhaseNote, STRENGTH_LEVELS, STRENGTH_STANDARDS, strengthStandard, strengthLevel, toKg, fromKg,
   };

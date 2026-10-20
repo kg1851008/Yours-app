@@ -613,3 +613,34 @@ test('food amounts: servings, grams and ounces, including foods with only per-se
   assert.equal(L.canWeigh(bar), false);
   assert.equal(L.foodMacros(bar, 2, 'servings').kcal, 400);
 });
+
+test('GLP-1 mode raises protein to at least 2 g/kg', () => {
+  const base = profile({ goal: 'health', weightKg: 80 });
+  const cyc = L.cycleInfo(base);
+  const off = L.targets(base, cyc).protein;
+  const on = L.targets({ ...base, glp1: { on: true } }, cyc).protein;
+  assert.ok(on > off, `protein rises (${off} -> ${on})`);
+  assert.ok(on >= 150, `about 2 g/kg for 80 kg (${on})`);
+});
+
+test('fasting timer: progress, goal met, weekly summary', () => {
+  const start = Date.UTC(2026, 9, 20, 20, 0);
+  const st = L.fastStatus({ start, goal: 16 }, start + 13.5 * 3600e3);
+  assert.equal(st.mins, 810); assert.equal(st.met, false); assert.equal(st.leftMin, 150); assert.equal(L.fmtHM(st.mins), '13:30');
+  assert.equal(L.fastStatus({ start, goal: 14, end: start + 14 * 3600e3 }).met, true);
+  const now = start + 2 * 864e5;
+  const sum = L.fastSummary([{ start, goal: 16, end: start + 16.5 * 3600e3 }, { start, goal: 16, end: start + 12 * 3600e3 }, { start: 0, goal: 16, end: 1 }], now);
+  assert.equal(sum.count, 2); assert.equal(sum.met, 1);
+});
+
+test('sleep stats: 7-day average, previous week and short nights', () => {
+  const sleep = {};
+  for (let i = 0; i < 7; i++) sleep[k(-i)] = i < 2 ? 6 : 8;
+  for (let i = 7; i < 14; i++) sleep[k(-i)] = 7;
+  sleep[k(-20)] = 3; // outside the window
+  const st = L.sleepStats(sleep, T, 14);
+  assert.equal(st.days.length, 14);
+  assert.equal(st.logged7, 7); assert.equal(st.short7, 2);
+  assert.equal(st.avg7, 7.4); assert.equal(st.avgPrev7, 7);
+  assert.equal(L.sleepStats({}, T).avg7, null);
+});
