@@ -649,10 +649,6 @@ a.link { text-decoration: none; overflow-wrap: anywhere; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bm-body: #2E3127; --bm-off: #45493B; --bm-sec: #8A5A43; } }
 :root[data-theme="dark"] { --bm-body: #2E3127; --bm-off: #45493B; --bm-sec: #8A5A43; }
 .bodymap-card { display: flex; flex-direction: column; align-items: center; padding: 14px; }
-.ex-anim { margin: 0; border: 1px solid var(--line); border-radius: 22px; overflow: hidden; background: #F9F7F4; }
-.ex-anim svg { display: block; width: 100%; height: auto; aspect-ratio: 1; }
-.ex-anim figcaption { padding: 10px 16px 12px; border-top: 1px solid rgba(47, 55, 32, .14); color: #2F3720; }
-.ex-anim .mono { font-family: var(--mono); font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; opacity: .7; }
 .bodymap { width: 100%; max-width: 300px; height: auto; }
 .bm-label { font: 500 8px var(--mono); fill: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
 .bm-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; vertical-align: -1px; margin-right: 4px; }
