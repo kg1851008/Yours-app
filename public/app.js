@@ -1582,7 +1582,7 @@
     // Invited friends see their gift on the button; everyone else sees who they are becoming.
     const ctaText = paid && pendingInvite() && !regionBlocked() ? `Start my ${days}-day free trial` : A ? A.cta : 'Start training with my cycle';
     const cta = (cls) => `<button class="btn primary ${cls || ''}" data-action="start">${esc(ctaText)}</button>`;
-    const phone = (img, alt) => `<div class="lp-phone"><img src="/img/landing/${img}.jpg" alt="${esc(alt)}" width="390" height="844" loading="lazy"></div>`;
+    const phone = (img, alt) => `<div class="lp-phone"><img src="/img/landing/${img}.jpg" alt="${esc(alt)}" width="390" height="844" decoding="async"></div>`;
     const phases = [
       ['01', 'Days 1-5', 'Period week', 'go by feel.', 'Weights start a little lighter, with mobility for cramp days. Feel strong? Lift heavy. Iron-rich meals help.'],
       ['02', 'Days 6-13', 'Follicular', 'energy climbs.', 'Your best window to add weight and learn new lifts.'],
