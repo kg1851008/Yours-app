@@ -678,3 +678,21 @@ a.link { text-decoration: none; overflow-wrap: anywhere; }
 .icon-btn.flip svg { transform: rotate(180deg); }
 .icon-btn:disabled { opacity: .35; }
 .mini-spark { width: 72px; height: 30px; flex: none; } .mini-spark svg { width: 100%; height: 30px; }
+
+/* More: every feature in one list */
+.more-sec { margin-top: 14px; }
+.more-sec:first-of-type { margin-top: 0; }
+.more-row { display: flex; align-items: center; gap: 14px; width: 100%; padding: 13px 2px; border-bottom: 1px solid var(--line); text-align: left; color: var(--text); }
+.more-row > svg:first-child { color: var(--text); flex: none; }
+.more-row > svg:last-child { color: var(--muted); flex: none; }
+.more-row strong { display: block; font-size: 15px; font-weight: 600; }
+.more-row .tiny { display: block; margin-top: 2px; }
+.more-row:active { background: var(--surface-2); }
+
+/* Sleep: 14-night chart */
+.sl-chart { position: relative; display: flex; align-items: flex-end; gap: 4px; height: 120px; margin-top: 16px; padding-top: 4px; border-bottom: 1px solid var(--line); }
+.sl-bar { flex: 1; height: 100%; display: flex; align-items: flex-end; }
+.sl-bar span { display: block; width: 100%; border-radius: 6px 6px 2px 2px; background: var(--green); min-height: 0; }
+.sl-bar span.short { background: var(--accent); }
+.sl-goal { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--muted); pointer-events: none; }
+.sl-goal span { position: absolute; right: 0; top: -16px; color: var(--muted); }
