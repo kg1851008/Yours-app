@@ -124,7 +124,7 @@ h3 { font-size: 16px; font-weight: 600; }
 .p-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.92; }
 .p-body { margin-top: auto; }
 .p-serif { font-family: var(--serif); font-style: italic; font-size: 28px; line-height: 1; letter-spacing: -0.01em; }
-.p-title { font-family: var(--display); font-weight: 400; text-transform: uppercase; font-size: 76px; line-height: 0.84; margin-top: 6px; color: #F7F2EA; overflow-wrap: anywhere; }
+.p-title { font-family: var(--display); font-weight: 400; text-transform: uppercase; font-size: 76px; line-height: 0.98; margin-top: 6px; color: #F7F2EA; overflow-wrap: anywhere; }
 /* Editorial rules: a hairline under the top caption row and a double rule over the title. */
 .poster:not(.light) .p-row { border-bottom: 1px solid rgba(247, 242, 234, 0.7); padding-bottom: 8px; }
 .poster:not(.light) .p-title { border-top: 3px double currentColor; padding-top: 10px; }
