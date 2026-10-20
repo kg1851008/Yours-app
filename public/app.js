@@ -57,6 +57,7 @@
     check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
     x: '<path d="M6 6l12 12M18 6 6 18"/>',
     back: '<path d="M15 5l-7 7 7 7"/>',
+    kudos: '<path d="M7 11v9H4a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3zM7 11l4-8a2.5 2.5 0 0 1 2.5 2.5V9h5.2a2 2 0 0 1 2 2.3l-1.2 7A2 2 0 0 1 17.5 20H7"/>',
     heart: '<path d="M12 20s-7.5-4.6-9.3-9.2C1.4 7.4 3.6 4 7 4c2 0 3.5 1.1 5 3 1.5-1.9 3-3 5-3 3.4 0 5.6 3.4 4.3 6.8C19.5 15.4 12 20 12 20z"/>',
     comment: '<path d="M20 12a8 8 0 0 1-11.6 7.1L4 20l1-4.2A8 8 0 1 1 20 12z"/>',
     lock: '<rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/>',
@@ -3215,6 +3216,7 @@ ${prog ? `
         <div class="chips">${[5, 6, 7, 8, 9, 10].map((v) => `<button type="button" class="chip ${m.rpe === v ? 'selected' : ''}" data-action="run-rpe" data-v="${v}" aria-pressed="${m.rpe === v}">${v}</button>`).join('')}</div>
         <p class="tiny muted" style="margin-top:4px">5 = easy chat, 8 = hard, 10 = all out.</p>
         <label class="row" style="gap:10px;margin-top:12px;cursor:pointer"><input type="checkbox" name="completed" ${m.f_completed === false ? '' : 'checked'}> <span class="small">I finished every part of the session</span></label>
+        ${isGuest() ? '' : `<label class="row" style="gap:10px;margin-top:8px;cursor:pointer"><input type="checkbox" name="share" ${(m.f_share != null ? m.f_share : S.data.autoPost) ? 'checked' : ''}> <span class="small">Post this run to the community</span></label>`}
         <button class="btn primary block" style="margin-top:14px" type="submit">Save run</button>
       </form>`}`;
   }
@@ -3377,8 +3379,57 @@ ${prog ? `
     logEvent('workout_done');
     shareWorkoutWins(record, prs);
     const unlocked = awardBadges(false);
-    S.modal = { type: 'summary', record, prs, volume, badges: unlocked };
+    S.modal = { type: 'summary', record, prs, volume, badges: unlocked, act: L.activityPost(record, prs, volume) };
     render();
+    if (S.data.autoPost && !isGuest()) postSummary();
+  }
+
+  // ---------- activity posts: finished workouts and runs in the community feed, with kudos ----------
+  async function shareActivity(act, phase) {
+    if (isGuest()) return null;
+    if (isCloud()) {
+      try { const id = await cloud.post(act.text, 'Workout', phase, act.activity); refreshCommunity(); return id; }
+      catch (e) { toast(window.YOURS_CLOUD.friendlyError(e)); return null; }
+    }
+    const c = community();
+    const id = uid();
+    c.posts.push({ id, author: meId(), text: act.text, tag: 'Workout', phase, activity: act.activity, ts: Date.now(), baseLikes: 0, likedBy: [], comments: [] });
+    saveCommunity(c);
+    return id;
+  }
+  async function unshareActivity(id) {
+    if (isCloud()) return cloudCall(() => cloud.deletePost(id), 'Removed from the community');
+    const c = community();
+    c.posts = c.posts.filter((p) => p.id !== id);
+    saveCommunity(c); toast('Removed from the community');
+  }
+  async function postSummary() {
+    const m = S.modal;
+    if (!m || m.type !== 'summary' || m.postId || m.posting) return;
+    m.posting = true; render();
+    const id = await shareActivity(m.act, m.record.phase);
+    m.posting = false;
+    if (id) { m.postId = id; logEvent('activity_posted'); }
+    if (S.modal === m) render();
+  }
+  // What a shared workout or run looks like in the feed. Every value is escaped or a number: posts come from other members.
+  function activityCard(a) {
+    const n = (x) => (Number.isFinite(Number(x)) ? Number(x) : 0);
+    const tile = (label, value) => `<div><span class="mono">${label}</span><strong>${esc(value)}</strong></div>`;
+    let tiles;
+    if (a.kind === 'run') {
+      const u = S.data ? runUnits() : 'imperial';
+      const dist = n(a.km) > 0 ? `${Number((u === 'metric' ? n(a.km) : n(a.km) / 1.609344).toFixed(2))} ${u === 'metric' ? 'km' : 'mi'}` : null;
+      tiles = [tile('Time', `${n(a.minutes)} min`), dist ? tile('Distance', dist) : '', n(a.pace) > 0 ? tile(a.treadmill ? 'Treadmill pace' : 'Pace', L.fmtPace(n(a.pace), u)) : ''].join('');
+    } else {
+      tiles = [tile('Sets', n(a.sets)), tile('Time', `${n(a.minutes)} min`), n(a.volume) > 0 ? tile('Volume', `${n(a.volume).toLocaleString()} ${a.unit === 'kg' ? 'kg' : 'lb'}`) : ''].join('');
+    }
+    const prs = Array.isArray(a.prs) ? a.prs.slice(0, 3) : [];
+    return `<div class="act">
+      <div class="act-title">${esc(String(a.title || (a.kind === 'run' ? 'Run' : 'Workout')).slice(0, 80))}</div>
+      <div class="act-stats">${tiles}</div>
+      ${prs.length ? `<div class="act-prs">${prs.map((p) => `<div class="row between"><span class="small"><span class="tag accent">PR</span> ${esc(String(p.name || '').slice(0, 60))}</span><strong class="small">${esc(fmtLoad(n(p.weight), p.unit === 'kg' ? 'kg' : 'lb'))} x ${n(p.reps)}</strong></div>`).join('')}</div>` : ''}
+    </div>`;
   }
 
   // ---------- meals ----------
@@ -3680,9 +3731,11 @@ ${prog ? `
         <button class="btn accent sm" type="submit">Post</button></div>
       </form>
       ${posts.map((p) => { const liked = me && p.likedBy.includes(me); const open = S.openComments[p.id]; return `<div class="card post">
-        <div class="head">${avatarHtml(p.author, null, `sm ${p.author.startsWith('u:') ? '' : 'alt'}`)}<div class="grow">${memberLink(p.author)}<div class="tiny muted">${timeAgo(p.ts)}${p.phase && Object.prototype.hasOwnProperty.call(D.PHASES, p.phase) && p.phase !== 'steady' ? ` · ${esc(phaseName(p.phase))} phase` : ''}</div></div><span class="tag ${p.tag === 'Win' ? 'accent' : ''}">${esc(p.tag)}</span></div>
-        <div class="body">${esc(p.text)}</div>
-        <div class="foot"><button class="${liked ? 'on' : ''}" data-action="like" data-id="${p.id}" aria-label="Like">${icon('heart', 18)} ${p.baseLikes + p.likedBy.length}</button><button data-action="toggle-comments" data-id="${p.id}">${icon('comment', 18)} ${p.comments.length}</button>${p.author !== me ? `<button data-action="message" data-id="${esc(p.author)}">Message</button>` : ''}${isCloud() ? (p.author === me ? `<button data-action="post-delete" data-id="${p.id}" aria-label="Delete your post">${icon('trash', 16)}</button>` : `<button data-action="report" data-post="${p.id}" data-author="${esc(p.author)}" aria-label="Report or hide">More</button>`) : ''}</div>
+        <div class="head">${avatarHtml(p.author, null, `sm ${p.author.startsWith('u:') ? '' : 'alt'}`)}<div class="grow">${memberLink(p.author)}<div class="tiny muted">${timeAgo(p.ts)}${p.phase && Object.prototype.hasOwnProperty.call(D.PHASES, p.phase) && p.phase !== 'steady' ? ` · ${esc(phaseName(p.phase))} phase` : ''}</div></div><span class="tag ${p.tag === 'Win' ? 'accent' : ''}">${esc(p.activity ? (p.activity.kind === 'run' ? 'Run' : 'Workout') : p.tag)}</span></div>
+        ${p.activity ? activityCard(p.activity) : `<div class="body">${esc(p.text)}</div>`}
+        <div class="foot">${p.activity
+          ? `<button class="${liked ? 'on' : ''}" data-action="like" data-id="${p.id}" aria-label="${liked ? 'Take back kudos' : 'Give kudos'}" aria-pressed="${!!liked}">${icon('kudos', 18)} ${p.baseLikes + p.likedBy.length || 'Kudos'}</button>`
+          : `<button class="${liked ? 'on' : ''}" data-action="like" data-id="${p.id}" aria-label="Like">${icon('heart', 18)} ${p.baseLikes + p.likedBy.length}</button>`}<button data-action="toggle-comments" data-id="${p.id}">${icon('comment', 18)} ${p.comments.length}</button>${p.author !== me ? `<button data-action="message" data-id="${esc(p.author)}">Message</button>` : ''}${isCloud() ? (p.author === me ? `<button data-action="post-delete" data-id="${p.id}" aria-label="Delete your post">${icon('trash', 16)}</button>` : `<button data-action="report" data-post="${p.id}" data-author="${esc(p.author)}" aria-label="Report or hide">More</button>`) : ''}</div>
         ${open ? `${p.comments.map((cm) => `<div class="comment">${avatarHtml(cm.author, null, `sm ${cm.author.startsWith('u:') ? '' : 'alt'}`)}<div class="c">${memberLink(cm.author, 'small')}<div class="small">${esc(cm.text)}</div></div></div>`).join('')}
           <form class="row" style="margin-top:10px" data-form="comment" data-id="${p.id}"><input class="input grow" style="height:42px" name="text" placeholder="Add a comment" maxlength="300" required><button class="btn primary sm" type="submit">Reply</button></form>` : ''}
       </div>`; }).join('')}
@@ -3735,7 +3788,7 @@ ${prog ? `
     const person = (id, btns) => `<div class="list-item">${avatarHtml(id, null, 'alt sm')}<div class="grow">${memberLink(id)}</div>${btns}</div>`;
     const ids = friendIds();
     const me = meId();
-    const items = (S.cloudFeed || []).filter((p) => ids.includes(p.author)).map((p) => ({ ts: p.ts, html: `<div class="card post"><div class="head">${avatarHtml(p.author, null, 'sm alt')}<div class="grow">${memberLink(p.author)}<div class="tiny muted">${timeAgo(p.ts)}</div></div><span class="tag ${p.tag === 'Win' ? 'accent' : ''}">${esc(p.tag)}</span></div><div class="body">${esc(p.text)}</div></div>` }))
+    const items = (S.cloudFeed || []).filter((p) => ids.includes(p.author)).map((p) => ({ ts: p.ts, html: `<div class="card post"><div class="head">${avatarHtml(p.author, null, 'sm alt')}<div class="grow">${memberLink(p.author)}<div class="tiny muted">${timeAgo(p.ts)}</div></div><span class="tag ${p.tag === 'Win' ? 'accent' : ''}">${esc(p.activity ? (p.activity.kind === 'run' ? 'Run' : 'Workout') : p.tag)}</span></div>${p.activity ? activityCard(p.activity) : `<div class="body">${esc(p.text)}</div>`}</div>` }))
       .concat((S.cloudWins || []).filter((w) => w.author === me || ids.includes(w.author)).map((w) => ({ ts: w.ts, html: `<div class="card win-card">${avatarHtml(w.author, null, 'alt')}<span class="badge-medal earned win-kind">${icon(w.kind === 'pr' ? 'award' : w.kind === 'streak' ? 'flame' : w.kind === 'run' ? 'foot' : 'workouts', 18)}</span><div class="grow"><div class="small">${w.author === me ? '<strong>You</strong>' : memberLink(w.author)}</div><div class="small">${esc(w.title)}</div><div class="tiny muted">${timeAgo(w.ts)}</div></div>${w.author !== me ? `<button class="icon-btn" data-action="cheer" data-id="${esc(w.author)}" data-title="${esc(w.title)}" aria-label="Cheer ${esc(firstName(memberName(w.author)))} on">${icon('heart', 18)}</button>` : ''}</div>` })))
       .sort((a, b) => b.ts - a.ts).slice(0, 60);
     const code = myInviteCode();
@@ -3885,6 +3938,11 @@ ${prog ? `
         ${m.volume ? `<p class="small muted" style="margin-top:10px">Total volume: ${Math.round(m.volume).toLocaleString()} ${r.unit}</p>` : ''}
         ${m.prs.length ? `<div class="card accent" style="margin-top:12px"><div class="eyebrow">New personal records</div>${m.prs.map((p) => `<div class="row between" style="margin-top:8px"><strong>${esc(p.name)}</strong><span>${fmtLoad(p.weight, p.unit)} x ${p.reps}</span></div>`).join('')}</div>` : '<p class="small" style="margin-top:12px">Logged. Your suggested weights for next time are already updated.</p>'}
         ${(m.badges || []).length ? `<div class="card" style="margin-top:12px;background:var(--green);color:var(--bg);border:none"><div class="eyebrow" style="color:var(--bg);opacity:.75">Badge unlocked</div>${m.badges.map((b) => `<div class="row" style="margin-top:10px;gap:12px"><span class="badge-medal earned">${icon(b.icon, 20)}</span><div class="grow"><strong>${esc(b.title)}</strong><div class="tiny" style="opacity:.8">${esc(b.desc)}</div></div><button class="icon-btn" style="width:34px;height:34px;color:var(--bg);background:transparent;border:1px solid currentColor" data-action="share-badge" data-id="${b.id}" aria-label="Share ${esc(b.title)} badge">${icon('share', 16)}</button></div>`).join('')}</div>` : ''}
+        ${isGuest() ? '' : `<div class="card" style="margin-top:12px">${m.postId
+          ? `<div class="row between"><span class="small">${icon('community', 16)} Posted to the community</span><button class="link small" data-action="activity-undo">Undo</button></div>`
+          : `<button class="btn soft block" data-action="post-activity" ${m.posting ? 'disabled' : ''}>${icon('community', 18)} ${m.posting ? 'Posting...' : 'Post to the community'}</button>`}
+          <label class="row" style="gap:10px;margin-top:10px;cursor:pointer"><input type="checkbox" data-autopost ${S.data.autoPost ? 'checked' : ''}> <span class="small">Post my workouts and runs automatically</span></label>
+          <p class="tiny muted" style="margin-top:6px">Members see the workout name, sets, time and PRs, plus your phase. Never your body weight or cycle day.</p></div>`}
         <div class="row" style="margin-top:18px"><button class="btn ghost grow" data-action="share-workout">${icon('share', 18)} Share</button><button class="btn primary grow" data-action="close-modal">Done</button></div>`);
     }
     if (m.type === 'share') {
@@ -4952,6 +5010,8 @@ ${prog ? `
       openShare(pr ? { art: m.record.phase, eyebrow: 'New personal record', big: fmtLoad(pr.weight, pr.unit), sub: `${pr.name} for ${pr.reps} reps.`, foot: shortDate(m.record.date) } : { art: 'session', eyebrow: 'Session complete', big: `${m.record.sets} sets`, sub: m.record.name, foot: shortDate(m.record.date) });
     },
     'share-card': () => shareCard(),
+    'post-activity': () => postSummary(),
+    'activity-undo': async () => { const m = S.modal; if (!m || !m.postId) return; const id = m.postId; m.postId = null; render(); await unshareActivity(id); },
     'billing-retry': async () => { S.billingBusy = true; render(); await Promise.all([loadBilling(), refreshSub()]); S.billingBusy = false; render(); },
     'open-stats': () => openStats(),
     'members-all': () => { if (S.modal) { S.modal.allMembers = true; render(); } },
@@ -5224,7 +5284,8 @@ ${prog ? `
     const el = ev.target;
     if (el.form && el.form.dataset.form === 'signup' && (el.name === 'agree' || el.name === 'health')) { S.authForm = { ...(S.authForm || {}), [el.name]: el.checked }; return; }
     if (el.dataset.bindUi === 'pose') { S.pose = el.value; return; }
-    if (S.modal && S.modal.type === 'run' && el.form && el.form.dataset.form === 'run-log' && el.type === 'checkbox') { S.modal.f_completed = el.checked; return; }
+    if (el.matches('[data-autopost]') && S.data) { S.data.autoPost = el.checked; save(); if (el.checked && S.modal && S.modal.type === 'summary') postSummary(); return; }
+    if (S.modal && S.modal.type === 'run' && el.form && el.form.dataset.form === 'run-log' && el.type === 'checkbox') { S.modal[el.name === 'share' ? 'f_share' : 'f_completed'] = el.checked; return; }
     if (el.dataset.bfield && S.modal && S.modal.type === 'builder') { const [i, f] = el.dataset.bfield.split('.'); if (S.modal.exercises[i]) S.modal.exercises[i][f] = el.value; return; }
     if (el.dataset.cmpPick) { S.cmp[el.dataset.cmpPick] = el.value; render(); return; }
     if (el.hasAttribute && el.hasAttribute('data-avatar-input')) {
@@ -5308,9 +5369,11 @@ ${prog ? `
       const before = S.data.profile.runPace;
       const next = L.nextRunPace(before, { zone, kind: tr.t.kind, pace, rpe: entry.rpe, completed: entry.completed });
       if (next.pace) S.data.profile.runPace = next.pace;
-      S.data.workouts.push({ date: todayKey(), name: `${tr.rd.plan.name}: ${tr.t.title}`, minutes: clamp(Number(form.minutes.value) || tr.t.minutes, 1, 400), phase: cyc().phase, run: entry });
+      const runRec = { date: todayKey(), name: `${tr.rd.plan.name}: ${tr.t.title}`, minutes: clamp(Number(form.minutes.value) || tr.t.minutes, 1, 400), phase: cyc().phase, run: entry };
+      S.data.workouts.push(runRec);
       logEvent('run_logged'); awardBadges(true); save(); S.modal = null; render();
       if (entry.completed) shareWin('run', `Finished a run: ${tr.t.title}`);
+      if (form.share && form.share.checked) shareActivity(L.activityPost(runRec), runRec.phase).then((id) => { if (id) logEvent('activity_posted'); });
       const easy = L.fmtPace(S.data.profile.runPace, u);
       toast(next.change === 'faster' ? `Run saved. Your paces just got faster: easy ${easy}` : next.change === 'set' ? `Run saved. Your targets are set from easy ${easy}` : next.change === 'easier' ? 'Run saved. We eased your paces a little for next time.' : 'Run saved. Same paces next time.');
       return;

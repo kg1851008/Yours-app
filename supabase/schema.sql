@@ -31,6 +31,11 @@ create table if not exists public.posts (
   created_at timestamptz not null default now()
 );
 
+-- Workouts and runs shared to the feed (Strava-style): tag 'Workout' plus a small summary the app renders.
+alter table public.posts add column if not exists activity jsonb check (activity is null or (jsonb_typeof(activity) = 'object' and length(activity::text) <= 1000));
+alter table public.posts drop constraint if exists posts_tag_check;
+alter table public.posts add constraint posts_tag_check check (tag in ('Win', 'Question', 'Tip', 'Workout'));
+
 create table if not exists public.comments (
   id uuid primary key default gen_random_uuid(),
   post_id uuid not null references public.posts (id) on delete cascade,
