@@ -474,15 +474,24 @@ h3 { font-size: 16px; font-weight: 600; }
 .still { animation: none !important; }
 a.btn { text-decoration: none; color: inherit; }
 
-/* ---------- opening splash ---------- */
-.splash { position: fixed; inset: 0; z-index: 1000; background: #F9F7F4; display: flex; align-items: center; justify-content: center; transition: opacity 0.8s ease, visibility 0.8s; }
-.splash::after { content: ''; position: absolute; inset: 0; background-image: var(--grain); opacity: 0.18; mix-blend-mode: multiply; pointer-events: none; }
-.splash img { width: min(78vw, 420px); height: auto; opacity: 0; transform: scale(0.96); animation: splash-in 1s cubic-bezier(.2, .7, .2, 1) 0.1s forwards; }
+/* ---------- opening splash: a magazine cover in YOURS green on milk ---------- */
+.splash { position: fixed; inset: 0; z-index: 1000; background: #FBFAF8; color: #2F3720; display: flex; flex-direction: column; padding: calc(34px + env(safe-area-inset-top)) 24px calc(30px + env(safe-area-inset-bottom)); transition: opacity 0.8s ease, visibility 0.8s; }
+.splash > * { opacity: 0; animation: splash-in 0.9s cubic-bezier(.2, .7, .2, 1) forwards; }
+.splash .sp-mid { animation-delay: 0.1s; } .splash .sp-lines { animation-delay: 0.35s; } .splash .sp-foot { animation-delay: 0.5s; }
+.sp-top, .sp-foot { display: flex; justify-content: space-between; gap: 10px; font-family: var(--mono); font-size: clamp(8px, 2.45vw, 9.5px); letter-spacing: clamp(0.08em, 0.6vw, 0.18em); text-transform: uppercase; white-space: nowrap; }
+.sp-top { padding-bottom: 10px; border-bottom: 3px double currentColor; }
+.sp-foot { padding-top: 10px; border-top: 1px solid currentColor; margin-top: 18px; }
+.sp-mid { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+.sp-mid img { width: 100%; max-width: 460px; height: auto; }
+.sp-tag { font-family: var(--serif); font-style: italic; font-size: clamp(24px, 7.7vw, 30px); line-height: 1.05; letter-spacing: -0.01em; margin-top: 18px; }
+.sp-lines { list-style: none; border-top: 1px solid currentColor; }
+.sp-lines li { display: flex; align-items: baseline; gap: 14px; padding: 9px 0; border-bottom: 1px solid rgba(47, 55, 32, 0.22); }
+.sp-lines b { font-family: var(--mono); font-weight: 500; font-size: 10px; letter-spacing: 0.2em; }
+.sp-lines span { font-family: var(--display); font-size: clamp(19px, 6.6vw, 26px); line-height: 1; text-transform: uppercase; letter-spacing: 0.01em; }
 .splash.out { opacity: 0; visibility: hidden; }
-.splash.out img { transform: scale(1.03); transition: transform 0.8s ease; }
-@keyframes splash-in { to { opacity: 1; transform: scale(1); } }
+@keyframes splash-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) {
-  .splash img { animation: none; opacity: 1; transform: none; }
+  .splash > * { animation: none; opacity: 1; }
   .splash { transition: opacity 0.25s linear; }
 }
 a.link { text-decoration: none; overflow-wrap: anywhere; }

@@ -28,19 +28,25 @@
   </script>
 </head>
 <body>
-  <!-- Opening splash: the logo full screen, then a fade into the app. Once per visit. -->
-  <div id="splash" class="splash" aria-hidden="true"><img src="img/logo.png" alt="" width="1330" height="405"></div>
+  <!-- Opening splash: a magazine cover (this month's issue), then a fade into the app. Once per visit. -->
+  <div id="splash" class="splash" aria-hidden="true">
+    <div class="sp-top"><span id="sp-issue">Vol. 01</span><span>Cycle-synced strength</span></div>
+    <div class="sp-mid"><img src="img/logo.png" alt="" width="1330" height="405"><p class="sp-tag">Train with your cycle,<br>not against it.</p></div>
+    <ol class="sp-lines"><li><b>01</b><span>Lift with your phase</span></li><li><b>02</b><span>Eat for your hormones</span></li><li><b>03</b><span>Women who lift</span></li></ol>
+    <div class="sp-foot"><span>The strength issue</span><span>yoursfit.app</span></div>
+  </div>
   <script>
     (function () {
       var el = document.getElementById('splash');
       var seen = false;
       try { seen = sessionStorage.getItem('yours.splash') === '1'; sessionStorage.setItem('yours.splash', '1'); } catch (e) {}
       if (seen) { el.remove(); return; }
+      try { document.getElementById('sp-issue').textContent = 'Vol. 01 · ' + new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }); } catch (e) {}
       var calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       setTimeout(function () {
         el.classList.add('out');
         setTimeout(function () { el.remove(); }, calm ? 250 : 800);
-      }, calm ? 600 : 2200);
+      }, calm ? 900 : 2600);
     })();
   </script>
   <div id="app" class="app"></div>
