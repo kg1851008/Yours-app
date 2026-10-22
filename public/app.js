@@ -211,6 +211,8 @@
       }
       if (!which || which === 'friends') {
         const [f, wins] = await Promise.all([cloud.friends(), cloud.wins()]);
+        // Name search needs the search_members database function; until it exists, the search box stays hidden.
+        if (S.searchReady == null) S.searchReady = await cloud.searchMembers('').then(() => true, () => false);
         const keep = (id) => !blocked.includes(id);
         S.friends = { friends: f.friends.filter(keep), incoming: f.incoming.filter(keep), outgoing: f.outgoing.filter(keep) };
         S.cloudWins = wins.filter((w) => keep(w.author));
@@ -2674,7 +2676,7 @@ ${prog ? `
     const maxDay = Math.max(1, ...d.days.map((x) => x.app_open));
     const bars = d.days.map((x, i) => `<rect x="${i * 10 + 1}" y="${60 - (x.app_open / maxDay) * 56}" width="8" height="${Math.max(1, (x.app_open / maxDay) * 56)}" rx="2" fill="var(--accent)"><title>${x.day}: ${x.app_open} opens, ${x.workout_done} workouts</title></rect>`).join('');
     const mem = d.members;
-    const engagement = ['workout_done', 'weekly_checkin', 'program_start', 'library_open', 'exercise_view', 'workout_created', 'home_mode', 'run_on', 'run_plan_start', 'run_logged', 'more_open', 'photo_added', 'friend_request', 'friend_accept', 'wins_on', 'glp1_on', 'fast_started', 'sleep_logged', 'measurement_logged', 'lp_postpartum', 'start_postpartum', 'lp_menopause', 'start_menopause', 'lp_beginner', 'start_beginner', 'lp_home', 'start_home', 'lp_bridal', 'start_bridal', 'exercise_swap', 'photo_compare', 'badge_earned', 'share_card', 'install_done', 'invite_shared', 'invite_opened', 'invite_claimed', 'membership_canceled'].filter((k) => ev[k]);
+    const engagement = ['workout_done', 'weekly_checkin', 'program_start', 'library_open', 'exercise_view', 'workout_created', 'home_mode', 'run_on', 'run_plan_start', 'run_logged', 'more_open', 'photo_added', 'searchable_on', 'friend_request', 'friend_accept', 'wins_on', 'glp1_on', 'fast_started', 'sleep_logged', 'measurement_logged', 'lp_postpartum', 'start_postpartum', 'lp_menopause', 'start_menopause', 'lp_beginner', 'start_beginner', 'lp_home', 'start_home', 'lp_bridal', 'start_bridal', 'exercise_swap', 'photo_compare', 'badge_earned', 'share_card', 'install_done', 'invite_shared', 'invite_opened', 'invite_claimed', 'membership_canceled'].filter((k) => ev[k]);
     return `<div class="stats">${statTile('Paying', n(mem.active), '')}${statTile('In trial', n(mem.trialing), '')}</div>
       <p class="tiny muted" style="margin-top:8px">${n(mem.yearly)} yearly · ${n(mem.monthly)} monthly · ${n(mem.cancelling)} set to cancel · ${n(mem.pastDue)} card failing · ${n(mem.ended)} ended${mem.comp ? ` · ${n(mem.comp)} complimentary` : ''}</p>
       ${membersCard(m, d.people)}
@@ -3791,6 +3793,34 @@ ${prog ? `
     const hit = WIN_STREAKS.filter((n) => st >= n).pop();
     if (hit && (S.data.sharedStreak || 0) < hit) { S.data.sharedStreak = hit; save(); shareWin('streak', `${hit}-day streak`); }
   }
+  // Search members by name. Only members who opted in show up; blocked members never do.
+  let memberSearchTimer = null;
+  function memberResults() {
+    const ms = S.memberSearch || {};
+    if (!ms.q || ms.q.trim().length < 2) return '';
+    if (ms.loading && !ms.results) return '<p class="tiny muted" style="margin-top:10px">Searching...</p>';
+    if (ms.error) return '<p class="tiny muted" style="margin-top:10px">Could not search right now. Check your connection.</p>';
+    const blocked = S.data.blocked || [];
+    const list = (ms.results || []).filter((m) => !blocked.includes(m.id));
+    if (!list.length) return `<p class="tiny muted" style="margin-top:10px">No one found for "${esc(ms.q.trim())}". Members only show up here if they turned on "Let members find me by name". You can also add by friend code.</p>`;
+    return list.map((m) => `<div class="list-item">${avatarHtml(m.id, m.name, 'alt sm')}<div class="grow">${memberLink(m.id)}</div>${friendButton(m.id)}</div>`).join('');
+  }
+  function runMemberSearch(q) {
+    S.memberSearch = { ...(S.memberSearch || {}), q, loading: true, error: false };
+    clearTimeout(memberSearchTimer);
+    const paint = () => { const box = root.querySelector('.member-results'); if (box) box.innerHTML = memberResults(); };
+    if (q.trim().length < 2) { S.memberSearch.results = null; S.memberSearch.loading = false; paint(); return; }
+    paint();
+    memberSearchTimer = setTimeout(async () => {
+      try {
+        const results = await cloud.searchMembers(q.trim());
+        results.forEach((m) => { S.cloudNames[m.id] = m.name; });
+        if (S.memberSearch && S.memberSearch.q === q) { S.memberSearch.results = results; S.memberSearch.loading = false; }
+      } catch { if (S.memberSearch) { S.memberSearch.error = true; S.memberSearch.loading = false; } }
+      paint();
+    }, 300);
+  }
+
   function viewFriends() {
     if (isGuest()) {
       return `<div class="card lock">${icon('community', 32)}<h2 style="margin-top:14px">Follow your friends</h2><p class="muted small" style="margin:8px 0 18px">Create a free account to add friends, see their posts and cheer on their workouts.</p><button class="btn primary" data-action="open-signup" data-reason="community">Create account</button></div>`;
@@ -3806,6 +3836,12 @@ ${prog ? `
       .sort((a, b) => b.ts - a.ts).slice(0, 60);
     const code = myInviteCode();
     return `${f.incoming.length ? `<div class="card"><div class="eyebrow">Friend requests</div>${f.incoming.map((id) => person(id, `<button class="btn accent sm" data-action="friend-accept" data-id="${esc(id)}">Accept</button><button class="btn ghost sm" data-action="friend-remove" data-id="${esc(id)}" aria-label="Decline ${esc(memberName(id))}">Decline</button>`)).join('')}</div>` : ''}
+      ${S.searchReady ? `<div class="card">
+        <div class="eyebrow">Find friends</div>
+        <div class="search-field" style="margin-top:10px">${icon('search', 18)}<input class="input" type="search" data-member-search placeholder="Search by name" value="${esc((S.memberSearch && S.memberSearch.q) || '')}" maxlength="60" autocomplete="off" aria-label="Search members by name"></div>
+        <div class="member-results" aria-live="polite">${memberResults()}</div>
+        <div class="row between" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)"><div class="grow"><strong class="small">Let members find me by name</strong><div class="tiny muted">${S.data.searchable ? 'On · members can find you in search' : 'Off · only people you add can find you'}</div></div><button class="toggle ${S.data.searchable ? 'on' : ''}" role="switch" aria-checked="${S.data.searchable ? 'true' : 'false'}" aria-label="Let members find me by name" data-action="searchable"><span></span></button></div>
+      </div>` : ''}
       <div class="card">
         <div class="eyebrow">Add a friend</div>
         <p class="small muted" style="margin:6px 0 10px">Share your friend code, or tap anyone's name in the feed. They accept, and you follow each other.</p>
@@ -5138,6 +5174,13 @@ ${prog ? `
       refreshCommunity('friends');
     },
     'friend-code-copy': async () => { const code = myInviteCode(); if (!code) return; try { await navigator.clipboard.writeText(code); toast('Friend code copied'); } catch { prompt('Your friend code', code); } },
+    searchable: async () => {
+      const on = !S.data.searchable;
+      if (!(await cloudCall(() => cloud.setSearchable(on)))) return;
+      S.data.searchable = on; save(); render();
+      toast(on ? 'Members can now find you by name' : 'You are hidden from search');
+      if (on) logEvent('searchable_on');
+    },
     'share-wins': () => {
       S.data.shareWins = !S.data.shareWins;
       if (S.data.shareWins) { S.data.sharedStreak = Math.max(S.data.sharedStreak || 0, WIN_STREAKS.filter((n) => L.streak(S.data).count >= n).pop() || 0); logEvent('wins_on'); }
@@ -5227,6 +5270,7 @@ ${prog ? `
   // Live inputs that should not trigger a full re-render.
   document.addEventListener('input', (ev) => {
     const el = ev.target;
+    if (el.matches('[data-member-search]')) { runMemberSearch(el.value); return; }
     if (el.form && el.form.dataset.form === 'signup' && ['name', 'email', 'password'].includes(el.name)) { S.authForm = { ...(S.authForm || {}), [el.name]: el.value }; }
     if (el.matches('[data-talk-text]') && S.modal && S.modal.type === 'talk') { S.modal.text = el.value; return; }
     if (el.dataset.estField && S.modal && S.modal.type === 'estimate') {

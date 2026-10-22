@@ -117,6 +117,12 @@
       // Profile photo: a small square JPEG as a data URL (members see it next to her name), or null to remove it.
       async setAvatar(dataUrl) { must(await sb.from('profiles').update({ avatar: dataUrl || null }).eq('id', user.id)); photos[api.myId()] = dataUrl || null; },
       photoOf(id) { return photos[id] || null; },
+      // Find members by name. Only members who turned on "Let members find me by name" are returned (the database enforces it).
+      async searchMembers(q) {
+        const rows = must(await sb.rpc('search_members', { q: String(q || '').slice(0, 60) }));
+        return (rows || []).map((r) => { photos[ID(r.id)] = r.avatar || null; return { id: ID(r.id), name: r.name }; });
+      },
+      async setSearchable(on) { must(await sb.from('profiles').update({ searchable: !!on }).eq('id', user.id)); },
       async deleteAccount() {
         const names = await api.listBackups();
         if (names.length) must(await sb.storage.from('vault').remove(names.map((n) => `${user.id}/${n}`)));

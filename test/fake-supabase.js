@@ -113,7 +113,7 @@ function createBackend(opts) {
     return err('unsupported');
   }
 
-  function rpc(token, name) {
+  function rpc(token, name, args) {
     const u = userOf(token);
     if (!u) return err('not signed in');
     if (name === 'delete_my_account') {
@@ -123,6 +123,12 @@ function createBackend(opts) {
       db.friendships = db.friendships.filter((f) => f.requester !== u.id && f.addressee !== u.id);
       db.messages = db.messages.filter((m) => m.from_id !== u.id && m.to_id !== u.id);
       return { data: null, error: null };
+    }
+    if (name === 'search_members') {
+      const q = String((args && args.q) || '').trim().toLowerCase();
+      if (q.length < 2) return { data: [], error: null };
+      const rows = db.profiles.filter((p) => p.searchable && p.id !== u.id && p.name.toLowerCase().includes(q)).slice(0, 20).map((p) => ({ id: p.id, name: p.name, avatar: p.avatar || null }));
+      return { data: rows, error: null };
     }
     return err('unknown function');
   }
@@ -134,7 +140,7 @@ function createBackend(opts) {
     }
     if (op.kind === 'query') return query(op.token, op.q);
     if (op.kind === 'storage') return storage(op.token, op.fn, op.args);
-    if (op.kind === 'rpc') return rpc(op.token, op.name);
+    if (op.kind === 'rpc') return rpc(op.token, op.name, op.args);
     return err('unknown op');
   }
   const tokenUser = (token) => { const u = userOf(token); return u ? { id: u.id, email: u.email } : null; };
@@ -177,7 +183,7 @@ const BROWSER_CLIENT = `(() => {
       onAuthStateChange(cb) { listeners.push(cb); return { data: { subscription: { unsubscribe() {} } } }; },
     },
     from: builder,
-    rpc: (name) => call({ kind: 'rpc', name }),
+    rpc: (name, args) => call({ kind: 'rpc', name, args }),
     storage: { from: () => ({
       list: (folder, o) => call({ kind: 'storage', fn: 'list', args: [folder, o] }),
       upload: async (path, blob) => call({ kind: 'storage', fn: 'upload', args: [path, await blob.text()] }),

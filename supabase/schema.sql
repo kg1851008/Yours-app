@@ -426,3 +426,22 @@ end $$;
 alter table public.profiles add column if not exists avatar text;
 alter table public.profiles drop constraint if exists profiles_avatar_jpeg;
 alter table public.profiles add constraint profiles_avatar_jpeg check (avatar is null or (char_length(avatar) <= 60000 and avatar ~ '^data:image/jpeg;base64,[A-Za-z0-9+/]+={0,2}$'));
+
+-- ---------- Find members by name (opt-in) ----------
+-- Off by default. search_members() only returns members who turned on "Let members find me by name",
+-- needs an active membership, a query of 2+ characters, and returns at most 20 (id, name, photo).
+alter table public.profiles add column if not exists searchable boolean not null default false;
+create or replace function public.search_members(q text) returns table (id uuid, name text, avatar text)
+language sql stable security definer set search_path = public as $fn$
+  select p.id, p.name, p.avatar from public.profiles p
+  where public.has_access()
+    and char_length(btrim(q)) between 2 and 60
+    and p.searchable
+    and p.id <> auth.uid()
+    and p.name ilike '%' || replace(replace(replace(btrim(q), '\', '\\'), '%', '\%'), '_', '\_') || '%'
+  order by (lower(p.name) like lower(btrim(q)) || '%') desc, p.name
+  limit 20;
+$fn$;
+revoke all on function public.search_members(text) from public;
+revoke all on function public.search_members(text) from anon;
+grant execute on function public.search_members(text) to authenticated;
